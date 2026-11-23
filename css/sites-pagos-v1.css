@@ -10,7 +10,7 @@ body:has(#seccion-pagos.activa) > main.contenido.sites-shell-main {
 #seccion-pagos {
     width: 100%;
     min-width: 0;
-    color: #24382d;
+    color: var(--cereza-texto);
     font-family: var(--sites-shell-font, Inter, "Segoe UI", Arial, sans-serif);
 }
 
@@ -40,21 +40,21 @@ body:has(#seccion-pagos.activa) > main.contenido.sites-shell-main {
 #seccion-pagos .sites-pagos-heading-copy { flex: 1 1 280px; min-width: 0; }
 #seccion-pagos .sites-pagos-heading .eyebrow {
     margin: 0 0 5px;
-    color: #658375;
+    color: var(--cereza-secundario);
     font-size: 10px;
     font-weight: 780;
     letter-spacing: .14em;
 }
 #seccion-pagos .sites-pagos-heading h1 {
     margin: 0;
-    color: #21372b;
+    color: var(--cereza-texto);
     font-size: 28px;
     line-height: 1.15;
     letter-spacing: -.038em;
 }
 #seccion-pagos .sites-pagos-heading .subtitulo {
     margin: 6px 0 0;
-    color: #718078;
+    color: var(--cereza-secundario);
     font-size: 13px;
     font-weight: 400;
     letter-spacing: 0;
@@ -75,9 +75,9 @@ body:has(#seccion-pagos.activa) > main.contenido.sites-shell-main {
     align-items: center;
     justify-content: center;
     padding: 0 12px !important;
-    border: 1px solid #cbdad0;
+    border: 1px solid var(--cereza-linea-fuerte);
     border-radius: 5px;
-    background: #fff;
+    background: var(--cereza-superficie);
     box-shadow: none;
     color: #285946;
     font-size: 12px;
@@ -85,7 +85,7 @@ body:has(#seccion-pagos.activa) > main.contenido.sites-shell-main {
     white-space: nowrap;
 }
 #seccion-pagos .sites-pagos-heading :is(.haiku-anadir-pago-boton, .haiku-ajuste-cargo-boton):hover {
-    background: #f1f6f2;
+    background: var(--cereza-relieve);
     box-shadow: none;
     transform: none;
 }
@@ -96,9 +96,9 @@ body:has(#seccion-pagos.activa) > main.contenido.sites-shell-main {
     gap: 0;
     margin: 0 0 20px;
     overflow: hidden;
-    border: 1px solid #dbe4dd;
+    border: 1px solid var(--cereza-linea);
     border-radius: 8px;
-    background: #fff;
+    background: var(--cereza-superficie);
 }
 #seccion-pagos .sites-pagos-metrics .pago-indicador {
     box-sizing: border-box;
@@ -139,9 +139,9 @@ body:has(#seccion-pagos.activa) > main.contenido.sites-shell-main {
 #seccion-pagos .sites-pagos-section {
     margin: 0 0 16px;
     overflow: hidden;
-    border: 1px solid #dbe4dd;
+    border: 1px solid var(--cereza-linea);
     border-radius: 8px;
-    background: #fff;
+    background: var(--cereza-superficie);
     box-shadow: none;
     scroll-margin-top: 84px;
 }
@@ -177,7 +177,7 @@ body:has(#seccion-pagos.activa) > main.contenido.sites-shell-main {
     font-weight: 700;
     vertical-align: 2px;
 }
-#seccion-pagos .sites-pagos-section-heading p { margin: 3px 0 0; color: #728078; font-size: 12px; }
+#seccion-pagos .sites-pagos-section-heading p { margin: 3px 0 0; color: var(--cereza-secundario); font-size: 12px; }
 
 /* Las autoridades existentes llenan los cuatro listados; aquí se presenta cada registro como fila Sites. */
 #seccion-pagos .sites-pagos-list {
@@ -213,7 +213,7 @@ body:has(#seccion-pagos.activa) > main.contenido.sites-shell-main {
     border: 0;
     border-bottom: 1px solid #e7ece7;
     border-radius: 0;
-    background: #fff;
+    background: var(--cereza-superficie);
     box-shadow: none;
     overflow: visible;
 }
@@ -222,7 +222,7 @@ body:has(#seccion-pagos.activa) > main.contenido.sites-shell-main {
 #seccion-pagos .sites-pagos-list > .haiku-abono-verificacion-v2 { padding: 10px 0 9px; }
 #seccion-pagos .sites-pagos-list .haiku-abono-v2-cabecera { padding: 0 0 7px; border-bottom: 0; }
 #seccion-pagos .sites-pagos-list .haiku-abono-v2-identidad { gap: 6px; }
-#seccion-pagos .sites-pagos-list .haiku-abono-v2-identidad strong { color: #20392d; font-size: 13px; font-weight: 760; }
+#seccion-pagos .sites-pagos-list .haiku-abono-v2-identidad strong { color: var(--cereza-texto); font-size: 13px; font-weight: 760; }
 #seccion-pagos .sites-pagos-list .haiku-abono-v2-identidad span { color: #526357; font-size: 11px; }
 #seccion-pagos .sites-pagos-list .haiku-abono-v2-estado {
     border-radius: 3px;
@@ -263,12 +263,12 @@ body:has(#seccion-pagos.activa) > main.contenido.sites-shell-main {
     margin: 0;
 }
 #seccion-pagos .sites-pagos-list .haiku-abono-v2-confirmar span { white-space: nowrap; }
-#seccion-pagos .sites-pagos-list .haiku-abono-v2-movimiento + .haiku-abono-v2-movimiento { border-top-color: #edf1ed; }
+#seccion-pagos .sites-pagos-list .haiku-abono-v2-movimiento + .haiku-abono-v2-movimiento { border-top-color: var(--cereza-linea); }
 #seccion-pagos .sites-pagos-list .haiku-abono-v2-resumen { gap: 20px; }
 #seccion-pagos .sites-pagos-list .haiku-abono-v2-resumen > span { gap: 6px; }
-#seccion-pagos .sites-pagos-list .haiku-abono-v2-resumen small { color: #718278; font-size: 10px; font-weight: 550; letter-spacing: 0; text-transform: none; }
+#seccion-pagos .sites-pagos-list .haiku-abono-v2-resumen small { color: var(--cereza-secundario); font-size: 10px; font-weight: 550; letter-spacing: 0; text-transform: none; }
 #seccion-pagos .sites-pagos-list .haiku-abono-v2-resumen strong { color: #243e30; font-size: 13px; font-weight: 730; font-variant-numeric: tabular-nums; }
-#seccion-pagos .sites-pagos-list .haiku-abono-v2-detalle { margin: 2px 0 0; padding: 0; border: 0; border-radius: 0; background: none; color: #718278; }
+#seccion-pagos .sites-pagos-list .haiku-abono-v2-detalle { margin: 2px 0 0; padding: 0; border: 0; border-radius: 0; background: none; color: var(--cereza-secundario); }
 #seccion-pagos .sites-pagos-list .haiku-abono-v2-confirmar { color: #2b694a; font-size: 11px; font-weight: 680; }
 #seccion-pagos .sites-pagos-list .haiku-abono-v2-confirmar input { accent-color: #2b694a; }
 #seccion-pagos .sites-pagos-editar-abonos {
@@ -276,13 +276,13 @@ body:has(#seccion-pagos.activa) > main.contenido.sites-shell-main {
     padding: 0 8px;
     border: 1px solid #c7d9c8;
     border-radius: 4px;
-    background: #fff;
+    background: var(--cereza-superficie);
     color: #2b694a;
     font-size: 11px;
     font-weight: 700;
     cursor: pointer;
 }
-#seccion-pagos .sites-pagos-editar-abonos:hover { background: #f1f7f2; }
+#seccion-pagos .sites-pagos-editar-abonos:hover { background: var(--cereza-relieve); }
 
 #seccion-pagos .sites-pagos-list .haiku-saldo-v4 .pago-checkin-nuevo {
     display: grid;
@@ -305,7 +305,7 @@ body:has(#seccion-pagos.activa) > main.contenido.sites-shell-main {
     gap: 2px;
     min-width: 0;
 }
-#seccion-pagos .sites-pagos-list .haiku-saldo-v4 .pago-checkin-identidad strong { color: #20392d; font-size: 13px; font-weight: 760; }
+#seccion-pagos .sites-pagos-list .haiku-saldo-v4 .pago-checkin-identidad strong { color: var(--cereza-texto); font-size: 13px; font-weight: 760; }
 #seccion-pagos .sites-pagos-list .haiku-saldo-v4 .pago-checkin-identidad span { color: #526357; font-size: 11px; }
 #seccion-pagos .sites-pagos-list .haiku-saldo-v4 .pago-checkin-estado {
     grid-column: 4;
@@ -349,7 +349,7 @@ body:has(#seccion-pagos.activa) > main.contenido.sites-shell-main {
     min-width: 0;
 }
 #seccion-pagos .sites-pagos-list .haiku-saldo-v4 .haiku-checkout-servicios { margin: 5px 0; padding: 0; border: 0; }
-#seccion-pagos .sites-pagos-list .haiku-saldo-v4 .haiku-checkout-servicio { border-bottom-color: #edf1ed; }
+#seccion-pagos .sites-pagos-list .haiku-saldo-v4 .haiku-checkout-servicio { border-bottom-color: var(--cereza-linea); }
 
 #seccion-pagos .sites-pagos-detalle { grid-column: 1 / -1; margin: 3px 0 0; padding: 0; border: 0; }
 #seccion-pagos .sites-pagos-detalle > summary {
@@ -374,7 +374,7 @@ body:has(#seccion-pagos.activa) > main.contenido.sites-shell-main {
     gap: 18px;
     margin-top: 4px;
     padding-top: 11px;
-    border-top: 1px dashed #dce7de;
+    border-top: 1px dashed var(--cereza-linea);
 }
 #seccion-pagos .sites-pagos-detalle-col { display: flex; flex-direction: column; min-width: 0; }
 #seccion-pagos .sites-pagos-detalle-col > h3 {
@@ -401,7 +401,7 @@ body:has(#seccion-pagos.activa) > main.contenido.sites-shell-main {
     margin: 0;
     padding: 9px 0;
     border: 0;
-    border-bottom: 1px solid #edf1ed;
+    border-bottom: 1px solid var(--cereza-linea);
     border-radius: 0;
     background: transparent;
     box-shadow: none;
@@ -416,7 +416,7 @@ body:has(#seccion-pagos.activa) > main.contenido.sites-shell-main {
     flex-wrap: wrap;
     gap: 2px 9px;
     margin-top: 4px;
-    color: #728078;
+    color: var(--cereza-secundario);
     font-size: 10px;
     line-height: 1.4;
     overflow-wrap: anywhere;
@@ -430,7 +430,7 @@ body:has(#seccion-pagos.activa) > main.contenido.sites-shell-main {
     margin: 0;
     padding: 7px 0;
     border: 0;
-    border-bottom: 1px solid #edf1ed;
+    border-bottom: 1px solid var(--cereza-linea);
     border-radius: 0;
     background: transparent;
     box-shadow: none;
@@ -444,14 +444,14 @@ body:has(#seccion-pagos.activa) > main.contenido.sites-shell-main {
 #seccion-pagos .sites-pagos-detalle-documentos > .haiku-bove-pendiente > span,
 #seccion-pagos .sites-pagos-detalle-documentos > .haiku-bove-pendiente > .sites-pagos-abrir-bove { grid-column: 1 / -1; }
 #seccion-pagos .sites-pagos-detalle-documentos > .haiku-bove-cierre > small,
-#seccion-pagos .sites-pagos-detalle-documentos > .haiku-bove-pendiente > span { color: #728078; font-size: 10px; line-height: 1.4; }
+#seccion-pagos .sites-pagos-detalle-documentos > .haiku-bove-pendiente > span { color: var(--cereza-secundario); font-size: 10px; line-height: 1.4; }
 #seccion-pagos .sites-pagos-detalle-documentos > .haiku-bove-pendiente > .sites-pagos-abrir-bove { justify-self: start; margin: 4px 0 0; }
 #seccion-pagos .sites-pagos-detalle-documentos > :is(.haiku-checkin-servicios-separados, .haiku-checkin-grupo-servicios) {
     display: grid;
     gap: 5px;
     padding: 8px 0;
     border: 0;
-    border-bottom: 1px solid #edf1ed;
+    border-bottom: 1px solid var(--cereza-linea);
     border-radius: 0;
     background: transparent;
     box-shadow: none;
@@ -462,12 +462,12 @@ body:has(#seccion-pagos.activa) > main.contenido.sites-shell-main {
     align-items: baseline;
     gap: 3px 7px;
     padding-top: 6px;
-    border-top: 1px solid #edf1ed;
+    border-top: 1px solid var(--cereza-linea);
 }
 #seccion-pagos .sites-pagos-detalle-documentos .haiku-checkin-servicios-bove strong { color: #32684a; }
 #seccion-pagos .sites-pagos-detalle-documentos .haiku-checkin-servicios-pendiente { color: #9c662c; }
 #seccion-pagos .sites-pagos-detalle-documentos > .haiku-checkout-servicios { margin: 0; border: 0; }
-#seccion-pagos .sites-pagos-detalle-documentos .haiku-checkout-servicio { min-width: 0; padding: 7px 0; border-bottom: 1px solid #edf1ed; }
+#seccion-pagos .sites-pagos-detalle-documentos .haiku-checkout-servicio { min-width: 0; padding: 7px 0; border-bottom: 1px solid var(--cereza-linea); }
 #seccion-pagos .sites-pagos-detalle-documentos .haiku-checkout-servicio-nombre strong { white-space: normal; overflow: visible; }
 #seccion-pagos .sites-pagos-abrir-pago,
 #seccion-pagos .sites-pagos-abrir-bove {
@@ -504,8 +504,8 @@ body:has(#seccion-pagos.activa) > main.contenido.sites-shell-main {
     padding: 22px;
     overflow-y: auto;
     border: 0;
-    border-left: 1px solid #dbe4dd;
-    background: #fff;
+    border-left: 1px solid var(--cereza-linea);
+    background: var(--cereza-superficie);
     box-shadow: -12px 0 35px #10241d20, 0 0 0 100vmax #10241db0;
 }
 #seccion-pagos .haiku-pago-editor:not([hidden])::before {
@@ -513,8 +513,8 @@ body:has(#seccion-pagos.activa) > main.contenido.sites-shell-main {
     display: block;
     margin: -4px -4px 5px;
     padding-bottom: 16px;
-    border-bottom: 1px solid #dce5e0;
-    color: #21312e;
+    border-bottom: 1px solid var(--cereza-linea);
+    color: var(--cereza-texto);
     font-size: 22px;
     font-weight: 730;
     letter-spacing: -.035em;
@@ -523,12 +523,12 @@ body:has(#seccion-pagos.activa) > main.contenido.sites-shell-main {
     justify-content: flex-end;
     margin-top: auto;
     padding-top: 16px;
-    border-top: 1px solid #dce5e0;
+    border-top: 1px solid var(--cereza-linea);
 }
 #seccion-pagos .haiku-pago-editor:not([hidden]) .haiku-pago-editor-acciones button { min-height: 38px; border-radius: 6px; font-size: 12px; }
 
 #seccion-pagos .sites-pagos-webpay-layout { display: grid; grid-template-columns: minmax(230px, .85fr) minmax(0, 1.8fr); }
-#seccion-pagos .sites-pagos-webpay-pending { min-width: 0; padding: 18px 20px; border-right: 1px solid #e4eae4; background: #f8faf8; }
+#seccion-pagos .sites-pagos-webpay-pending { min-width: 0; padding: 18px 20px; border-right: 1px solid #e4eae4; background: var(--cereza-relieve); }
 #seccion-pagos .sites-pagos-webpay-pending h3 { margin: 0; color: #2c4635; font-size: 13px; }
 #seccion-pagos .sites-pagos-webpay-pending #pagos-lista-webpay { display: block; padding: 0; margin: 8px 0 0; }
 #seccion-pagos .sites-pagos-webpay-pending .pagos-checkout-vacio { margin: 0; padding: 2px 0 10px; color: #748177; font-size: 12px; }
@@ -536,7 +536,7 @@ body:has(#seccion-pagos.activa) > main.contenido.sites-shell-main {
     margin: 0;
     padding: 11px 0;
     border: 0;
-    border-bottom: 1px solid #e0e8e1;
+    border-bottom: 1px solid var(--cereza-linea);
     border-radius: 0;
     background: transparent;
     box-shadow: none;
@@ -557,7 +557,7 @@ body:has(#seccion-pagos.activa) > main.contenido.sites-shell-main {
     margin-bottom: 13px;
 }
 #seccion-pagos .sites-pagos-webpay-title h3 { margin: 0; color: #2c4635; font-size: 13px; }
-#seccion-pagos .sites-pagos-webpay-title span { color: #73837a; font-size: 11px; }
+#seccion-pagos .sites-pagos-webpay-title span { color: var(--cereza-secundario); font-size: 11px; }
 #seccion-pagos .sites-pagos-webpay-entry .pagos-webpay-nuevo {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -578,7 +578,7 @@ body:has(#seccion-pagos.activa) > main.contenido.sites-shell-main {
     background: transparent;
 }
 #seccion-pagos .sites-pagos-webpay-entry .haiku-webpay-ayuda strong { color: #2c4635; font-size: 13px; }
-#seccion-pagos .sites-pagos-webpay-entry .haiku-webpay-ayuda span { color: #73837a; font-size: 11px; line-height: 1.4; }
+#seccion-pagos .sites-pagos-webpay-entry .haiku-webpay-ayuda span { color: var(--cereza-secundario); font-size: 11px; line-height: 1.4; }
 #seccion-pagos .sites-pagos-webpay-entry .pagos-webpay-campo { min-width: 0; gap: 4px; }
 #seccion-pagos .sites-pagos-webpay-entry .pagos-webpay-campo:has(#pagos-webpay-nombre) { grid-column: span 2; }
 #seccion-pagos .sites-pagos-webpay-entry .pagos-webpay-campo:has(#pagos-webpay-tarjeta) { grid-column: span 2; }
@@ -603,7 +603,7 @@ body:has(#seccion-pagos.activa) > main.contenido.sites-shell-main {
     padding: 0 9px;
     border: 1px solid #d6e1d8;
     border-radius: 5px;
-    background: #fff;
+    background: var(--cereza-superficie);
     color: #253a2e;
     font-size: 12px;
 }
@@ -643,7 +643,7 @@ body > #haiku-ajuste-cargo-overlay > .haiku-ajuste-cargo-modal {
     min-height: 0;
     overflow: hidden;
     border-radius: 8px 0 0 8px;
-    border-color: #dbe4dd;
+    border-color: var(--cereza-linea);
     box-shadow: -16px 0 42px #10241d30;
 }
 body > #haiku-pago-grupo-overlay .haiku-pago-grupo-cabecera,
@@ -661,8 +661,8 @@ body > #haiku-ajuste-cargo-overlay .haiku-ajuste-cargo-acciones {
     z-index: 1;
     margin: 18px -22px -22px;
     padding: 13px 22px 18px;
-    border-top: 1px solid #e4ebe5;
-    background: #fff;
+    border-top: 1px solid var(--cereza-linea);
+    background: var(--cereza-superficie);
 }
 .sites-pagos-selector .sites-resumen-drawer-panel,
 .sites-pagos-bove .sites-resumen-drawer-panel { width: min(460px, 100vw); }
@@ -680,7 +680,7 @@ body > :is(.sites-pagos-selector, .sites-pagos-bove)[hidden] { display: none; }
 .sites-pagos-selector .sites-resumen-drawer-body,
 .sites-pagos-bove .sites-resumen-drawer-body { color: #405749; font-size: 13px; line-height: 1.5; }
 .sites-pagos-selector .sites-resumen-drawer-body > p:first-child,
-.sites-pagos-bove .sites-resumen-drawer-body > p:first-child { margin: 0 0 18px; color: #63766a; }
+.sites-pagos-bove .sites-resumen-drawer-body > p:first-child { margin: 0 0 18px; color: var(--cereza-secundario); }
 .sites-pagos-selector .sites-resumen-drawer-body > label,
 .sites-pagos-bove .sites-resumen-drawer-body > label { display: block; color: #51695b; font-size: 12px; font-weight: 690; }
 .sites-pagos-selector .sites-resumen-drawer-body > :is(select, input),
@@ -688,7 +688,7 @@ body > :is(.sites-pagos-selector, .sites-pagos-bove)[hidden] { display: none; }
 .sites-pagos-selector .sites-pagos-selector-estado,
 .sites-pagos-bove [data-sites-bove-estado] { margin-top: 14px; color: #9a5d22; font-size: 12px; }
 .sites-pagos-selector .sites-resumen-drawer-footer [data-sites-pagos-continuar],
-.sites-pagos-bove .sites-resumen-drawer-footer [data-sites-bove-confirmar] { border-color: #245b4a; background: #245b4a; color: #fff; }
+.sites-pagos-bove .sites-resumen-drawer-footer [data-sites-bove-confirmar] { border-color: var(--cereza-primario); background: var(--cereza-primario); color: #fff; }
 .sites-pagos-selector .sites-resumen-drawer-footer [data-sites-pagos-continuar]:disabled { cursor: not-allowed; opacity: .48; }
 .sites-pagos-selector .sites-resumen-drawer-body :is(button, select),
 .sites-pagos-bove .sites-resumen-drawer-body :is(button, select) { cursor: pointer; }

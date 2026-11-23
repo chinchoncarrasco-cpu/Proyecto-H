@@ -15,7 +15,7 @@
 .haku-reprogramacion-bloqueo,.haku-reprogramacion-pendientes{padding:.35rem .5rem;border-left:3px solid #a87519}
 .haku-reprogramacion-accesos{display:flex;flex-wrap:wrap;gap:.4rem;margin:.4rem 0}
 .haku-reprogramacion-accesos button{font:inherit;color:inherit;background:transparent;border:1px solid #8fa89b;border-radius:.35rem;padding:.45rem .65rem;cursor:pointer}
-html[data-haiku-tema="oscuro"] .haku-reprogramacion option{background:#1b2420;color:#e8efea}
+html[data-haiku-tema="oscuro"] .haku-reprogramacion option{background:var(--cereza-superficie);color:var(--cereza-texto)}
 .haku-reprogramacion-revision{font-weight:700;color:#9d6610}
 html[data-haiku-tema="oscuro"] .haku-reprogramacion-revision{color:#e7bd71}
 @media(max-width:700px){.haku-reprogramacion{font-size:.82rem}.haku-reprogramacion-recorrido{grid-template-columns:1fr;gap:.3rem;padding:.45rem}.haku-reprogramacion-fila{grid-template-columns:repeat(2,minmax(0,1fr));gap:.25rem .45rem;padding:.4rem 0}.haku-reprogramacion-identidad,.haku-reprogramacion-decision{grid-column:1/-1}.haku-reprogramacion-seccion{margin:.3rem 0}}

@@ -1,19 +1,19 @@
 /* Sites V1: capa visual del shell real. No estiliza el contenido de las secciones. */
 :root {
-    --sites-shell-ink: #172522;
-    --sites-shell-ink-soft: #2a3c37;
-    --sites-shell-canvas: #f5f7f5;
-    --sites-shell-surface: #ffffff;
-    --sites-shell-line: #dce5e0;
-    --sites-shell-muted: #687873;
-    --sites-shell-green: #22735c;
-    --sites-shell-green-soft: #e6f2eb;
-    --sites-shell-amber: #a36522;
-    --sites-shell-amber-soft: #fff2df;
-    --sites-shell-red: #aa4e44;
-    --sites-shell-red-soft: #f9e9e6;
-    --sites-shell-blue: #3a6e8b;
-    --sites-shell-blue-soft: #e8f2f7;
+    --sites-shell-ink: var(--cereza-texto);
+    --sites-shell-ink-soft: var(--cereza-texto);
+    --sites-shell-canvas: var(--cereza-lienzo);
+    --sites-shell-surface: var(--cereza-superficie);
+    --sites-shell-line: var(--cereza-linea);
+    --sites-shell-muted: var(--cereza-secundario);
+    --sites-shell-green: var(--cereza-acento);
+    --sites-shell-green-soft: var(--cereza-seleccion);
+    --sites-shell-amber: var(--cereza-dorado);
+    --sites-shell-amber-soft: var(--cereza-dorado-fondo);
+    --sites-shell-red: var(--cereza-rojo);
+    --sites-shell-red-soft: var(--cereza-rojo-fondo);
+    --sites-shell-blue: var(--cereza-azul);
+    --sites-shell-blue-soft: var(--cereza-azul-fondo);
     --sites-shell-font: Inter, "Segoe UI", Arial, sans-serif;
     --sites-shell-sidebar-width: var(--haiku-sidebar-ancho, 240px);
     /* Una misma línea bajo el logo, la barra superior y Haku en escritorio. */
@@ -166,13 +166,13 @@ body:has(> .sites-shell-topbar) {
     align-items: center;
     gap: 10px;
     min-width: 0;
-    color: #74817c;
+    color: var(--cereza-secundario);
     font-size: 13px;
     white-space: nowrap;
 }
 
 .sites-shell-topbar-title strong {
-    color: #283b34;
+    color: var(--cereza-texto);
     font-weight: 650;
 }
 
@@ -210,13 +210,13 @@ body:has(> .sites-shell-topbar) {
     padding: 0 11px !important;
     border: 1px solid var(--sites-shell-line) !important;
     border-radius: 6px !important;
-    background: #f9fbf9 !important;
-    color: #73837b;
+    background: var(--cereza-relieve) !important;
+    color: var(--cereza-secundario);
 }
 
 .sites-shell-topbar .busqueda-reservas-wrap > span,
 .sites-shell-topbar .busqueda-palabra-wrap > span {
-    color: #73837b !important;
+    color: var(--cereza-secundario) !important;
     font-size: 16px !important;
 }
 
@@ -228,7 +228,7 @@ body:has(> .sites-shell-topbar) {
 
 .sites-shell-topbar .busqueda-reservas-wrap input::placeholder,
 .sites-shell-topbar .busqueda-palabra-wrap input::placeholder {
-    color: #85938b !important;
+    color: var(--cereza-secundario) !important;
 }
 
 /* Resumen conserva un override antiguo que ocultaba la búsqueda por palabra. */
@@ -240,7 +240,7 @@ body:has(> .sites-shell-topbar) {
     body:has(#seccion-resumen.activa) .sites-shell-topbar .busqueda-reservas-wrap {
         height: 38px !important;
         border-color: var(--sites-shell-line) !important;
-        background: #f9fbf9 !important;
+        background: var(--cereza-relieve) !important;
         box-shadow: none;
     }
 }
@@ -262,16 +262,16 @@ body:has(> .sites-shell-topbar) {
     gap: 8px;
     width: 124px;
     padding: 0 10px;
-    border: 1px solid #245b4a;
+    border: 1px solid var(--cereza-primario);
     border-radius: 6px;
-    background: #245b4a;
+    background: var(--cereza-primario);
     color: #ffffff;
     font-size: 13px;
     font-weight: 650;
 }
 
 .sites-shell-topbar .boton-nueva-reserva:hover {
-    background: #1d4a3d;
+    background: var(--cereza-primario);
 }
 
 .sites-shell-topbar .boton-notificaciones {
@@ -280,12 +280,12 @@ body:has(> .sites-shell-topbar) {
     padding: 0;
     border: 1px solid var(--sites-shell-line);
     border-radius: 6px;
-    background: #ffffff;
+    background: var(--cereza-superficie);
     color: #344b40;
 }
 
 .sites-shell-topbar .boton-notificaciones:hover {
-    background: #edf4ef;
+    background: var(--cereza-relieve);
 }
 
 .sites-shell-topbar .boton-nueva-reserva svg,

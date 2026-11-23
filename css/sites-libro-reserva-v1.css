@@ -13,7 +13,7 @@ body:has(#seccion-libro-reserva.activa) > main.contenido.sites-shell-main {
     max-width: none;
     min-width: 0;
     padding: 26px 32px 48px;
-    background: #f8fbf9;
+    background: var(--cereza-relieve);
     color: #243a2c;
     font-family: var(--sites-shell-font, Inter, "Segoe UI", Arial, sans-serif);
 }
@@ -42,7 +42,7 @@ body:has(#seccion-libro-reserva.activa) > main.contenido.sites-shell-main {
 #seccion-libro-reserva .sites-libro-heading .subtitulo {
     display: block;
     margin: 0 0 6px;
-    color: #648171;
+    color: var(--cereza-secundario);
     font-size: 10px;
     font-weight: 780;
     letter-spacing: .15em;
@@ -50,7 +50,7 @@ body:has(#seccion-libro-reserva.activa) > main.contenido.sites-shell-main {
 }
 #seccion-libro-reserva .sites-libro-heading h2 {
     margin: 0;
-    color: #243a2e;
+    color: var(--cereza-texto);
     font-size: 28px;
     font-weight: 750;
     letter-spacing: -.04em;
@@ -58,7 +58,7 @@ body:has(#seccion-libro-reserva.activa) > main.contenido.sites-shell-main {
 }
 #seccion-libro-reserva .sites-libro-heading .texto-secundario {
     margin: 5px 0 0;
-    color: #718177;
+    color: var(--cereza-secundario);
     font-size: 13px;
     line-height: 1.4;
 }
@@ -87,9 +87,9 @@ body:has(#seccion-libro-reserva.activa) > main.contenido.sites-shell-main {
     margin: 0;
     padding: 0;
     overflow: hidden;
-    border: 1px solid #dce7df;
+    border: 1px solid var(--cereza-linea);
     border-radius: 9px;
-    background: #fff;
+    background: var(--cereza-superficie);
     box-shadow: 0 3px 14px #29423309;
 }
 #seccion-libro-reserva .sites-libro-origen {
@@ -97,15 +97,15 @@ body:has(#seccion-libro-reserva.activa) > main.contenido.sites-shell-main {
     grid-template-columns: minmax(260px, 1.55fr) repeat(2, minmax(140px, .7fr)) minmax(220px, 1fr);
     align-items: stretch;
     min-width: 0;
-    border-bottom: 1px solid #dfe8e1;
-    background: #f8fbf9;
+    border-bottom: 1px solid var(--cereza-linea);
+    background: var(--cereza-relieve);
 }
 #seccion-libro-reserva .sites-libro-origen-bloque {
     min-width: 0;
     padding: 15px 17px;
 }
 #seccion-libro-reserva .sites-libro-origen-bloque + .sites-libro-origen-bloque {
-    border-left: 1px solid #e1eae3;
+    border-left: 1px solid var(--cereza-linea);
 }
 #seccion-libro-reserva .libro-reserva-estado.sites-libro-origen-bloque {
     text-align: left;
@@ -150,7 +150,7 @@ body:has(#seccion-libro-reserva.activa) > main.contenido.sites-shell-main {
     min-width: 0;
     padding: 11px 16px;
     border-bottom: 1px solid #e1e9e3;
-    background: #fff;
+    background: var(--cereza-superficie);
 }
 #seccion-libro-reserva .libro-reserva-acciones {
     display: flex;
@@ -175,7 +175,7 @@ body:has(#seccion-libro-reserva.activa) > main.contenido.sites-shell-main {
     padding: 0 10px;
     border: 1px solid #d0ded4;
     border-radius: 5px;
-    background: #fff;
+    background: var(--cereza-superficie);
     box-shadow: none;
     color: #375e46;
     font-family: inherit;
@@ -254,7 +254,7 @@ body:has(#seccion-libro-reserva.activa) > main.contenido.sites-shell-main {
     min-height: 69px;
     padding: 10px 15px;
     border-bottom: 1px solid #dbe6df;
-    background: #f7faf8;
+    background: var(--cereza-relieve);
 }
 #seccion-libro-reserva .sites-libro-hoja-info {
     display: grid;
@@ -280,7 +280,7 @@ body:has(#seccion-libro-reserva.activa) > main.contenido.sites-shell-main {
     padding: 0 10px;
     border: 1px solid #ceded2;
     border-radius: 5px;
-    background: #fff;
+    background: var(--cereza-superficie);
     color: #2d4d39;
     font-family: inherit;
     font-size: 12px;
@@ -324,7 +324,7 @@ body:has(#seccion-libro-reserva.activa) > main.contenido.sites-shell-main {
     padding: 0;
     border: 1px solid #d0dfd4;
     border-radius: 5px;
-    background: #fff;
+    background: var(--cereza-superficie);
     color: #315d43;
     font-family: inherit;
     font-size: 15px;
@@ -381,7 +381,7 @@ body:has(#seccion-libro-reserva.activa) > main.contenido.sites-shell-main {
     overflow: auto;
     overscroll-behavior: contain;
     scrollbar-color: #aebcaf #eff3f0;
-    background: #fff;
+    background: var(--cereza-superficie);
 }
 /* Encabezados propios del visor: se fijan sin alterar los estilos de las celdas XLSX. */
 #seccion-libro-reserva .libro-reserva-tabla--fiel th.sites-libro-colhead {
@@ -462,7 +462,7 @@ body:has(#seccion-libro-reserva.activa) > main.contenido.sites-shell-main {
     min-width: 0;
     padding: 7px 15px;
     border-top: 1px solid #e3eae4;
-    background: #fbfcfb;
+    background: var(--cereza-superficie);
     color: #6f8173;
     font-size: 10px;
     line-height: 1.3;
@@ -474,7 +474,7 @@ body:has(#seccion-libro-reserva.activa) > main.contenido.sites-shell-main {
     margin: 0;
     padding: 11px 16px;
     border-top: 1px solid #e2eae3;
-    background: #f8fbf9;
+    background: var(--cereza-relieve);
     color: #5d7362;
     font-size: 11px;
     line-height: 1.5;
@@ -494,7 +494,7 @@ body:has(#seccion-libro-reserva.activa) > main.contenido.sites-shell-main {
         align-items: baseline;
         gap: 12px;
         padding: 8px 17px;
-        border-top: 1px solid #e1eae3;
+        border-top: 1px solid var(--cereza-linea);
         border-left: 0;
     }
     #seccion-libro-reserva .sites-libro-origen-bloque:last-child .sites-libro-origen-kicker { flex: none; margin: 0; }
@@ -506,7 +506,7 @@ body:has(#seccion-libro-reserva.activa) > main.contenido.sites-shell-main {
         order: 1;
         width: 100%;
         padding: 10px 0 0;
-        border-top: 1px solid #e4ede6;
+        border-top: 1px solid var(--cereza-linea);
         border-left: 0;
     }
     #seccion-libro-reserva .haiku-libro-google { order: 2; }
@@ -524,7 +524,7 @@ body:has(#seccion-libro-reserva.activa) > main.contenido.sites-shell-main {
     #seccion-libro-reserva .sites-libro-origen-bloque:last-child {
         display: block;
         padding: 9px 12px;
-        border-top: 1px solid #e1eae3;
+        border-top: 1px solid var(--cereza-linea);
         border-left: 0;
     }
     #seccion-libro-reserva .sites-libro-origen-bloque:first-child { border-top: 0; }

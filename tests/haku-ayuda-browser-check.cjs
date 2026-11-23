@@ -245,7 +245,7 @@ async function ayuda(browser,ancho,tema,webview=false) {
         assert.equal(estilos.desborde,false);
         assert.equal(estilos.tapaAcciones,false);
         assert.equal(estilos.columnas.split(" ").length,escritorio?2:1);
-        assert.equal(estilos.fondo,tema==="oscuro"?"rgb(27, 38, 33)":"rgb(251, 252, 251)");
+        assert.equal(estilos.fondo,tema==="oscuro"?"rgb(35, 31, 37)":"rgb(255, 253, 251)");
         const buscador=panel.getByRole("searchbox");
         if (!escritorio) assert.equal(await buscador.evaluate(n=>n===document.activeElement),false);
         await panel.getByText("Resumen del día",{exact:true}).click();
@@ -458,7 +458,7 @@ async function operaciones(browser,ancho,tema) {
         assert.equal(await page.evaluate(()=>prueba.rpc.length+prueba.tablas.length),cuenta);
         const medidas=await tarjeta.evaluate(e=>({ancho:e.clientWidth,scroll:e.scrollWidth,tema:getComputedStyle(e).backgroundColor}));
         assert.ok(medidas.scroll<=medidas.ancho+1);
-        assert.equal(medidas.tema,tema==="oscuro"?"rgb(27, 38, 33)":"rgb(251, 252, 251)");
+        assert.equal(medidas.tema,tema==="oscuro"?"rgb(35, 31, 37)":"rgb(255, 253, 251)");
         await tarjeta.getByRole("button",{name:boton,exact:true}).click();
         await tarjeta.getByRole("status").getByText(resultado).waitFor();
         return tarjeta;
@@ -518,7 +518,7 @@ async function comprobarTarjeta(tarjeta, tema) {
     });
     assert.ok(estilo.margen<=2, `aprovecha el ancho del panel: ${estilo.margen}`);
     assert.equal(estilo.desborde,false);
-    assert.equal(estilo.fondo,tema==="oscuro"?"rgb(27, 38, 33)":"rgb(251, 252, 251)");
+    assert.equal(estilo.fondo,tema==="oscuro"?"rgb(35, 31, 37)":"rgb(255, 253, 251)");
     assert.ok(estilo.contraste>=4.5,`contraste del encabezado: ${estilo.contraste}`);
 }
 

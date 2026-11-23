@@ -16,8 +16,8 @@
     display: flex;
     flex-direction: column;
     width: min(420px, 100vw);
-    background: #fff;
-    color: #263d30;
+    background: var(--cereza-superficie);
+    color: var(--cereza-texto);
     box-shadow: -12px 0 35px #10241d20;
     font-family: inherit;
 }
@@ -28,7 +28,7 @@
     align-items: flex-start;
     gap: 15px;
     padding: 18px 22px 16px;
-    border-bottom: 1px solid #dce7df;
+    border-bottom: 1px solid var(--cereza-linea);
 }
 .sites-notificaciones-head small {
     display: block;
@@ -68,7 +68,7 @@
 .sites-notificaciones-section { padding-top: 17px; }
 .sites-notificaciones-section + .sites-notificaciones-section {
     margin-top: 7px;
-    border-top: 1px solid #dce7df;
+    border-top: 1px solid var(--cereza-linea);
 }
 .sites-notificaciones-heading {
     display: flex;
@@ -148,7 +148,7 @@
 .sites-notificaciones-entry button:hover { text-decoration: underline; }
 .sites-notificaciones-entry button.danger { color: #9b5b4e; }
 .sites-notificaciones-activity { display: grid; }
-.sites-notificaciones-group { border-bottom: 1px solid #dce7df; }
+.sites-notificaciones-group { border-bottom: 1px solid var(--cereza-linea); }
 .sites-notificaciones-group:last-child { border-bottom: 0; }
 .sites-notificaciones-group summary {
     display: flex;
@@ -163,7 +163,7 @@
 .sites-notificaciones-group-title {
     flex: 1;
     min-width: 0;
-    color: #263d30;
+    color: var(--cereza-texto);
     font-size: 13px;
     font-weight: 670;
 }
@@ -181,7 +181,7 @@
 }
 .sites-notificaciones-group[open] .sites-notificaciones-chevron { transform: rotate(-90deg); }
 .sites-notificaciones-list { padding: 0 0 5px 26px; }
-.sites-notificaciones-entry { padding: 9px 0; border-top: 1px solid #edf1ed; }
+.sites-notificaciones-entry { padding: 9px 0; border-top: 1px solid var(--cereza-linea); }
 .sites-notificaciones-entry-main { display: flex; align-items: baseline; gap: 7px; min-width: 0; }
 .sites-notificaciones-hour {
     flex: none;

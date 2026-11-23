@@ -37,7 +37,7 @@ body:has(> .sites-shell-topbar):has(#seccion-calendario.activa) {
 
 #seccion-calendario .sites-calendario-etiqueta {
     margin: 0 0 7px;
-    color: #698779;
+    color: var(--cereza-secundario);
     font-size: 11px;
     font-weight: 770;
     letter-spacing: .15em;
@@ -46,7 +46,7 @@ body:has(> .sites-shell-topbar):has(#seccion-calendario.activa) {
 
 #seccion-calendario .sites-calendario-encabezado h2 {
     margin: 0;
-    color: #1c3029;
+    color: var(--cereza-texto);
     font-size: 28px;
     font-weight: 730;
     letter-spacing: -.045em;
@@ -66,7 +66,7 @@ body:has(> .sites-shell-topbar):has(#seccion-calendario.activa) {
     padding: 0 14px;
     border: 1px solid #cfddd5;
     border-radius: 6px;
-    background: #fff;
+    background: var(--cereza-superficie);
     color: #295b49;
     font: 650 13px/1.2 var(--sites-shell-font);
     white-space: nowrap;
@@ -74,7 +74,7 @@ body:has(> .sites-shell-topbar):has(#seccion-calendario.activa) {
 
 #seccion-calendario .sites-calendario-accion-bloqueo:hover {
     border-color: #a9c9b7;
-    background: #eef5f0;
+    background: var(--cereza-relieve);
 }
 
 #seccion-calendario .sites-calendario-accion-bloqueo.activo {
@@ -136,9 +136,9 @@ body:has(> .sites-shell-topbar):has(#seccion-calendario.activa) {
     width: 32px;
     height: 32px;
     padding: 0;
-    border: 1px solid #dbe4de;
+    border: 1px solid var(--cereza-linea);
     border-radius: 6px;
-    background: #fff;
+    background: var(--cereza-superficie);
     color: #365646;
     font-size: 24px;
     font-weight: 400;
@@ -146,7 +146,7 @@ body:has(> .sites-shell-topbar):has(#seccion-calendario.activa) {
 }
 
 #seccion-calendario .sites-calendario-navegar:hover {
-    background: #edf4ef;
+    background: var(--cereza-relieve);
 }
 
 #seccion-calendario .sites-calendario-ir-hoy {
@@ -177,7 +177,7 @@ body:has(> .sites-shell-topbar):has(#seccion-calendario.activa) {
 #seccion-calendario .sites-calendario-dias-semana {
     grid-template-columns: repeat(7, minmax(0, 1fr));
     border-bottom: 1px solid #e0e9e3;
-    background: #f7faf8;
+    background: var(--cereza-relieve);
 }
 
 #seccion-calendario .sites-calendario-dias-semana span {
@@ -215,10 +215,10 @@ body:has(> .sites-shell-topbar):has(#seccion-calendario.activa) {
     padding: 8px 10px;
     overflow: visible;
     border: 0;
-    border-right: 1px solid #e7ede8;
+    border-right: 1px solid var(--cereza-linea);
     border-bottom: 1px solid #e0e9e3;
-    background: #fff;
-    color: #24382d;
+    background: var(--cereza-superficie);
+    color: var(--cereza-texto);
     font: inherit;
     text-align: left;
     cursor: pointer;
@@ -229,11 +229,11 @@ body:has(> .sites-shell-topbar):has(#seccion-calendario.activa) {
 }
 
 #seccion-calendario .dia-calendario:hover {
-    background: #f7faf8;
+    background: var(--cereza-relieve);
 }
 
 #seccion-calendario .dia-calendario.dia-vacio {
-    background: #fbfcfb;
+    background: var(--cereza-superficie);
     color: #a9b5ac;
 }
 
@@ -242,7 +242,7 @@ body:has(> .sites-shell-topbar):has(#seccion-calendario.activa) {
 }
 
 #seccion-calendario .dia-calendario.seleccionado:not(.hoy) {
-    background: #f7faf8;
+    background: var(--cereza-relieve);
 }
 
 #seccion-calendario .dia-calendario .numero-dia {
@@ -256,7 +256,7 @@ body:has(> .sites-shell-topbar):has(#seccion-calendario.activa) {
     height: 24px;
     min-height: 24px;
     border-radius: 50%;
-    color: #24382d;
+    color: var(--cereza-texto);
     font-size: 12px;
     font-weight: 710;
     line-height: 1;
@@ -429,10 +429,10 @@ body:has(> .sites-shell-topbar):has(#seccion-calendario.activa) {
     max-height: min(480px, calc(100vh - 24px));
     padding: 0;
     overflow: hidden;
-    border: 1px solid var(--sites-shell-line, #dce5e0);
+    border: 1px solid var(--sites-shell-line, var(--cereza-linea));
     border-radius: 9px;
-    background: #fff;
-    color: var(--sites-shell-ink, #172522);
+    background: var(--cereza-superficie);
+    color: var(--sites-shell-ink, var(--cereza-texto));
     box-shadow: 0 18px 50px #14282035;
     font-family: var(--sites-shell-font, Inter, "Segoe UI", Arial, sans-serif);
 }
@@ -494,7 +494,7 @@ body:has(> .sites-shell-topbar):has(#seccion-calendario.activa) {
     border: 1px solid #e5ebe6;
     border-left: 3px solid var(--cal-sites-panel-accent);
     border-radius: 5px;
-    background: #fff;
+    background: var(--cereza-superficie);
     color: #263e32;
     font: 630 12px/1.35 var(--sites-shell-font, Inter, "Segoe UI", Arial, sans-serif);
     text-align: left;
@@ -503,7 +503,7 @@ body:has(> .sites-shell-topbar):has(#seccion-calendario.activa) {
 }
 
 .calendario-panel-dia .calendario-panel-reserva:hover {
-    background: #f7faf8;
+    background: var(--cereza-relieve);
 }
 
 .calendario-panel-dia .calendario-panel-reserva:is(.cal-reserva-checkin, .cal-reserva-continua) { --cal-sites-panel-accent: #387d5e; }
@@ -647,7 +647,7 @@ body:has(> .sites-shell-topbar):has(#seccion-calendario.activa) {
 
     #seccion-calendario .dia-calendario.hoy:not(.seleccionado) .numero-dia {
         background: transparent;
-        color: #24382d;
+        color: var(--cereza-texto);
     }
 
     #seccion-calendario .dia-calendario.sites-calendario-dia-con-actividad::after {
@@ -672,7 +672,7 @@ body:has(> .sites-shell-topbar):has(#seccion-calendario.activa) {
         padding: 12px 15px;
         border: 1px solid var(--sites-shell-line);
         border-radius: 9px;
-        background: #fff;
+        background: var(--cereza-superficie);
     }
 
     #seccion-calendario .sites-calendario-agenda-cabecera {
@@ -685,7 +685,7 @@ body:has(> .sites-shell-topbar):has(#seccion-calendario.activa) {
 
     #seccion-calendario .sites-calendario-agenda-cabecera strong {
         min-width: 0;
-        color: #263c30;
+        color: var(--cereza-texto);
         font-size: 14px;
         line-height: 1.25;
     }
@@ -721,7 +721,7 @@ body:has(> .sites-shell-topbar):has(#seccion-calendario.activa) {
     #seccion-calendario .sites-calendario-agenda-item.cal-reserva-checkout { --cal-agenda-accent: var(--haiku-reserva-checkout-fondo); }
     #seccion-calendario .sites-calendario-agenda-item.cal-reserva-fullday { --cal-agenda-accent: #bb9452; }
     #seccion-calendario .sites-calendario-agenda-item.cal-reserva-bloqueada { --cal-agenda-accent: #a3877e; }
-    #seccion-calendario .sites-calendario-agenda-item:hover { background: #f7faf8; }
+    #seccion-calendario .sites-calendario-agenda-item:hover { background: var(--cereza-relieve); }
     #seccion-calendario .sites-calendario-agenda-riel { flex: none; width: 3px; height: 32px; border-radius: 2px; background: var(--cal-agenda-accent); }
     #seccion-calendario .sites-calendario-agenda-texto { display: grid; gap: 3px; min-width: 0; }
     #seccion-calendario .sites-calendario-agenda-texto strong { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }

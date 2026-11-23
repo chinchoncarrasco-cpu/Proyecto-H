@@ -110,6 +110,7 @@
     const panel = root.querySelector("#haiku-asistente-panel");
     const overlay = root.querySelector("#haiku-asistente-overlay");
     const boton = root.querySelector("#haiku-asistente-boton");
+    const accesoChat = document.getElementById("haiku-acceso-chat");
     const cerrar = root.querySelector("#haiku-asistente-cerrar");
     const mensajes = root.querySelector("#haiku-asistente-mensajes");
     const campo = root.querySelector("#haiku-asistente-texto");
@@ -152,15 +153,18 @@
         const autenticado = estaAutenticado();
         if (!autenticado) cerrarPanel();
         root.hidden = !autenticado;
+        if (accesoChat) accesoChat.hidden = !autenticado;
     }
 
-    function abrirPanel() {
+    function abrirPanel(presentacion = "burbuja") {
         if (root.hidden) return;
         if (!panel.hidden) return;
         focoAnterior = document.activeElement;
+        root.dataset.haikuPresentacion = presentacion;
         overlay.hidden = true;
         panel.hidden = false;
         boton.setAttribute("aria-expanded", "true");
+        accesoChat?.setAttribute("aria-expanded", String(presentacion === "chat"));
         notificarEstadoPanel();
         requestAnimationFrame(() => { if (!panel.hidden) campo.focus(); });
     }
@@ -170,6 +174,7 @@
         panel.hidden = true;
         overlay.hidden = true;
         boton.setAttribute("aria-expanded", "false");
+        accesoChat?.setAttribute("aria-expanded", "false");
         notificarEstadoPanel();
         (focoAnterior?.isConnected ? focoAnterior : boton).focus?.();
         focoAnterior = null;
@@ -1819,6 +1824,16 @@
     }
 
     boton.addEventListener("click", alternarPanel);
+    accesoChat?.addEventListener("click", () => {
+        if (panel.hidden) abrirPanel("chat");
+        else if (root.dataset.haikuPresentacion === "chat") cerrarPanel();
+        else {
+            root.dataset.haikuPresentacion = "chat";
+            accesoChat.setAttribute("aria-expanded", "true");
+            focoAnterior = accesoChat;
+            campo.focus();
+        }
+    });
     cerrar.addEventListener("click", cerrarPanel);
     document.addEventListener("keydown", evento => {
         if (panel.hidden) return;

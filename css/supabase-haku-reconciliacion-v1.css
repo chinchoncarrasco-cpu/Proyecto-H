@@ -10,14 +10,14 @@
 .haiku-versiones-titulo { margin: 0 0 8px; font-size: 1rem; color: #23563e; line-height: 1.5; }
 .haiku-versiones-aviso { font-size: .78rem; color: #53675b; line-height: 1.5; }
 .haiku-versiones-totales { display: grid; grid-template-columns: repeat(auto-fit, minmax(88px, 1fr)); gap: 7px; margin: 15px 0; }
-.haiku-versiones-totales > div { padding: 10px 6px; background: #eef7f2; border: 1px solid #dce6df; border-radius: 10px; text-align: center; }
+.haiku-versiones-totales > div { padding: 10px 6px; background: #eef7f2; border: 1px solid var(--cereza-linea); border-radius: 10px; text-align: center; }
 .haiku-versiones-totales strong, .haiku-versiones-totales span { display: block; }
 .haiku-versiones-totales strong { font-size: 1.3rem; color: #23563e; }
 .haiku-versiones-totales span { font-size: .72rem; margin-top: 4px; }
 .haiku-versiones-seccion { margin: 10px 0; }
 .haiku-versiones summary { cursor: pointer; padding: 9px 3px; font-weight: 600; }
 .haiku-versiones summary:focus-visible { outline: 2px solid #1f6e4c; outline-offset: 3px; }
-.haiku-versiones-tarjeta { margin: 8px 0; padding: 14px; border: 1px solid #dce6df; border-left: 4px solid #418667; border-radius: 12px; background: #fff; overflow-wrap: anywhere; line-height: 1.55; }
+.haiku-versiones-tarjeta { margin: 8px 0; padding: 14px; border: 1px solid var(--cereza-linea); border-left: 4px solid #418667; border-radius: 12px; background: var(--cereza-superficie); overflow-wrap: anywhere; line-height: 1.55; }
 .haiku-versiones--requiere_revision { border-left-color: #a77111; background: #fffbf1; }
 .haiku-versiones--ya_no_aparece { border-left-color: #a66458; }
 .haiku-versiones--modificada { border-left-color: #4f77a3; }
@@ -40,15 +40,15 @@
     --rec-verde-2: #2f7d5a;
     --rec-verde-suave: #eef7f2;
     --rec-verde-muy-suave: #f7fbf8;
-    --rec-borde: #dce6df;
+    --rec-borde: var(--cereza-linea);
     --rec-borde-fuerte: #c9d8cf;
     --rec-texto: #243129;
-    --rec-muted: #718078;
+    --rec-muted: var(--cereza-secundario);
     --rec-ambar: #9a6908;
     --rec-ambar-bg: #fff8e7;
     --rec-rojo: #93483e;
     --rec-rojo-bg: #fff1ef;
-    --rec-gris-bg: #f6f8f7;
+    --rec-gris-bg: var(--cereza-relieve);
     color: var(--rec-texto);
 }
 
@@ -75,9 +75,9 @@
 .haiku-asistente-preview .haiku-asistente-preview-resumen {
     margin: 12px 0;
     padding: 11px 12px;
-    border: 1px solid #dfe8e2;
+    border: 1px solid var(--cereza-linea);
     border-radius: 11px;
-    background: #f6f9f7;
+    background: var(--cereza-relieve);
     color: #445249;
     font-size: .66rem;
     font-weight: 700;
@@ -92,7 +92,7 @@
 .haiku-asistente-preview .haiku-asistente-preview-dato {
     padding: 8px 9px;
     border-color: var(--rec-borde);
-    background: #fbfcfb;
+    background: var(--cereza-superficie);
 }
 
 /* Secciones principales */
@@ -102,7 +102,7 @@
     padding: 0 !important;
     border: 1px solid var(--rec-borde) !important;
     border-radius: 12px;
-    background: #fff;
+    background: var(--cereza-superficie);
     overflow: hidden;
     box-shadow: 0 2px 8px rgba(30, 55, 41, .035);
 }
@@ -115,7 +115,7 @@
     padding: 11px 38px 10px 16px;
     list-style: none;
     border-left: 4px solid #9eaaa3;
-    background: #f8faf8;
+    background: var(--cereza-relieve);
     color: #314239 !important;
     font-size: .68rem !important;
     font-weight: 850 !important;
@@ -145,18 +145,18 @@
 .haiku-asistente-preview > details:nth-of-type(1) > summary,
 .haiku-asistente-preview > details:nth-of-type(4) > summary {
     border-left-color: #4e8b6c;
-    background: #f2f8f4;
+    background: var(--cereza-relieve);
     color: #28523d !important;
 }
 
 .haiku-asistente-preview > details:nth-of-type(2) > summary {
     border-left-color: #708c7c;
-    background: #f4f7f5;
+    background: var(--cereza-lienzo);
 }
 
 .haiku-asistente-preview > details:nth-of-type(3) > summary {
     border-left-color: #9ba9a0;
-    background: #f7f8f7;
+    background: var(--cereza-relieve);
     color: #536159 !important;
 }
 
@@ -174,7 +174,7 @@
 
 .haiku-asistente-preview > details:nth-of-type(7) > summary {
     border-left-color: #a7afaa;
-    background: #f7f8f7;
+    background: var(--cereza-relieve);
     color: #69736d !important;
 }
 
@@ -182,9 +182,9 @@
 .haiku-asistente-preview > details > div {
     margin: 9px 9px 0;
     padding: 10px 11px;
-    border: 1px solid #e2e9e4;
+    border: 1px solid var(--cereza-linea);
     border-radius: 10px;
-    background: #fff;
+    background: var(--cereza-superficie);
     box-shadow: 0 1px 5px rgba(26, 52, 37, .035);
 }
 
@@ -250,7 +250,7 @@
     margin-top: 6px;
     padding: 8px 9px;
     border-style: dashed;
-    background: #fafbfa;
+    background: var(--cereza-relieve);
     box-shadow: none;
 }
 
@@ -275,7 +275,7 @@
     padding: 8px 10px;
     border: 1px solid #a9c3b4;
     border-radius: 8px;
-    background: #f4faf6;
+    background: var(--cereza-relieve);
     color: #2e6649;
     font: inherit;
     font-size: .61rem;
@@ -297,9 +297,9 @@
 .haiku-asistente-preview > details > div details {
     margin: 8px 0 0 30px !important;
     padding: 0 !important;
-    border: 1px solid #e2e9e4 !important;
+    border: 1px solid var(--cereza-linea) !important;
     border-radius: 8px;
-    background: #fafcfb;
+    background: var(--cereza-relieve);
     overflow: hidden;
 }
 
@@ -307,7 +307,7 @@
     position: relative;
     padding: 7px 30px 7px 9px !important;
     list-style: none;
-    background: #f7faf8;
+    background: var(--cereza-relieve);
     color: #53645a !important;
     font-size: .58rem !important;
     font-weight: 800 !important;
@@ -327,8 +327,8 @@
 .haiku-asistente-preview > details > div details > ul {
     margin: 0 !important;
     padding: 8px 11px 9px 25px !important;
-    border-top: 1px solid #edf1ee;
-    background: #fff;
+    border-top: 1px solid var(--cereza-linea);
+    background: var(--cereza-superficie);
     color: #5f6f66;
     font-size: .59rem;
     line-height: 1.45;
@@ -338,17 +338,17 @@
 .haiku-asistente-preview > details > ul {
     margin: 0 !important;
     padding: 9px 12px 10px 27px !important;
-    border-top: 1px solid #edf1ee;
-    background: #fff;
+    border-top: 1px solid var(--cereza-linea);
+    background: var(--cereza-superficie);
 }
 
 /* El bloque de preguntas es el único listado que contiene labels directos. */
 .haiku-asistente-preview-lista:has(> label) {
     margin-top: 10px;
     padding: 0;
-    border: 1px solid #d9e5dd;
+    border: 1px solid var(--cereza-linea);
     border-radius: 12px;
-    background: #fbfdfb;
+    background: var(--cereza-relieve);
     overflow: hidden;
 }
 
@@ -396,9 +396,9 @@
     gap: 7px;
     margin: 8px;
     padding: 10px;
-    border: 1px solid #e1e8e3;
+    border: 1px solid var(--cereza-linea);
     border-radius: 11px;
-    background: #fff;
+    background: var(--cereza-superficie);
     box-shadow: 0 2px 8px rgba(24, 55, 38, .045);
 }
 
@@ -413,7 +413,7 @@
 
 .haiku-reconciliacion-decision-titulo {
     min-width: 0;
-    color: #203128;
+    color: var(--cereza-texto);
     font-size: .72rem;
     font-weight: 800;
     line-height: 1.35;
@@ -423,7 +423,7 @@
     flex: 0 0 auto;
     padding: 3px 6px;
     border-radius: 999px;
-    background: #edf3ef;
+    background: var(--cereza-relieve);
     color: #53675c;
     font-size: .54rem;
     font-weight: 800;
@@ -446,7 +446,7 @@
     padding: 7px 30px 7px 9px;
     border: 1px solid #cfdad3;
     border-radius: 8px;
-    background: #fafcfb;
+    background: var(--cereza-relieve);
     color: #34443b;
     font: inherit;
     font-size: .65rem;
@@ -477,9 +477,9 @@
 
 .haiku-reconciliacion-resumen-accion {
     padding: 8px;
-    border: 1px solid #dfe8e2;
+    border: 1px solid var(--cereza-linea);
     border-radius: 9px;
-    background: #f8faf9;
+    background: var(--cereza-relieve);
 }
 .haiku-reconciliacion-resumen-accion span {
     display: block;
@@ -500,9 +500,9 @@
     min-height: 36px;
     margin-top: 10px;
     padding: 8px 12px;
-    border: 1px solid #bfd1c6;
+    border: 1px solid var(--cereza-linea-fuerte);
     border-radius: 9px;
-    background: #f7faf8;
+    background: var(--cereza-relieve);
     color: #315844;
     font: inherit;
     font-size: .64rem;
@@ -520,7 +520,7 @@
 }
 
 .haiku-asistente-preview > button.libro-reserva-boton:disabled {
-    border-color: #d9dfdb;
+    border-color: var(--cereza-linea);
     background: #f3f4f3;
     color: #99a29c;
     cursor: not-allowed;
@@ -529,7 +529,7 @@
 /* El texto de alcance al final queda claramente secundario. */
 .haiku-asistente-preview > details + p,
 .haiku-asistente-preview > details ~ p:last-of-type {
-    color: #748078;
+    color: var(--cereza-secundario);
     font-size: .59rem;
     line-height: 1.45;
 }
@@ -605,7 +605,7 @@
 
 .haiku-incorporacion-modo {
     padding: 4px 7px;
-    background: #edf3ef;
+    background: var(--cereza-relieve);
     color: #4c6357;
 }
 
@@ -630,9 +630,9 @@
 .haiku-incorporacion-indicador {
     min-width: 0;
     padding: 6px 4px;
-    border: 1px solid #e1e8e3;
+    border: 1px solid var(--cereza-linea);
     border-radius: 8px;
-    background: #f8faf9;
+    background: var(--cereza-relieve);
     text-align: center;
 }
 
@@ -642,7 +642,7 @@
 }
 
 .haiku-incorporacion-indicador strong {
-    color: #244334;
+    color: var(--cereza-texto);
     font-size: .82rem;
     line-height: 1;
 }
@@ -650,7 +650,7 @@
 .haiku-incorporacion-indicador span {
     margin-top: 3px;
     overflow: hidden;
-    color: #748078;
+    color: var(--cereza-secundario);
     font-size: .52rem;
     font-weight: 750;
     text-overflow: ellipsis;
@@ -694,23 +694,23 @@
     display: grid;
     gap: 7px;
     padding: 7px;
-    border-top: 1px solid #edf1ee;
+    border-top: 1px solid var(--cereza-linea);
     background: #f7f9f8;
 }
 
 .haiku-incorporacion-item {
     min-width: 0;
     padding: 9px;
-    border: 1px solid #dfe6e1;
+    border: 1px solid var(--cereza-linea);
     border-left: 3px solid #9dbfac;
     border-radius: 9px;
-    background: #fff;
+    background: var(--cereza-superficie);
     box-shadow: 0 1px 4px rgba(25, 54, 38, .035);
 }
 
 .haiku-incorporacion-item--dudosos,
 .haiku-incorporacion-item--pendientes { border-left-color: #d1a33d; }
-.haiku-incorporacion-item--omitidos { border-left-color: #a7b0aa; background: #fafbfa; }
+.haiku-incorporacion-item--omitidos { border-left-color: #a7b0aa; background: var(--cereza-relieve); }
 .haiku-incorporacion-item--pagos { border-left-color: #4b9b70; }
 
 /* Haku conserva los controles y el historial de cada ficha. El navegador
@@ -770,14 +770,14 @@
 }
 
 .haiku-incorporacion-identidad strong {
-    color: #203128;
+    color: var(--cereza-texto);
     font-size: .75rem;
     line-height: 1.25;
 }
 
 .haiku-incorporacion-identidad small {
     margin-top: 2px;
-    color: #748078;
+    color: var(--cereza-secundario);
     font-size: .61rem;
     line-height: 1.25;
 }
@@ -786,7 +786,7 @@
 .haiku-incorporacion-estado--dudosos,
 .haiku-incorporacion-estado--pendientes { background: #fff2d8; color: #815c12; }
 .haiku-incorporacion-estado--omitidos,
-.haiku-incorporacion-estado--asociadas { background: #eef1ef; color: #647068; }
+.haiku-incorporacion-estado--asociadas { background: var(--cereza-relieve); color: #647068; }
 
 .haiku-incorporacion-estadias,
 .haiku-incorporacion-contacto,
@@ -802,7 +802,7 @@
     gap: 5px;
     padding: 6px;
     border-radius: 7px;
-    background: #f5f8f6;
+    background: var(--cereza-relieve);
 }
 
 .haiku-incorporacion-contacto { grid-template-columns: .9fr 1.5fr 1fr; }
@@ -812,7 +812,7 @@
     min-width: 0;
     padding: 5px 6px;
     border-radius: 6px;
-    background: #f6f8f7;
+    background: var(--cereza-relieve);
 }
 
 .haiku-incorporacion-dato span,
@@ -836,7 +836,7 @@
 .haiku-incorporacion-movimientos-libro {
     margin-top: 9px;
     padding-top: 8px;
-    border-top: 1px solid #dfe8e2;
+    border-top: 1px solid var(--cereza-linea);
 }
 
 .haiku-incorporacion-movimientos-titulo {
@@ -859,7 +859,7 @@
     border: 1px solid #e0e8e3;
     border-left: 3px solid #7aa68c;
     border-radius: 7px;
-    background: #fbfdfc;
+    background: var(--cereza-relieve);
 }
 
 .haiku-incorporacion-movimiento--revisar,
@@ -882,7 +882,7 @@
 .haiku-incorporacion-movimiento-estado {
     padding: 2px 5px;
     border-radius: 999px;
-    background: #edf3ef;
+    background: var(--cereza-relieve);
     color: #4d6657;
     font-size: .5rem;
     font-weight: 800;
@@ -949,7 +949,7 @@
     margin: 0;
     overflow-y: auto;
     padding: 7px 9px;
-    border-top: 1px solid #edf1ee;
+    border-top: 1px solid var(--cereza-linea);
     color: #626e67;
     font-size: .57rem;
     line-height: 1.35;
@@ -971,9 +971,9 @@
     min-height: 29px;
     margin-top: 7px;
     padding: 5px 9px;
-    border: 1px solid #bfd4c6;
+    border: 1px solid var(--cereza-linea-fuerte);
     border-radius: 7px;
-    background: #f2f8f4;
+    background: var(--cereza-relieve);
     color: #2c6548;
     font: inherit;
     font-size: .58rem;
@@ -995,7 +995,7 @@
     padding: 5px 9px;
     border: 1px solid #b8cbbf;
     border-radius: 7px;
-    background: #fff;
+    background: var(--cereza-superficie);
     color: #28553e;
     font: inherit;
     font-size: .58rem;
@@ -1003,7 +1003,7 @@
     cursor: pointer;
 }
 
-.haiku-pago-ver-reserva:hover { background: #f1f7f3; }
+.haiku-pago-ver-reserva:hover { background: var(--cereza-relieve); }
 .haiku-pago-ver-reserva:focus-visible { outline: 2px solid #4b8a68; outline-offset: 2px; }
 
 .haiku-pago-reserva-no-verificada,
@@ -1045,9 +1045,9 @@
 .haiku-incorporacion-atajo {
     min-height: 30px;
     padding: 6px 10px;
-    border: 1px solid #bfd1c6;
+    border: 1px solid var(--cereza-linea-fuerte);
     border-radius: 8px;
-    background: #f7faf8;
+    background: var(--cereza-relieve);
     color: #315844;
     font: inherit;
     font-size: .59rem;
@@ -1066,7 +1066,7 @@
     padding: 7px 9px;
     border-left: 3px solid #7fa58e;
     border-radius: 6px;
-    background: #f3f8f5;
+    background: var(--cereza-relieve);
     color: #405d4c;
     font-size: .59rem;
     line-height: 1.35;
@@ -1082,7 +1082,7 @@
 .haiku-incorporacion-acciones .libro-reserva-boton {
     min-height: 34px;
     padding: 7px 9px;
-    border: 1px solid #bfd1c6;
+    border: 1px solid var(--cereza-linea-fuerte);
     border-radius: 8px;
     background: var(--rec-verde);
     color: #fff;
@@ -1090,8 +1090,8 @@
     font-size: .62rem;
     font-weight: 800;
 }
-.haiku-incorporacion-acciones .libro-reserva-boton.secundario { background: #f7faf8; color: #315844; cursor: pointer; }
-.haiku-incorporacion-acciones .libro-reserva-boton:disabled { border-color: #d9dfdb; background: #eef1ef; color: #8a938d; cursor: not-allowed; }
+.haiku-incorporacion-acciones .libro-reserva-boton.secundario { background: var(--cereza-relieve); color: #315844; cursor: pointer; }
+.haiku-incorporacion-acciones .libro-reserva-boton:disabled { border-color: var(--cereza-linea); background: var(--cereza-relieve); color: #8a938d; cursor: not-allowed; }
 
 @media (max-width: 700px) {
     .haiku-asistente-preview .haiku-asistente-preview-grid,
@@ -1114,7 +1114,7 @@
     padding: 9px 14px;
     border: 1px solid #c9dcd0;
     border-radius: 11px;
-    background: #eef5f0;
+    background: var(--cereza-relieve);
     color: #28513c;
     font: 650 12px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
     text-align: center;
@@ -1172,8 +1172,8 @@
     padding: 16px;
     border: 1px solid #d3e2d8;
     border-radius: 16px;
-    background: #f6f9f7;
-    color: #263c30;
+    background: var(--cereza-relieve);
+    color: var(--cereza-texto);
     overflow-wrap: anywhere;
 }
 .haku-4b-zona > h4 {
@@ -1188,9 +1188,9 @@
 .haku-4b-zona > details {
     margin: 8px 0;
     padding: 10px 12px;
-    border: 1px solid #dce6df;
+    border: 1px solid var(--cereza-linea);
     border-radius: 11px;
-    background: #fff;
+    background: var(--cereza-superficie);
     font: 400 12px/1.5 system-ui, sans-serif;
 }
 .haku-4b-zona > details > summary {
@@ -1203,9 +1203,9 @@
 .haku-4b-zona > .haiku-asistente-preview {
     margin-top: 14px;
     padding: 14px;
-    border: 1px solid #dce6df;
+    border: 1px solid var(--cereza-linea);
     border-radius: 13px;
-    background: #fff;
+    background: var(--cereza-superficie);
 }
 .haku-4b-zona .haiku-asistente-preview > .libro-reserva-boton {
     margin: 10px 6px 0 0;
@@ -1215,7 +1215,7 @@
     gap: 10px;
     flex-wrap: wrap;
     padding-bottom: 12px;
-    border-bottom: 1px solid #e1eae4;
+    border-bottom: 1px solid var(--cereza-linea);
     margin-bottom: 12px;
 }
 .haku-4b-zona .haiku-incorporacion-modo,
@@ -1223,7 +1223,7 @@
     padding: 5px 9px;
     border: 1px solid #cee2d4;
     border-radius: 999px;
-    background: #edf6f0;
+    background: var(--cereza-relieve);
     color: #315b40;
     font-size: 10px;
     line-height: 1.4;
@@ -1238,7 +1238,7 @@
     gap: 8px;
     flex-wrap: wrap;
     padding-top: 14px;
-    border-top: 1px solid #e1eae4;
+    border-top: 1px solid var(--cereza-linea);
     margin-top: 14px;
 }
 @media (max-width: 600px) {
@@ -1255,20 +1255,20 @@
 /* Sólo consultas de reservas del Libro; no comparación ni incorporación. */
 .haku-libro-consulta { white-space: normal; min-width: 0; }
 .haku-libro-consulta p { margin: 6px 0; overflow-wrap: anywhere; }
-.haku-libro-consulta .haku-libro-consulta-tarjeta { margin-top: 12px; padding: 14px; border: 1px solid #dce7df; border-left: 3px solid #92b8a0; border-radius: 14px; background: #fff; color: #293d32; }
+.haku-libro-consulta .haku-libro-consulta-tarjeta { margin-top: 12px; padding: 14px; border: 1px solid var(--cereza-linea); border-left: 3px solid #92b8a0; border-radius: 14px; background: var(--cereza-superficie); color: #293d32; }
 .haku-libro-consulta .haku-libro-consulta-cabecera { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
 .haku-libro-consulta .haku-libro-consulta-cabecera strong { font-size: .92rem; overflow-wrap: anywhere; min-width: 0; }
 .haku-libro-consulta .haku-libro-consulta-sello { display: inline-block; flex-shrink: 0; border-radius: 20px; padding: 4px 9px; background: #eaf2ed; color: #355541; font-size: .65rem; font-weight: 750; }
 .haku-libro-consulta .haku-libro-consulta-chips { display: flex; flex-wrap: wrap; gap: 5px; margin: 9px 0; }
 .haku-libro-consulta .haku-libro-consulta-chips span { padding: 4px 7px; border-radius: 6px; background: #f2f5f3; font-size: .7rem; }
-.haku-libro-consulta .haku-libro-consulta-detalles { margin-top: 10px; border-top: 1px solid #e5ebe7; padding-top: 9px; }
+.haku-libro-consulta .haku-libro-consulta-detalles { margin-top: 10px; border-top: 1px solid var(--cereza-linea); padding-top: 9px; }
 .haku-libro-consulta .haku-libro-consulta-detalles summary { cursor: pointer; color: #42654e; font-size: .75rem; font-weight: 700; padding: 3px 0; }
 .haku-libro-consulta .haku-libro-consulta-detalles summary:focus-visible { outline: 2px solid #42654e; outline-offset: 3px; }
 .haku-libro-consulta .haku-libro-consulta-seccion { margin-top: 14px; font-size: .75rem; line-height: 1.5; }
 .haku-libro-consulta .haku-libro-consulta-seccion h4 { margin: 0 0 7px; font-size: .65rem; text-transform: uppercase; letter-spacing: .07em; color: #4b6b57; }
 .haku-libro-consulta .haku-libro-consulta-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
 .haku-libro-consulta .haku-libro-consulta-grid .haiku-asistente-preview-dato { min-width: 0; overflow-wrap: anywhere; }
-.haku-libro-consulta .haku-libro-consulta-movimiento { padding: 8px 10px; background: #f5f7f5; border-radius: 8px; margin-top: 7px; white-space: pre-wrap; }
+.haku-libro-consulta .haku-libro-consulta-movimiento { padding: 8px 10px; background: var(--cereza-lienzo); border-radius: 8px; margin-top: 7px; white-space: pre-wrap; }
 .haku-libro-consulta .haku-libro-consulta-fuente { color: #68796e; font-size: .65rem; margin-top: 9px; }
 @media (max-width: 480px) {
  .haku-libro-consulta .haku-libro-consulta-tarjeta { padding: 11px; }
@@ -1342,7 +1342,7 @@
    La clase sólo se aplica al informe general, no a consultas ni a sólo-pagos. */
 .haiku-asistente-panel .haiku-asistente-mensaje:has(> .haku-comparacion-compacta) {
     width: 100%; max-width: none; padding: 0; border-radius: 4px;
-    box-sizing: border-box; background: #fff;
+    box-sizing: border-box; background: var(--cereza-superficie);
 }
 .haiku-asistente-panel .haku-comparacion-compacta {
     width: 100%; max-width: none; min-width: 0; padding: 0;
@@ -1359,7 +1359,7 @@
 }
 .haiku-asistente-panel .haku-comparacion-compacta > .haiku-asistente-preview-resumen {
     margin: 0; padding: 9px 10px; border: 0; border-block: 1px solid var(--rec-borde);
-    border-radius: 0; background: #eaf3ee; font-size: .75rem; font-weight: 400;
+    border-radius: 0; background: var(--cereza-relieve); font-size: .75rem; font-weight: 400;
 }
 .haiku-asistente-panel .haku-comparacion-compacta > .haiku-asistente-preview-grid {
     display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; margin: 0;
@@ -1367,7 +1367,7 @@
 .haiku-asistente-panel .haku-comparacion-compacta > .haiku-asistente-preview-grid > .haiku-asistente-preview-dato {
     min-width: 0; margin: 0; padding: 8px 10px; border: 0;
     border-right: 1px solid var(--rec-borde); border-bottom: 1px solid var(--rec-borde);
-    border-radius: 0; background: #f8fbf9;
+    border-radius: 0; background: var(--cereza-relieve);
 }
 .haiku-asistente-panel .haku-comparacion-compacta > .haiku-asistente-preview-grid > :nth-child(3n) { border-right: 0; }
 .haiku-asistente-panel .haku-comparacion-compacta .haiku-asistente-preview-dato > span { font-size: .62rem; }
@@ -1393,7 +1393,7 @@
 .haiku-asistente-panel .haku-comparacion-compacta .haiku-comparacion-acordeon > summary {
     min-height: 34px; padding: 5px 38px 5px 44px; line-height: 1.45;
     border-left: 3px solid var(--franja-acento); background: var(--franja-fondo);
-    color: #293f35 !important; font-family: system-ui, sans-serif; font-size: .84rem !important; font-weight: 600 !important;
+    color: var(--cereza-texto) !important; font-family: system-ui, sans-serif; font-size: .84rem !important; font-weight: 600 !important;
     cursor: pointer; overflow-wrap: anywhere;
 }
 .haiku-asistente-panel .haku-comparacion-compacta .haiku-comparacion-acordeon > summary:focus-visible {
@@ -1403,7 +1403,7 @@
     margin: 0 !important; padding: 0 !important; list-style: none; font-size: .73rem !important;
 }
 .haiku-asistente-panel .haku-comparacion-compacta .haiku-comparacion-acordeon > ul > li {
-    margin: 0; padding: 8px 10px; border-top: 1px solid #e6ece8; line-height: 1.45;
+    margin: 0; padding: 8px 10px; border-top: 1px solid var(--cereza-linea); line-height: 1.45;
 }
 .haiku-asistente-panel .haku-comparacion-compacta .haiku-cancelacion-card {
     width: 100%; max-width: none; min-width: 0; margin: 0; padding: 9px 10px;
@@ -1423,7 +1423,7 @@
 .haiku-asistente-panel .haku-comparacion-compacta .haiku-comparacion-acordeon > ul > .haku-comparacion-fila,
 .haiku-asistente-panel .haku-comparacion-compacta .haiku-comparacion-acordeon .haiku-cancelacion-card {
     position: relative; padding: 9px 10px 9px 27px; line-height: 1.45;
-    border-top-color: #e6ece8;
+    border-top-color: var(--cereza-linea);
 }
 .haku-comparacion-compacta :is(.haku-comparacion-fila,.haiku-cancelacion-card)::before {
     content: ""; position: absolute; left: 11px; top: 15px;
@@ -1434,10 +1434,10 @@
     font-size: .78rem; font-weight: 700; color: #253f33; line-height: 1.45; margin: 0;
 }
 .haiku-asistente-panel .haku-comparacion-compacta :is(.haku-fila-datos,.haiku-cancelacion-chip,.haiku-cancelacion-cab) {
-    font-size: .73rem; color: #405c4e;
+    font-size: .73rem; color: var(--cereza-secundario);
 }
 .haiku-asistente-panel .haku-comparacion-compacta :is(.haku-fila-detalle,.haiku-cancelacion-origen,.haiku-cancelacion-nota,.haiku-cancelacion-secundario) {
-    font-size: .69rem; color: #5b6c63; margin: 2px 0 0;
+    font-size: .69rem; color: var(--cereza-secundario); margin: 2px 0 0;
 }
 /* Listas operativas: mantener todos los nodos, controles y feedback existentes. */
 .haiku-asistente-panel .haku-comparacion-compacta .haiku-cancelacion-card {
@@ -1492,8 +1492,8 @@
 .haiku-asistente-panel .haku-comparacion-compacta .haiku-asistente-preview-lista.haiku-reconciliacion-abierto > label {
     margin: 5px 0 0; padding: 0; border: 0; border-radius: 0; box-shadow: none; gap: 0; min-width: 0;
 }
-.haku-comparacion-compacta .haku-pregunta-caso { min-width: 0; border-bottom: 1px solid #dce6df; }
-.haku-comparacion-compacta .haku-pregunta-caso > summary { position: relative; list-style: none; cursor: pointer; padding: 8px 30px 8px 10px; background: #eaf3ee; }
+.haku-comparacion-compacta .haku-pregunta-caso { min-width: 0; border-bottom: 1px solid var(--cereza-linea); }
+.haku-comparacion-compacta .haku-pregunta-caso > summary { position: relative; list-style: none; cursor: pointer; padding: 8px 30px 8px 10px; background: var(--cereza-relieve); }
 .haku-comparacion-compacta .haku-pregunta-caso > summary::-webkit-details-marker { display: none; }
 .haku-comparacion-compacta .haku-pregunta-caso > summary::after {
     content: ""; position: absolute; right: 12px; top: 50%; width: 7px; height: 7px;
@@ -1506,16 +1506,16 @@
 .haku-comparacion-compacta .haku-pregunta-contenido { padding: 8px 10px; min-width: 0; overflow-wrap: anywhere; }
 .haku-comparacion-compacta :is(.haku-pregunta-conteo,.haku-pregunta-diferencias) { font-size: .7rem; margin: 6px 0; }
 .haku-comparacion-compacta .haku-pregunta-diferencias { padding: 5px 7px; background: #fbefd9; color: #79551f; }
-.haku-comparacion-compacta .haku-pregunta-campos { margin: 7px 0; border-block: 1px solid #dce6df; }
+.haku-comparacion-compacta .haku-pregunta-campos { margin: 7px 0; border-block: 1px solid var(--cereza-linea); }
 .haku-comparacion-compacta .haku-pregunta-campos > summary { padding: 7px 0; font-size: .73rem; cursor: pointer; }
 .haiku-asistente-panel .haku-comparacion-compacta .haku-pregunta-campos :is(table,tbody,tr,td) {
     display: block; width: auto; min-width: 0; max-width: 100%; box-sizing: border-box; white-space: normal;
 }
 .haiku-asistente-panel .haku-comparacion-compacta .haku-pregunta-campos tr:has(th) { display: none; }
-.haku-comparacion-compacta .haku-pregunta-campos tr { padding: 6px 0; border-bottom: 1px solid #dce6df; }
+.haku-comparacion-compacta .haku-pregunta-campos tr { padding: 6px 0; border-bottom: 1px solid var(--cereza-linea); }
 .haku-comparacion-compacta .haku-pregunta-campos td { padding: 3px 6px; border: 0; font-size: .7rem; overflow-wrap: anywhere; }
 .haku-comparacion-compacta .haku-pregunta-campos td:first-child { font-weight: 700; font-size: .73rem; }
-.haku-comparacion-compacta .haku-pregunta-campos td:not(:first-child)::before { content: attr(data-etiqueta) " · "; color: #617369; }
+.haku-comparacion-compacta .haku-pregunta-campos td:not(:first-child)::before { content: attr(data-etiqueta) " · "; color: var(--cereza-secundario); }
 .haku-comparacion-compacta .haku-campo-diferente { background: #fcf1df; }
 .haiku-asistente-panel .haku-comparacion-compacta .haku-pregunta-contenido :is(.haiku-reconciliacion-alerta,.haiku-reconciliacion-ayuda-decision) {
     padding: 6px 8px; border-radius: 2px; box-shadow: none; margin: 6px 0; font-size: .69rem;
@@ -1534,7 +1534,7 @@
     display: block; margin: 0; padding: 0; border: 0; border-radius: 0; box-shadow: none;
 }
 .haiku-asistente-panel .haku-incorporacion-compacta .haiku-incorporacion-item {
-    margin: 0; padding: 9px 10px; border: 0; border-top: 1px solid #e6ece8; border-radius: 0; box-shadow: none;
+    margin: 0; padding: 9px 10px; border: 0; border-top: 1px solid var(--cereza-linea); border-radius: 0; box-shadow: none;
 }
 .haiku-asistente-panel .haku-incorporacion-compacta .haiku-incorporacion-identidad strong { font-size: .78rem; line-height: 1.45; }
 .haiku-asistente-panel .haku-incorporacion-compacta .haiku-incorporacion-identidad span { font-size: .73rem; }
@@ -1542,7 +1542,7 @@
     grid-template-columns: repeat(2,minmax(0,1fr)); gap: 5px; margin: 6px 0; padding: 0; border: 0; border-radius: 0;
 }
 .haiku-asistente-panel .haku-incorporacion-compacta :is(.haiku-incorporacion-propuesta,.haiku-incorporacion-avisos) { font-size: .69rem; line-height: 1.45; margin-block: 6px; }
-.haiku-asistente-panel .haku-incorporacion-compacta .haiku-incorporacion-movimiento { margin: 0; padding: 7px 0; border: 0; border-bottom: 1px solid #e6ece8; border-radius: 0; }
+.haiku-asistente-panel .haku-incorporacion-compacta .haiku-incorporacion-movimiento { margin: 0; padding: 7px 0; border: 0; border-bottom: 1px solid var(--cereza-linea); border-radius: 0; }
 .haiku-asistente-panel .haku-incorporacion-compacta :is(.haiku-incorporacion-atajos,.haiku-incorporacion-acciones) {
     display: flex; flex-wrap: wrap; gap: 7px; margin: 0; padding: 9px 10px; border-radius: 0;
 }
@@ -1550,24 +1550,24 @@
 .haiku-asistente-panel .haku-incorporacion-compacta .haiku-incorporacion-acciones > button { flex: 1 1 120px; white-space: normal; }
 .haiku-asistente-panel .haku-incorporacion-compacta :is(.haiku-incorporacion-cabecera,.haiku-incorporacion-item-cabecera) { flex-wrap: wrap; }
 .haiku-asistente-panel .haku-incorporacion-compacta .haiku-incorporacion-cambios { list-style: none; padding: 0; margin: 6px 0; }
-.haiku-asistente-panel .haku-incorporacion-compacta .haiku-incorporacion-cambios > li { border-top: 1px solid #e6ece8; padding: 6px 0; font-size: .73rem; overflow-wrap: anywhere; }
+.haiku-asistente-panel .haku-incorporacion-compacta .haiku-incorporacion-cambios > li { border-top: 1px solid var(--cereza-linea); padding: 6px 0; font-size: .73rem; overflow-wrap: anywhere; }
 .haiku-asistente-panel .haku-incorporacion-compacta .haiku-incorporacion-notas-comparacion {
-    margin: 0; border: 1px solid #dce6df; border-radius: 4px; background: #fbfdfc; overflow: hidden;
+    margin: 0; border: 1px solid var(--cereza-linea); border-radius: 4px; background: var(--cereza-relieve); overflow: hidden;
 }
 .haiku-asistente-panel .haku-incorporacion-compacta .haiku-incorporacion-notas-comparacion > summary {
-    margin: 0; padding: 8px 10px; background: #f4f8f5; color: #344b3e; font-size: .7rem; font-weight: 750; cursor: pointer;
+    margin: 0; padding: 8px 10px; background: var(--cereza-relieve); color: #344b3e; font-size: .7rem; font-weight: 750; cursor: pointer;
 }
 .haiku-asistente-panel .haku-incorporacion-compacta .haiku-incorporacion-notas-contenido {
-    display: grid; gap: 7px; padding: 8px; border-top: 1px solid #dce6df;
+    display: grid; gap: 7px; padding: 8px; border-top: 1px solid var(--cereza-linea);
 }
 .haiku-asistente-panel .haku-incorporacion-compacta .haiku-incorporacion-notas-fuente {
-    min-width: 0; padding: 8px 9px; border: 1px solid #e0e7e3; border-radius: 3px; background: #fff;
+    min-width: 0; padding: 8px 9px; border: 1px solid #e0e7e3; border-radius: 3px; background: var(--cereza-superficie);
 }
 .haiku-asistente-panel .haku-incorporacion-compacta .haiku-incorporacion-notas-fuente--libro {
-    border-color: #cfe2d6; background: #f1f8f3;
+    border-color: #cfe2d6; background: var(--cereza-relieve);
 }
 .haiku-asistente-panel .haku-incorporacion-compacta .haiku-incorporacion-notas-fuente h4 {
-    margin: 0 0 6px; color: #617369; font-size: .61rem; font-weight: 800; letter-spacing: .04em; text-transform: uppercase;
+    margin: 0 0 6px; color: var(--cereza-secundario); font-size: .61rem; font-weight: 800; letter-spacing: .04em; text-transform: uppercase;
 }
 .haiku-asistente-panel .haku-incorporacion-compacta .haiku-incorporacion-notas-fuente ul {
     list-style: none; margin: 0; padding: 0;
@@ -1581,7 +1581,7 @@
 
 /* Resultado guardado: continuidad visual con la confirmación, sin alterar sus datos. */
 .haiku-asistente-panel .haiku-asistente-mensaje:has(> .haku-incorporacion-resultado) {
-    width: 100%; max-width: none; padding: 0; border-radius: 4px; box-sizing: border-box; background: #fff;
+    width: 100%; max-width: none; padding: 0; border-radius: 4px; box-sizing: border-box; background: var(--cereza-superficie);
 }
 .haiku-asistente-panel .haiku-asistente-mensajes > .haku-incorporacion-resultado {
     width: calc(100% + 18px); margin-inline: -9px;
@@ -1594,11 +1594,11 @@
     margin: 0; padding: 9px 10px; flex-wrap: wrap;
 }
 .haiku-asistente-panel .haku-incorporacion-resultado > .haiku-incorporacion-cabecera .haiku-incorporacion-modo {
-    border: 1px solid #c7dfd1; background: #e5f2e9; color: #286346;
+    border: 1px solid #c7dfd1; background: var(--cereza-verde-fondo); color: #286346;
 }
 .haiku-asistente-panel .haku-incorporacion-resultado > .haku-incorporacion-resultado-mensaje {
     margin: 0; padding: 9px 10px; border: 0; border-block: 1px solid #cfe1d6;
-    border-radius: 0; background: #eaf3ee; color: #315844; font-size: .75rem; font-weight: 400;
+    border-radius: 0; background: var(--cereza-relieve); color: #315844; font-size: .75rem; font-weight: 400;
 }
 .haiku-asistente-panel .haku-incorporacion-resultado > .haku-incorporacion-resultado-resumen {
     display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 0; margin: 0; overflow: visible;
@@ -1606,13 +1606,13 @@
 .haiku-asistente-panel .haku-incorporacion-resultado > .haku-incorporacion-resultado-resumen > .haku-incorporacion-resultado-indicador {
     display: flex; flex-direction: column; grid-column: span 2; min-width: 0; margin: 0; padding: 8px 10px;
     border: 0; border-right: 1px solid var(--rec-borde); border-bottom: 1px solid var(--rec-borde);
-    border-radius: 0; background: #f8fbf9; text-align: left;
+    border-radius: 0; background: var(--cereza-relieve); text-align: left;
 }
 .haiku-asistente-panel .haku-incorporacion-resultado > .haku-incorporacion-resultado-resumen > .haku-incorporacion-resultado-indicador > span {
-    order: -1; margin-top: 0; color: #748078; font-size: .62rem; white-space: normal; overflow: visible;
+    order: -1; margin-top: 0; color: var(--cereza-secundario); font-size: .62rem; white-space: normal; overflow: visible;
 }
 .haiku-asistente-panel .haku-incorporacion-resultado > .haku-incorporacion-resultado-resumen > .haku-incorporacion-resultado-indicador > strong {
-    color: #244334; font-size: 1rem; line-height: 1.3;
+    color: var(--cereza-texto); font-size: 1rem; line-height: 1.3;
 }
 .haiku-asistente-panel .haku-incorporacion-resultado > .haku-incorporacion-resultado-resumen > .haku-incorporacion-resultado-indicador:nth-last-child(-n + 2) {
     grid-column: span 3;
@@ -1628,7 +1628,7 @@
 }
 .haiku-asistente-panel .haku-incorporacion-resultado > .haiku-incorporacion-propuesta {
     margin: 0; padding: 8px 10px; border-bottom: 1px solid var(--rec-borde); border-radius: 0;
-    color: #5b6c63; font-size: .69rem; line-height: 1.45;
+    color: var(--cereza-secundario); font-size: .69rem; line-height: 1.45;
 }
 .haiku-asistente-panel .haku-incorporacion-resultado > .haiku-incorporacion-acciones {
     display: flex; flex-wrap: wrap; gap: 7px; margin: 0; padding: 9px 10px; border-radius: 0;
@@ -1654,20 +1654,20 @@
     margin: 0; padding: 0; list-style: none;
 }
 .haku-incorporacion-resultado .haku-incorporacion-final-item {
-    margin: 0; padding: 9px 10px; border-bottom: 1px solid #e6ece8; overflow-wrap: anywhere;
+    margin: 0; padding: 9px 10px; border-bottom: 1px solid var(--cereza-linea); overflow-wrap: anywhere;
 }
 .haku-incorporacion-resultado .haku-incorporacion-final-item:last-child { border-bottom: 0; }
 .haku-incorporacion-resultado .haku-incorporacion-final-item-cabecera {
     display: flex; align-items: baseline; flex-wrap: wrap; gap: 5px 9px; font-size: .75rem;
 }
 .haku-incorporacion-resultado .haku-incorporacion-final-estado {
-    margin-left: auto; padding: 2px 6px; border-radius: 4px; background: #eaf3ee; color: #286346;
+    margin-left: auto; padding: 2px 6px; border-radius: 4px; background: var(--cereza-relieve); color: #286346;
     font-size: .63rem;
 }
 .haku-incorporacion-resultado .haku-incorporacion-final-estado--omitido { background: #f0f2f1; color: #647168; }
 .haku-incorporacion-resultado .haku-incorporacion-final-item > p,
 .haku-incorporacion-resultado .haku-incorporacion-final-vacio {
-    margin: 4px 0 0; color: #5b6c63; font-size: .69rem; line-height: 1.45;
+    margin: 4px 0 0; color: var(--cereza-secundario); font-size: .69rem; line-height: 1.45;
 }
 .haku-incorporacion-resultado .haku-incorporacion-final-vacio { padding: 9px 10px; margin: 0; }
 .haku-incorporacion-resultado .haku-incorporacion-final-item--actualizacion {
@@ -1680,7 +1680,7 @@
 .haku-incorporacion-final-item--actualizacion > .haiku-pago-ver-reserva { margin-top: 5px; }
 .haku-comprobante-cambios {
     display: grid; gap: 4px; margin-top: 4px; min-width: 0;
-    color: var(--haku-compacto-texto, #172019); font-size: .63rem; line-height: 1.35;
+    color: var(--haku-compacto-texto, var(--cereza-texto)); font-size: .63rem; line-height: 1.35;
 }
 .haku-comprobante-columnas { display: none; }
 .haku-comprobante-campos { list-style: none; margin: 0; padding: 0; }
@@ -1689,7 +1689,7 @@
 }
 .haku-comprobante-campo + .haku-comprobante-campo { border-top: 1px solid var(--haku-compacto-borde, var(--rec-borde)); }
 .haku-comprobante-campo > strong, .haku-comprobante-guardado > .haku-comprobante-valor { font-weight: 650; }
-.haku-comprobante-antes { color: var(--haku-compacto-secundario, #586c60); }
+.haku-comprobante-antes { color: var(--haku-compacto-secundario, var(--cereza-secundario)); }
 .haku-comprobante-guardado { color: var(--haku-compacto-acento, #286c4e); }
 .haku-comprobante-dato { display: grid; grid-template-columns: 3.375rem minmax(0,1fr); gap: 8px; }
 .haku-comprobante-etiqueta { font-size: .61rem; font-weight: 500; }
@@ -1705,14 +1705,14 @@
     border: solid currentColor; border-width: 0 1px 1px 0; transform: rotate(-45deg);
 }
 .haku-comprobante-notas[open] > summary::before { transform: rotate(45deg); }
-.haku-comprobante-notas > summary:hover { background: var(--haku-compacto-suave, #eef4ef); }
+.haku-comprobante-notas > summary:hover { background: var(--haku-compacto-suave, var(--cereza-relieve)); }
 .haku-comprobante-notas > summary:focus-visible {
     outline: 2px solid var(--haku-compacto-acento, #286c4e); outline-offset: 1px;
 }
 .haku-comprobante-notas-pares { display: grid; gap: 4px; margin: 2px 0; }
 .haku-comprobante-nota { min-width: 0; padding: 5px 7px; border-radius: 4px; }
-.haku-comprobante-nota.haku-comprobante-antes { background: var(--haku-compacto-control, #f1f5f2); }
-.haku-comprobante-nota.haku-comprobante-guardado { background: var(--haku-compacto-suave, #eef4ef); }
+.haku-comprobante-nota.haku-comprobante-antes { background: var(--haku-compacto-control, var(--cereza-relieve)); }
+.haku-comprobante-nota.haku-comprobante-guardado { background: var(--haku-compacto-suave, var(--cereza-relieve)); }
 .haku-comprobante-nota > strong { display: block; margin-bottom: 2px; font-size: .61rem; font-weight: 600; }
 .haku-comprobante-nota > ul { margin: 0; padding: 0; list-style: none; }
 .haku-comprobante-nota li + li { margin-top: 3px; }
@@ -1728,7 +1728,7 @@ html[data-haku-mobile-assistant="1"] .haku-comprobante-notas > summary { min-hei
         }
         html:not([data-haku-mobile-assistant="1"]) .haku-comprobante-columnas {
             padding: 3px 0; border-bottom: 1px solid var(--haku-compacto-borde, var(--rec-borde));
-            color: var(--haku-compacto-secundario, #586c60); font-size: .61rem; font-weight: 600;
+            color: var(--haku-compacto-secundario, var(--cereza-secundario)); font-size: .61rem; font-weight: 600;
         }
         html:not([data-haku-mobile-assistant="1"]) .haku-comprobante-dato { display: block; }
         html:not([data-haku-mobile-assistant="1"]) .haku-comprobante-etiqueta {
@@ -1751,11 +1751,11 @@ html[data-haku-mobile-assistant="1"] .haku-comprobante-notas > summary { min-hei
     --franja-fondo: #e2efe8; --franja-acento: #428165;
     width: 100%; min-width: 0; margin: 3px 0 0 !important; padding: 0 !important;
     border: 0 !important; border-bottom: 1px solid var(--rec-borde) !important;
-    border-radius: 0; background: #fff; box-shadow: none; box-sizing: border-box;
+    border-radius: 0; background: var(--cereza-superficie); box-shadow: none; box-sizing: border-box;
 }
 .haiku-asistente-panel .haku-incorporacion-resultado--servicios > .haku-incorporacion-resultado-detalle > summary {
     min-height: 34px; padding: 6px 38px 6px 44px; border-left: 3px solid var(--franja-acento);
-    background: var(--franja-fondo); color: #293f35 !important; font-family: system-ui, sans-serif;
+    background: var(--franja-fondo); color: var(--cereza-texto) !important; font-family: system-ui, sans-serif;
     font-size: .84rem !important; font-weight: 600 !important; line-height: 1.45; cursor: pointer;
 }
 .haiku-asistente-panel .haku-incorporacion-resultado--servicios > .haku-incorporacion-resultado-detalle > summary::before {
@@ -1777,9 +1777,9 @@ html[data-haku-mobile-assistant="1"] .haku-comprobante-notas > summary { min-hei
 .haiku-asistente-panel .haku-comparacion-compacta .haku-icono--nuevo { --haku-icono: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.7%22%3E%3Ccircle%20cx%3D%2212%22%20cy%3D%2212%22%20r%3D%229%22%2F%3E%3Cpath%20d%3D%22M12%207v10M7%2012h10%22%2F%3E%3C%2Fsvg%3E"); }
 .haku-incorporacion-compacta .haku-cambio-campo { display: block; margin-bottom: 4px; }
 .haku-incorporacion-compacta :is(.haku-cambio-actual,.haku-cambio-libro) { display: block; overflow-wrap: anywhere; }
-.haku-incorporacion-compacta .haku-cambio-actual::before { content: "Proyecto H: "; color: #617369; }
-.haku-incorporacion-compacta .haku-cambio-libro::before { content: "Libro: "; color: #617369; }
-.haku-incorporacion-compacta .haku-cambio-flecha { display: block; color: #617369; line-height: 1; }
+.haku-incorporacion-compacta .haku-cambio-actual::before { content: "Proyecto H: "; color: var(--cereza-secundario); }
+.haku-incorporacion-compacta .haku-cambio-libro::before { content: "Libro: "; color: var(--cereza-secundario); }
+.haku-incorporacion-compacta .haku-cambio-flecha { display: block; color: var(--cereza-secundario); line-height: 1; }
 /* Informe de actualización: reutiliza la geometría de reconciliación. */
 .haiku-asistente-panel .haiku-asistente-mensajes > .haiku-asistente-mensaje:has(> .haku-actualizacion-compacta) {
     width: calc(100% + 18px); max-width: none; margin-inline: -9px; padding: 0; border: 0; border-radius: 0;
@@ -1789,13 +1789,13 @@ html[data-haku-mobile-assistant="1"] .haku-comprobante-notas > summary { min-hei
 }
 .haiku-asistente-panel .haku-actualizacion-compacta .haku-libro-contadores > div {
     display: flex; flex-direction: column; min-width: 0; padding: 8px 10px; text-align: left;
-    border: 0; border-right: 1px solid #dce6df; border-bottom: 1px solid #dce6df; border-radius: 0; background: #f8fbf9;
+    border: 0; border-right: 1px solid var(--cereza-linea); border-bottom: 1px solid var(--cereza-linea); border-radius: 0; background: var(--cereza-relieve);
 }
 .haku-actualizacion-compacta .haku-libro-contadores > div:nth-child(2n) { border-right: 0; }
-.haku-actualizacion-compacta .haku-libro-contadores span { order: -1; font-size: .62rem; text-transform: uppercase; color: #617369; }
+.haku-actualizacion-compacta .haku-libro-contadores span { order: -1; font-size: .62rem; text-transform: uppercase; color: var(--cereza-secundario); }
 .haku-actualizacion-compacta .haku-libro-contadores strong { font-size: 1rem; line-height: 1.3; }
 .haiku-asistente-panel .haku-actualizacion-compacta .haku-libro-item {
-    margin: 0; padding: 9px 10px; border: 0; border-bottom: 1px solid #e6ece8; border-radius: 0; box-shadow: none;
+    margin: 0; padding: 9px 10px; border: 0; border-bottom: 1px solid var(--cereza-linea); border-radius: 0; box-shadow: none;
 }
 .haiku-asistente-panel .haku-actualizacion-compacta .haku-libro-item > strong,
 .haiku-asistente-panel .haku-actualizacion-compacta .haku-libro-item > summary > strong { display: block; font-size: .78rem; line-height: 1.45; }
@@ -1803,11 +1803,11 @@ html[data-haku-mobile-assistant="1"] .haku-comprobante-notas > summary { min-hei
 .haiku-asistente-panel .haku-actualizacion-compacta .haku-pregunta-caso { margin-top: 5px; padding: 0; }
 .haku-actualizacion-compacta .haku-pregunta-caso small { display: block; font-size: .62rem; font-weight: 400; }
 .haku-actualizacion-compacta .haku-pregunta-caso dl { padding: 0 10px 9px; margin: 0; }
-.haku-actualizacion-compacta .haku-pregunta-caso dt { font-size: .73rem; padding-top: 7px; border-top: 1px solid #e6ece8; }
-.haku-actualizacion-compacta .haku-pregunta-caso dd { font-size: .69rem; color: #5b6c63; overflow-wrap: anywhere; }
+.haku-actualizacion-compacta .haku-pregunta-caso dt { font-size: .73rem; padding-top: 7px; border-top: 1px solid var(--cereza-linea); }
+.haku-actualizacion-compacta .haku-pregunta-caso dd { font-size: .69rem; color: var(--cereza-secundario); overflow-wrap: anywhere; }
 .haiku-asistente-panel .haku-actualizacion-compacta .haku-libro-aviso { margin: 0; padding: 8px 10px; border-radius: 0; border: 0; background: #fbefd9; }
-.haiku-asistente-panel .haku-actualizacion-compacta > .haiku-comparacion-acordeon > p { margin: 0; padding: 8px 10px; border-bottom: 1px solid #e6ece8; font-size: .69rem; }
-.haku-actualizacion-compacta .haku-libro-prioridad { background: #eaf3ee; padding: 8px 10px 0; }
+.haiku-asistente-panel .haku-actualizacion-compacta > .haiku-comparacion-acordeon > p { margin: 0; padding: 8px 10px; border-bottom: 1px solid var(--cereza-linea); font-size: .69rem; }
+.haku-actualizacion-compacta .haku-libro-prioridad { background: var(--cereza-relieve); padding: 8px 10px 0; }
 .haiku-asistente-panel .haku-actualizacion-compacta .haku-libro-prioridad h4 { margin: 0 0 5px; font-size: .78rem; }
 .haiku-asistente-panel .haku-actualizacion-compacta .haku-libro-prioridad > p { font-size: .69rem; margin: 4px 0; }
 .haku-actualizacion-compacta .haku-prioridad-fila { border-bottom: 1px solid #d5e3da; }
@@ -1824,11 +1824,11 @@ html[data-haku-mobile-assistant="1"] .haku-comprobante-notas > summary { min-hei
 /* Burbuja aprobada en Figma: el cambio ocupa el foco; los contadores una franja. */
 .haku-libro-auto.haku-libro-auto {
     z-index: 90020; /* Visible y accionable sobre Haku y su inspector (90000/90010). */
-    --aviso-fondo: #f0f6f2;
+    --aviso-fondo: var(--cereza-relieve);
     --aviso-superficie: var(--sites-shell-surface, #fff);
     --aviso-borde: var(--sites-shell-line, #d9e3de);
-    --aviso-texto: var(--sites-shell-ink, #17362d);
-    --aviso-secundario: var(--sites-shell-muted, #687873);
+    --aviso-texto: var(--sites-shell-ink, var(--cereza-texto));
+    --aviso-secundario: var(--sites-shell-muted, var(--cereza-secundario));
     --aviso-acento: var(--sites-shell-green, #22735c);
     display: flex; flex-direction: column; gap: 6px;
     width: min(388px, calc(100vw - 36px)); max-height: min(390px, calc(100dvh - 100px));
@@ -1974,8 +1974,8 @@ html[data-haku-mobile-assistant="1"] .haku-comprobante-notas > summary { min-hei
 .haku-incorporacion-aviso { min-width: 0; }
 .haku-incorporacion-aviso__contenido { min-width: 0; overflow-wrap: anywhere; }
 html[data-haiku-tema="oscuro"] .haku-libro-auto.haku-libro-auto {
-    --aviso-fondo: #202d26; --aviso-superficie: #1b2621; --aviso-borde: #3e5145;
-    --aviso-texto: #e8efea; --aviso-secundario: #b1c2b7; --aviso-acento: #9fd2b3;
+    --aviso-fondo: #202d26; --aviso-superficie: #1b2621; --aviso-borde: var(--cereza-linea);
+    --aviso-texto: var(--cereza-texto); --aviso-secundario: var(--cereza-secundario); --aviso-acento: #9fd2b3;
     background: var(--aviso-fondo); color: var(--aviso-texto); border-color: var(--aviso-borde);
 }
 html[data-haiku-tema="oscuro"] .haku-libro-auto.haku-libro-auto button { background: var(--aviso-superficie); color: var(--aviso-acento); border-color: var(--aviso-borde); }
@@ -1996,9 +1996,9 @@ html[data-haiku-tema="oscuro"] .haku-libro-auto.haku-libro-auto .haku-libro-auto
 
 /* Casos pendientes del aviso de incorporación (Figma 2:203 y 2:423). */
 .haku-libro-auto.haku-libro-auto--con-pendientes {
-    --aviso-fondo: #fff; --aviso-borde: #c9dacf;
+    --aviso-fondo: var(--cereza-superficie); --aviso-borde: #c9dacf;
     --aviso-texto: #172c24; --aviso-secundario: #50665c; --aviso-acento: #22694e;
-    --casos-detalle: #f4f8f5; --casos-linea: #dce6df; --casos-seleccion: #e6f2eb;
+    --casos-detalle: #f4f8f5; --casos-linea: var(--cereza-linea); --casos-seleccion: var(--cereza-verde-fondo);
     --casos-borde-seleccion: #9cbfaa; --casos-principal: #246b52; --casos-texto-principal: #fff;
     --casos-dato: #8d5d27; --casos-dato-fondo: #f8efe1;
     right: 18px; bottom: 74px;
@@ -2170,10 +2170,10 @@ html .haku-libro-auto--con-pendientes .haku-libro-casos button.haku-libro-casos_
 /* Resumen de actualización aprobado en Figma (32:181). Ocupa el ancho real
    de Haku; la densidad responde al panel, también cuando está acoplado. */
 .haiku-asistente-root .haiku-asistente-panel .haiku-asistente-mensajes > .haiku-asistente-mensaje.haku-libro-resumen {
-    --aviso-borde: var(--sites-shell-line, #dbe3de);
-    --aviso-texto: var(--sites-shell-ink, #172019);
-    --aviso-secundario: #586c60; --aviso-acento: #286c4e;
-    --resumen-suave: #eef4ef; --resumen-aviso: #825016;
+    --aviso-borde: var(--sites-shell-line, var(--cereza-linea));
+    --aviso-texto: var(--sites-shell-ink, var(--cereza-texto));
+    --aviso-secundario: var(--cereza-secundario); --aviso-acento: #286c4e;
+    --resumen-suave: var(--cereza-relieve); --resumen-aviso: #825016;
     container-type: inline-size; display: flex; flex-direction: column; gap: 4px;
     box-sizing: border-box; flex: 0 0 auto; align-self: stretch; width: 100%; max-width: none; min-width: 0;
     margin: 0; padding: 0 2px 0 10px; border: 0; border-left: 2px solid var(--aviso-acento);
@@ -2222,7 +2222,7 @@ html .haku-libro-auto--con-pendientes .haku-libro-casos button.haku-libro-casos_
 .haku-libro-resumen .haku-libro-auto__caso p { margin: 0; }
 .haku-libro-resumen__caso .haku-libro-auto__cabecera { display: none; } /* El título general ya identifica el cambio. */
 html[data-haiku-tema="oscuro"] .haiku-asistente-root .haiku-asistente-panel .haiku-asistente-mensajes > .haiku-asistente-mensaje.haku-libro-resumen {
-    --aviso-borde: #3e5145; --aviso-texto: #e8efea; --aviso-secundario: #b1c2b7;
+    --aviso-borde: var(--cereza-linea); --aviso-texto: var(--cereza-texto); --aviso-secundario: var(--cereza-secundario);
     --aviso-acento: #9fd2b3; --resumen-suave: #28382f; --resumen-aviso: #f0c584;
 }
 html[data-haiku-tema="oscuro"] .haiku-asistente-panel .haku-libro-resumen .haku-libro-resumen__punto--claro { display: none; }
@@ -2241,7 +2241,7 @@ html[data-haiku-tema="oscuro"] .haiku-asistente-panel .haku-libro-resumen .haku-
 }
 .haiku-asistente-panel .haku-pagos-compactos > .haku-pagos-nota {
     margin: 0; padding: 7px 10px; border: 0; border-bottom: 1px solid var(--rec-borde);
-    border-radius: 0; background: #f8fbf9; color: #5b6c63; font-size: .69rem; line-height: 1.45;
+    border-radius: 0; background: var(--cereza-relieve); color: var(--cereza-secundario); font-size: .69rem; line-height: 1.45;
 }
 .haiku-asistente-panel .haku-pagos-compactos > .haku-pagos-nota--final {
     margin-top: 5px; border-top: 1px solid var(--rec-borde);
@@ -2251,13 +2251,13 @@ html[data-haiku-tema="oscuro"] .haiku-asistente-panel .haku-libro-resumen .haku-
 }
 .haiku-asistente-panel .haku-pagos-compactos .haku-pago-fila {
     position: relative; width: 100%; min-width: 0; margin: 0; padding: 0;
-    border: 0; border-top: 1px solid #e6ece8; border-radius: 0; background: #fff;
+    border: 0; border-top: 1px solid var(--cereza-linea); border-radius: 0; background: var(--cereza-superficie);
     box-shadow: none; box-sizing: border-box; overflow: hidden;
 }
 .haiku-asistente-panel .haku-pagos-compactos .haku-pago-fila > summary {
     position: relative; display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: center;
     gap: 8px; min-width: 0; min-height: 43px; padding: 7px 34px 7px 27px;
-    list-style: none; cursor: pointer; color: #293f35; box-sizing: border-box;
+    list-style: none; cursor: pointer; color: var(--cereza-texto); box-sizing: border-box;
 }
 .haiku-asistente-panel .haku-pagos-compactos .haku-pago-fila > summary::-webkit-details-marker { display: none; }
 .haiku-asistente-panel .haku-pagos-compactos .haku-pago-fila > summary::before {
@@ -2282,12 +2282,12 @@ html[data-haiku-tema="oscuro"] .haiku-asistente-panel .haku-libro-resumen .haku-
     display: block; margin: 0; color: #253f33; font-size: .78rem; font-weight: 700; line-height: 1.4;
 }
 .haiku-asistente-panel .haku-pagos-compactos .haku-pago-fila-datos {
-    display: block; margin-top: 1px; color: #405c4e; font-size: .71rem; line-height: 1.4;
+    display: block; margin-top: 1px; color: var(--cereza-secundario); font-size: .71rem; line-height: 1.4;
     overflow-wrap: anywhere;
 }
 .haiku-asistente-panel .haku-pagos-compactos .haku-pago-fila-estado {
     align-self: center; max-width: 112px; margin: 0; white-space: normal; text-align: center;
-    color: #405c4e; background: #edf4f0; font-size: .62rem; line-height: 1.3;
+    color: var(--cereza-secundario); background: #edf4f0; font-size: .62rem; line-height: 1.3;
 }
 .haiku-asistente-panel .haku-pagos-compactos .haku-pago-fila--revisar .haku-pago-fila-estado {
     color: #79551f; background: #fbefd9;
@@ -2296,24 +2296,24 @@ html[data-haiku-tema="oscuro"] .haiku-asistente-panel .haku-libro-resumen .haku-
     color: #8a4545; background: #f8e4e4;
 }
 .haiku-asistente-panel .haku-pagos-compactos .haku-pago-fila-detalle {
-    min-width: 0; padding: 0 10px 9px 27px; border-top: 1px solid #edf1ee;
-    background: #fcfdfc; overflow-wrap: anywhere;
+    min-width: 0; padding: 0 10px 9px 27px; border-top: 1px solid var(--cereza-linea);
+    background: var(--cereza-relieve); overflow-wrap: anywhere;
 }
 .haiku-asistente-panel .haku-pagos-compactos .haku-pago-detalle-grid {
     display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 0; margin: 0;
 }
 .haiku-asistente-panel .haku-pagos-compactos .haku-pago-detalle-grid > .haiku-asistente-preview-dato {
-    min-width: 0; margin: 0; padding: 7px 8px; border: 0; border-bottom: 1px solid #e6ece8;
+    min-width: 0; margin: 0; padding: 7px 8px; border: 0; border-bottom: 1px solid var(--cereza-linea);
     border-radius: 0; background: transparent; overflow-wrap: anywhere;
 }
 .haiku-asistente-panel .haku-pagos-compactos .haku-pago-detalle-grid > .haiku-asistente-preview-dato:nth-child(odd) {
-    border-right: 1px solid #e6ece8;
+    border-right: 1px solid var(--cereza-linea);
 }
 .haiku-asistente-panel .haku-pagos-compactos .haku-pago-detalle-grid .haiku-asistente-preview-dato > span {
-    display: block; color: #617369; font-size: .61rem;
+    display: block; color: var(--cereza-secundario); font-size: .61rem;
 }
 .haiku-asistente-panel .haku-pagos-compactos .haku-pago-detalle-grid .haiku-asistente-preview-dato > strong {
-    display: block; color: #293f35; font-size: .72rem; line-height: 1.4; overflow-wrap: anywhere;
+    display: block; color: var(--cereza-texto); font-size: .72rem; line-height: 1.4; overflow-wrap: anywhere;
 }
 .haiku-asistente-panel .haku-pagos-compactos .haku-pago-fila-detalle :is(.haiku-versiones-meta,.haiku-versiones-aviso,.haiku-pago-diferencia-compacta) {
     margin: 6px 0 0; font-size: .69rem; overflow-wrap: anywhere;
@@ -2340,8 +2340,8 @@ html[data-haiku-tema="oscuro"] .haiku-asistente-panel .haku-libro-resumen .haku-
 }
 .haiku-asistente-panel .haku-pendientes-compactos {
     width: 100%; min-width: 0; max-width: 100%; margin: 0; padding: 0;
-    border: 1px solid var(--rec-borde); border-radius: 5px; background: #fff;
-    color: #263c30; box-sizing: border-box; overflow: hidden;
+    border: 1px solid var(--rec-borde); border-radius: 5px; background: var(--cereza-superficie);
+    color: var(--cereza-texto); box-sizing: border-box; overflow: hidden;
 }
 .haiku-asistente-panel .haku-pendientes-compactos > .haiku-asistente-preview-cabecera {
     margin: 0; padding: 9px 10px; border-bottom: 1px solid var(--rec-borde);
@@ -2352,23 +2352,23 @@ html[data-haiku-tema="oscuro"] .haiku-asistente-panel .haku-libro-resumen .haku-
 .haiku-asistente-panel .haku-pendientes-compactos > .haku-pendientes-metricas > .haiku-asistente-preview-dato {
     min-width: 0; margin: 0; padding: 8px 10px; border: 0;
     border-right: 1px solid var(--rec-borde); border-bottom: 1px solid var(--rec-borde);
-    border-radius: 0; background: #f8fbf9;
+    border-radius: 0; background: var(--cereza-relieve);
 }
 .haiku-asistente-panel .haku-pendientes-compactos > .haku-pendientes-metricas > .haiku-asistente-preview-dato:last-child {
     border-right: 0;
 }
 .haiku-asistente-panel .haku-pendientes-compactos > .haku-pendientes-metricas span {
-    display: block; color: #617369; font-size: .61rem; text-transform: uppercase;
+    display: block; color: var(--cereza-secundario); font-size: .61rem; text-transform: uppercase;
 }
 .haiku-asistente-panel .haku-pendientes-compactos > .haku-pendientes-metricas strong {
-    display: block; color: #244334; font-size: 1rem; line-height: 1.3;
+    display: block; color: var(--cereza-texto); font-size: 1rem; line-height: 1.3;
 }
 .haiku-asistente-panel .haku-pendientes-compactos > :is(.haku-pendientes-resumen,.haku-libro-sin-pendientes) {
     margin: 0; padding: 8px 10px; border: 0; border-bottom: 1px solid var(--rec-borde);
-    border-radius: 0; background: #f8fbf9; color: #5b6c63; font-size: .69rem; line-height: 1.45;
+    border-radius: 0; background: var(--cereza-relieve); color: var(--cereza-secundario); font-size: .69rem; line-height: 1.45;
 }
 .haiku-asistente-panel .haku-pendientes-compactos > .haku-libro-sin-pendientes {
-    color: #315844; background: #eaf3ee;
+    color: #315844; background: var(--cereza-relieve);
 }
 .haiku-asistente-panel .haku-pendientes-compactos > .haku-pendiente-item {
     width: 100%; min-width: 0; margin: 0 !important; border: 0 !important;
@@ -2379,7 +2379,7 @@ html[data-haiku-tema="oscuro"] .haiku-asistente-panel .haku-libro-resumen .haku-
     min-height: 40px; padding: 7px 10px; font-size: .78rem; line-height: 1.4;
 }
 .haiku-asistente-panel .haku-pendientes-compactos .haku-pendiente-detalle {
-    padding: 8px 10px 9px; background: #fff; overflow-wrap: anywhere;
+    padding: 8px 10px 9px; background: var(--cereza-superficie); overflow-wrap: anywhere;
 }
 .haiku-asistente-panel .haku-pendientes-compactos .haku-pendiente-comparacion { margin: 8px 0; padding: 0; }
 .haiku-asistente-panel .haku-pendientes-compactos .haku-pendiente-comparacion > summary {
@@ -2397,9 +2397,9 @@ html[data-haiku-tema="oscuro"] .haiku-asistente-panel .haku-libro-resumen .haku-
 }
 .haiku-asistente-panel .haku-pendientes-compactos .haku-pendiente-detalle dl { margin: 7px 0; }
 .haiku-asistente-panel .haku-pendientes-compactos .haku-pendiente-detalle dt {
-    margin-top: 6px; padding-top: 6px; border-top: 1px solid #e6ece8; font-weight: 700;
+    margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--cereza-linea); font-weight: 700;
 }
-.haiku-asistente-panel .haku-pendientes-compactos .haku-pendiente-detalle dd { margin: 2px 0 0; color: #5b6c63; }
+.haiku-asistente-panel .haku-pendientes-compactos .haku-pendiente-detalle dd { margin: 2px 0 0; color: var(--cereza-secundario); }
 .haiku-asistente-panel .haku-pendientes-compactos .haku-pendiente-estado { color: #315844; }
 .haiku-asistente-panel .haku-pendientes-compactos > .haku-libro-pendientes-acciones {
     display: flex; flex-wrap: wrap; gap: 7px; margin: 0; padding: 9px 10px;
@@ -2426,21 +2426,21 @@ html[data-haiku-tema="oscuro"] .haiku-asistente-panel .haku-libro-resumen .haku-
 /* Bloqueos de Haku: datos esenciales a la vista, evidencia completa plegada.
    Colores propios de ambos temas; no heredar las tarjetas de cancelación. */
 .haiku-bloqueos-grupo {
-    --bloqueo-fondo: #fff;
+    --bloqueo-fondo: var(--cereza-superficie);
     --bloqueo-texto: #203b30;
     --bloqueo-secundario: #596b61;
     --bloqueo-linea: #d8e3dc;
-    --bloqueo-suave: #eef4f0;
+    --bloqueo-suave: var(--cereza-relieve);
     --bloqueo-acento: #22735c;
     --bloqueo-alerta-fondo: #fff5e5;
     --bloqueo-alerta-texto: #78501d;
 }
 @media screen {
     html[data-haiku-tema="oscuro"] .haiku-bloqueos-grupo {
-        --bloqueo-fondo: #1b2420;
-        --bloqueo-texto: #e8efea;
-        --bloqueo-secundario: #b1c2b7;
-        --bloqueo-linea: #3e5145;
+        --bloqueo-fondo: var(--cereza-superficie);
+        --bloqueo-texto: var(--cereza-texto);
+        --bloqueo-secundario: var(--cereza-secundario);
+        --bloqueo-linea: var(--cereza-linea);
         --bloqueo-suave: #24392e;
         --bloqueo-acento: #a7d8ba;
         --bloqueo-alerta-fondo: #332719;
@@ -2488,11 +2488,11 @@ html[data-haiku-tema="oscuro"] .haiku-asistente-panel .haku-libro-resumen .haku-
 .haiku-bloqueos-grupo .haku-bloqueo-origen { margin: 3px 0; padding: 0; color: var(--bloqueo-secundario); font-size: 11px; }
 .haiku-bloqueos-grupo .haku-bloqueo-boton {
     box-sizing: border-box; min-height: 32px; max-width: 100%; margin: 0 0 0 auto; padding: 6px 10px;
-    border: 1px solid #22735c; border-radius: 5px; background: #22735c; color: #fff;
+    border: 1px solid var(--cereza-primario); border-radius: 5px; background: var(--cereza-primario); color: #fff;
     font: 500 11px/18px var(--sites-shell-font, Inter, "Segoe UI", sans-serif); text-align: center;
     white-space: normal; cursor: pointer; box-shadow: none;
 }
-.haiku-bloqueos-grupo .haku-bloqueo-boton:hover:not(:disabled) { background: #195e4a; border-color: #195e4a; }
+.haiku-bloqueos-grupo .haku-bloqueo-boton:hover:not(:disabled) { background: var(--cereza-primario); border-color: var(--cereza-primario); }
 .haiku-bloqueos-grupo .haku-bloqueo-boton:disabled { background: var(--bloqueo-suave); border-color: var(--bloqueo-linea); color: var(--bloqueo-secundario); opacity: 1; cursor: default; }
 .haiku-bloqueos-grupo .haku-bloqueo-boton[aria-busy="true"]::before {
     content: ''; display: inline-block; width: 10px; height: 10px; margin-right: 6px;

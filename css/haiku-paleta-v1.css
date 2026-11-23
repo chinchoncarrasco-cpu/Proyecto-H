@@ -1,29 +1,68 @@
-/* Paleta compartida HAIKU · Figma, claro y oscuro. */
+/* Paleta compartida HAIKU · Cereza. */
 :root {
-  --haku-compacto-superficie: #fbfcfb;
-  --haku-compacto-control: #f1f5f2;
-  --haku-compacto-borde: #dbe3de;
-  --haku-compacto-texto: #172019;
-  --haku-compacto-secundario: #586c60;
-  --haku-compacto-acento: #286c4e;
-  --haku-compacto-seleccion: #e6f2eb;
-  --haku-compacto-suave: #eef4ef;
-  --haku-compacto-aviso: #825016;
-  --haku-compacto-primario: #22735c;
+  --cereza-lienzo: #f5f1ed;
+  --cereza-superficie: #fffdfb;
+  --cereza-relieve: #faf6f3;
+  --cereza-cabecera: #fffdfb;
+  --cereza-linea: #e7deda;
+  --cereza-linea-fuerte: #d6c7c7;
+  --cereza-texto: #2c2329;
+  --cereza-secundario: #665962;
+  --cereza-primario: #78263f;
+  --cereza-sobre-primario: #fffafc;
+  --cereza-acento: #78263f;
+  --cereza-seleccion: #f3e4e9;
+  --cereza-dorado: #7d581e;
+  --cereza-dorado-fondo: #f5eadb;
+  --cereza-verde: #2a604c;
+  --cereza-verde-fondo: #e5f1e9;
+  --cereza-azul: #315e81;
+  --cereza-azul-fondo: #e8eff5;
+  --cereza-rojo: #9d3c3f;
+  --cereza-rojo-fondo: #f8e8e6;
+  --cereza-morado: #684381;
+  --cereza-morado-fondo: #efe6f5;
+  --cereza-neutro: #5e515a;
+  --cereza-neutro-fondo: #efe8e5;
+  --haku-compacto-superficie: var(--cereza-superficie);
+  --haku-compacto-control: var(--cereza-relieve);
+  --haku-compacto-borde: var(--cereza-linea);
+  --haku-compacto-texto: var(--cereza-texto);
+  --haku-compacto-secundario: var(--cereza-secundario);
+  --haku-compacto-acento: var(--cereza-acento);
+  --haku-compacto-seleccion: var(--cereza-seleccion);
+  --haku-compacto-suave: var(--cereza-relieve);
+  --haku-compacto-aviso: var(--cereza-dorado);
+  --haku-compacto-aviso-fondo: var(--cereza-dorado-fondo);
+  --haku-compacto-primario: var(--cereza-primario);
 }
-html[data-haiku-tema="oscuro"] {
-  --haku-compacto-superficie: #1b2621;
-  --haku-compacto-control: #0f1915;
-  --haku-compacto-borde: #3e5145;
-  --haku-compacto-texto: #e8efea;
-  --haku-compacto-secundario: #b1c2b7;
-  --haku-compacto-acento: #9fd2b3;
-  --haku-compacto-seleccion: #254736;
-  --haku-compacto-suave: #28382f;
-  --haku-compacto-aviso: #f0c585;
+@media screen {
+  html[data-haiku-tema="oscuro"] {
+    --cereza-lienzo: #19171b;
+    --cereza-superficie: #231f25;
+    --cereza-relieve: #2b262d;
+    --cereza-cabecera: #201b22;
+    --cereza-linea: #3a323c;
+    --cereza-linea-fuerte: #50434f;
+    --cereza-texto: #f4ecef;
+    --cereza-secundario: #baadb5;
+    --cereza-primario: #913b57;
+    --cereza-acento: #f0adbf;
+    --cereza-seleccion: #402631;
+    --cereza-dorado: #dabb80;
+    --cereza-dorado-fondo: #423524;
+    --cereza-verde: #a2d4b5;
+    --cereza-verde-fondo: #293b32;
+    --cereza-azul: #a6ccef;
+    --cereza-azul-fondo: #263845;
+    --cereza-rojo: #f2aeaa;
+    --cereza-rojo-fondo: #472d32;
+    --cereza-morado: #d4b9ec;
+    --cereza-morado-fondo: #3c2c48;
+    --cereza-neutro: #cfbfc8;
+    --cereza-neutro-fondo: #342c36;
+  }
 }
-:root { --haku-compacto-aviso-fondo: #fff5e5; }
-html[data-haiku-tema="oscuro"] { --haku-compacto-aviso-fondo: #392b1c; }
 
 .haku-retiros-libro { width:100%; min-width:0; color:var(--haku-compacto-texto); }
 .haku-retiros-libro__lista { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,360px),1fr)); gap:6px 12px; padding:0 8px 8px; align-items:start; }

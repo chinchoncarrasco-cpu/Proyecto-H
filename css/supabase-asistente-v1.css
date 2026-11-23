@@ -70,8 +70,8 @@
     box-sizing: border-box;
     border: 1px solid #cfd8d2;
     border-radius: 8px;
-    background: #f4f7f5;
-    color: #172019;
+    background: var(--cereza-lienzo);
+    color: var(--cereza-texto);
     box-shadow: 0 14px 36px rgba(15, 37, 26, .18);
     transform-origin: bottom right;
 }
@@ -88,8 +88,8 @@
     gap: 14px;
     min-height: 54px;
     padding: 11px 13px;
-    border-bottom: 1px solid #dbe3de;
-    background: #fbfcfb;
+    border-bottom: 1px solid var(--cereza-linea);
+    background: var(--cereza-superficie);
 }
 
 .haiku-asistente-conversacion {
@@ -113,7 +113,7 @@
 
 .haiku-asistente-cerrar {
     width: 32px; height: 32px; flex: 0 0 auto;
-    border: 1px solid #d8dfda; border-radius: 5px; background: #fff; color: #37423b;
+    border: 1px solid var(--cereza-linea); border-radius: 5px; background: var(--cereza-superficie); color: #37423b;
     cursor: pointer; font: inherit; font-size: 1.15rem;
 }
 
@@ -121,7 +121,7 @@
     min-height: 0; flex: 1 1 auto; display: flex; flex-direction: column; gap: 12px;
     overflow-y: auto; overscroll-behavior-y: contain; overflow-anchor: none; scrollbar-gutter: stable;
     scrollbar-width: thin; scrollbar-color: #a9b9af transparent;
-    padding: 14px 12px; background: #f1f5f2;
+    padding: 14px 12px; background: var(--cereza-relieve);
 }
 
 .haiku-asistente-mensajes::-webkit-scrollbar { width: 9px; }
@@ -135,8 +135,8 @@
 }
 
 .haiku-asistente-mensaje--asistente {
-    align-self: flex-start; border: 1px solid #dbe4de;
-    background: #fff; color: #334139;
+    align-self: flex-start; border: 1px solid var(--cereza-linea);
+    background: var(--cereza-superficie); color: #334139;
 }
 
 .haiku-asistente-mensaje--usuario {
@@ -158,13 +158,13 @@
 
 .haiku-asistente-preview {
     width: 100%; align-self: stretch; box-sizing: border-box; padding: 13px;
-    border: 1px solid #b8d3c3; border-radius: 15px; background: #fff;
+    border: 1px solid #b8d3c3; border-radius: 15px; background: var(--cereza-superficie);
     box-shadow: 0 4px 14px rgba(28, 61, 42, .07);
 }
 
 .haiku-asistente-preview-cabecera {
     display: flex; align-items: flex-start; justify-content: space-between; gap: 10px;
-    padding-bottom: 10px; border-bottom: 1px solid #e5ebe7;
+    padding-bottom: 10px; border-bottom: 1px solid var(--cereza-linea);
 }
 .haiku-asistente-preview-cabecera > div { min-width: 0; }
 .haiku-asistente-preview-cabecera > div > span {
@@ -181,20 +181,20 @@
 
 .haiku-asistente-preview-resumen { margin: 10px 0; color: #46534c; font-size: .72rem; line-height: 1.45; }
 .haiku-asistente-preview-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
-.haiku-asistente-preview-dato { min-width: 0; padding: 7px 8px; border: 1px solid #e3e9e5; border-radius: 9px; background: #f8faf8; }
+.haiku-asistente-preview-dato { min-width: 0; padding: 7px 8px; border: 1px solid var(--cereza-linea); border-radius: 9px; background: var(--cereza-relieve); }
 .haiku-asistente-preview-dato > span { display: block; margin-bottom: 3px; color: #7d8982; font-size: .56rem; font-weight: 700; text-transform: uppercase; }
 .haiku-asistente-preview-dato > strong { display: block; overflow-wrap: anywhere; color: #243129; font-size: .69rem; font-weight: 750; line-height: 1.35; }
 
 .haiku-asistente-preview-observacion,
 .haiku-asistente-preview-pago,
-.haiku-asistente-preview-lista { margin-top: 9px; padding-top: 9px; border-top: 1px solid #e5ebe7; }
+.haiku-asistente-preview-lista { margin-top: 9px; padding-top: 9px; border-top: 1px solid var(--cereza-linea); }
 
 .haiku-asistente-preview-observacion > span,
 .haiku-asistente-preview-pago > strong,
 .haiku-asistente-preview-lista > strong { display: block; margin-bottom: 7px; color: #425048; font-size: .65rem; font-weight: 800; }
 
 .haiku-asistente-preview-observacion p { margin: 0; color: #59665f; font-size: .68rem; line-height: 1.45; }
-.haiku-asistente-preview-pago { padding: 9px; border: 1px solid #d7e7dd; border-radius: 10px; background: #f4faf6; }
+.haiku-asistente-preview-pago { padding: 9px; border: 1px solid #d7e7dd; border-radius: 10px; background: var(--cereza-relieve); }
 .haiku-asistente-preview-pago > strong { color: #226343; }
 
 .haiku-asistente-preview-lista ul { display: grid; gap: 4px; margin: 0; padding: 0 0 0 17px; color: #58645d; font-size: .67rem; line-height: 1.4; }
@@ -209,7 +209,7 @@
     min-height: 34px;
     border: 1px solid #d5ddd8;
     border-radius: 9px;
-    background: #eef2ef;
+    background: var(--cereza-relieve);
     color: #87918b;
     font: inherit;
     font-size: .66rem;
@@ -217,8 +217,8 @@
     transition: background .15s ease, border-color .15s ease, color .15s ease;
 }
 .haiku-asistente-preview-pie button:not(:disabled) {
-    border-color: #1f6e4c;
-    background: #1f6e4c;
+    border-color: var(--cereza-primario);
+    background: var(--cereza-primario);
     color: #fff;
     cursor: pointer;
 }
@@ -231,22 +231,22 @@
     opacity: .76;
 }
 
-.haiku-asistente-adjuntos { display: flex; gap: 7px; overflow-x: auto; padding: 10px 12px 0; background: #fff; }
+.haiku-asistente-adjuntos { display: flex; gap: 7px; overflow-x: auto; padding: 10px 12px 0; background: var(--cereza-superficie); }
 .haiku-asistente-adjuntos:empty { display: none; }
-.haiku-asistente-adjunto { position: relative; width: 66px; height: 58px; flex: 0 0 auto; overflow: hidden; border: 1px solid #d8dfda; border-radius: 10px; background: #eef2ef; }
+.haiku-asistente-adjunto { position: relative; width: 66px; height: 58px; flex: 0 0 auto; overflow: hidden; border: 1px solid var(--cereza-linea); border-radius: 10px; background: var(--cereza-relieve); }
 .haiku-asistente-adjunto img { width: 100%; height: 100%; display: block; object-fit: cover; }
 .haiku-asistente-quitar { position: absolute; top: 3px; right: 3px; width: 21px; height: 21px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 50%; background: rgba(17, 29, 22, .86); color: #fff; cursor: pointer; font: inherit; font-size: .75rem; }
 
-.haiku-asistente-compositor { padding: 10px 12px 12px; border-top: 0; background: #fff; }
-.haiku-asistente-texto { width: 100%; min-height: 66px; max-height: 150px; resize: vertical; box-sizing: border-box; padding: 11px 12px; border: 1px solid #d3dbd6; border-radius: 5px; outline: 0; background: #fff; color: #172019; font: inherit; font-size: .79rem; line-height: 1.42; }
+.haiku-asistente-compositor { padding: 10px 12px 12px; border-top: 0; background: var(--cereza-superficie); }
+.haiku-asistente-texto { width: 100%; min-height: 66px; max-height: 150px; resize: vertical; box-sizing: border-box; padding: 11px 12px; border: 1px solid #d3dbd6; border-radius: 5px; outline: 0; background: var(--cereza-superficie); color: var(--cereza-texto); font: inherit; font-size: .79rem; line-height: 1.42; }
 .haiku-asistente-texto:focus { border-color: #6f9c82; }
-.haiku-asistente-texto:disabled { background: #f3f5f3; color: #7e8882; }
+.haiku-asistente-texto:disabled { background: var(--cereza-relieve); color: #7e8882; }
 
 .haiku-asistente-acciones { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 9px; }
 .haiku-asistente-adjuntar,
 .haiku-asistente-enviar { min-height: 36px; padding: 8px 12px; border-radius: 5px; cursor: pointer; font: inherit; font-size: .75rem; font-weight: 700; }
-.haiku-asistente-adjuntar { border: 1px solid #d4dcd6; background: #fff; color: #3b4840; }
-.haiku-asistente-enviar { border: 1px solid #1f6e4c; background: #1f6e4c; color: #fff; }
+.haiku-asistente-adjuntar { border: 1px solid #d4dcd6; background: var(--cereza-superficie); color: #3b4840; }
+.haiku-asistente-enviar { border: 1px solid var(--cereza-primario); background: var(--cereza-primario); color: #fff; }
 .haiku-asistente-adjuntar:disabled,
 .haiku-asistente-enviar:disabled { opacity: .5; cursor: not-allowed; }
 .haiku-asistente-aviso { margin-top: 8px; color: #87928b; font-size: .66rem; line-height: 1.35; }
@@ -293,7 +293,7 @@
     padding: 5px 9px;
     border-color: #d8e0db;
     border-radius: 3px;
-    background: #fff;
+    background: var(--cereza-superficie);
     color: #53635a;
     font-size: .63rem;
 }
@@ -333,8 +333,8 @@
 .haiku-asistente-rapidas {
     flex: 0 0 auto;
     border-top: 1px solid #d9e2dc;
-    border-bottom: 1px solid #dfe6e1;
-    background: #f8faf8;
+    border-bottom: 1px solid var(--cereza-linea);
+    background: var(--cereza-relieve);
 }
 
 .haiku-asistente-rapidas > summary {
@@ -407,7 +407,7 @@
     padding: 7px 10px;
     border: 1px solid #d8e1db;
     border-radius: 4px;
-    background: #fff;
+    background: var(--cereza-superficie);
     color: #294236;
     cursor: pointer;
     font: inherit;
@@ -419,7 +419,7 @@
 
 .haiku-asistente-rapidas-lista button:hover {
     border-color: #9ebbaa;
-    background: #edf5f0;
+    background: var(--cereza-relieve);
 }
 
 .haiku-asistente-rapidas-lista button:disabled {
@@ -500,7 +500,7 @@
     padding: 6px 9px;
     border: 1px solid #cddbd2;
     border-radius: 4px;
-    background: #fff;
+    background: var(--cereza-superficie);
     color: #27503b;
     cursor: pointer;
     font: inherit;
@@ -526,7 +526,7 @@
     gap: 10px;
     padding: 12px;
     border: 1px solid #c6d9cd;
-    background: #fff;
+    background: var(--cereza-superficie);
 }
 
 .haiku-cloudbeds-tarifas-cabecera > div > span {
@@ -570,7 +570,7 @@
     min-width: 0;
     padding: 7px 5px;
     border: 1px solid #dae5de;
-    background: #fff;
+    background: var(--cereza-superficie);
     color: #65746c;
     font-size: .52rem;
     line-height: 1.25;
@@ -589,7 +589,7 @@
     gap: 2px;
     padding: 8px 10px;
     border-left: 3px solid #bdc9c1;
-    background: #f8faf8;
+    background: var(--cereza-relieve);
     font-size: .61rem;
     line-height: 1.4;
 }
@@ -625,7 +625,7 @@
 
 .haiku-cloudbeds-tarifas-categoria {
     border: 1px solid #d8e2dc;
-    background: #fff;
+    background: var(--cereza-superficie);
 }
 
 .haiku-cloudbeds-tarifas-categoria > summary {
@@ -635,7 +635,7 @@
     justify-content: space-between;
     gap: 8px;
     padding: 7px 10px;
-    color: #294536;
+    color: var(--cereza-texto);
     cursor: pointer;
     font-size: .68rem;
     font-weight: 780;
@@ -650,8 +650,8 @@
     display: grid;
     gap: 9px;
     padding: 11px;
-    border-top: 1px solid #e1e8e3;
-    background: #fff;
+    border-top: 1px solid var(--cereza-linea);
+    background: var(--cereza-superficie);
 }
 
 .haiku-cloudbeds-tarifas-tarjeta > header {
@@ -673,7 +673,7 @@
     flex: 0 0 auto;
     padding: 4px 6px;
     border-radius: 999px;
-    background: #eef2ef;
+    background: var(--cereza-relieve);
     color: #58675f;
     font-size: .52rem !important;
     font-weight: 820;
@@ -716,14 +716,14 @@
 .haiku-cloudbeds-tarifas-revision {
     padding: 8px;
     border: 1px solid #e0e7e2;
-    background: #f8faf8;
+    background: var(--cereza-relieve);
 }
 
 .haiku-cloudbeds-tarifas-identidad-contextual {
     display: grid;
     gap: 3px;
-    border-color: #c9ddcf;
-    background: #f2f8f4;
+    border-color: var(--cereza-linea-fuerte);
+    background: var(--cereza-relieve);
     color: #385447;
     font-size: .61rem;
     line-height: 1.4;
@@ -861,14 +861,14 @@
 .haiku-cloudbeds-tarifas-confirmacion {
     padding: 11px;
     border: 1px solid #bcd2c4;
-    background: #f3f8f5;
+    background: var(--cereza-relieve);
 }
 
 .haiku-cloudbeds-tarifas-confirmacion[hidden] { display: none !important; }
 .haiku-cloudbeds-tarifas-confirmacion > strong { font-size: .7rem; }
 .haiku-cloudbeds-tarifas-confirmacion p { margin: 6px 0; color: #506158; font-size: .62rem; line-height: 1.4; }
 .haiku-cloudbeds-tarifas-confirmacion-detalle { display: grid; gap: 7px; margin-top: 8px; }
-.haiku-cloudbeds-tarifas-confirmacion-item { padding: 8px; border: 1px solid #d6e3da; background: #fff; }
+.haiku-cloudbeds-tarifas-confirmacion-item { padding: 8px; border: 1px solid var(--cereza-linea); background: var(--cereza-superficie); }
 .haiku-cloudbeds-tarifas-confirmacion-item > strong { display: block; margin-bottom: 6px; font-size: .66rem; }
 .haiku-cloudbeds-tarifas-confirmacion-item .haiku-cloudbeds-tarifas-preview-alerta { padding: 6px 7px; border-left: 3px solid #b77a16; background: #fff7e8; color: #6d4b14; }
 .haiku-cloudbeds-tarifas-confirmacion-item .haiku-cloudbeds-tarifas-servicios-info { padding: 6px 7px; border-left: 3px solid #3c8b5d; background: #f2faf5; color: #285d3f; }

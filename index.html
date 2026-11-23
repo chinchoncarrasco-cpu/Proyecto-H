@@ -30,8 +30,8 @@
         }
     </style>
 
-    <link rel="stylesheet" href="css/styles.css">
-    <link rel="stylesheet" href="css/sites-shell-v1.css">
+    <link rel="stylesheet" href="css/styles.css?v=cereza-1">
+    <link rel="stylesheet" href="css/sites-shell-v1.css?v=cereza-1">
     <link rel="stylesheet" href="css/sites-resumen-v1.css">
     <link rel="stylesheet" href="css/sites-calendario-v1.css">
 <link rel="stylesheet" href="css/haiku-redes-v1.css">
@@ -45,7 +45,7 @@
     <link rel="stylesheet" href="css/sites-servicios-v1.css">
     <link rel="stylesheet" href="css/sites-pagos-v1.css">
     <link rel="stylesheet" href="css/sites-reservas-v1.css">
-    <link rel="stylesheet" href="css/haiku-huespedes-v1.css">
+    <link rel="stylesheet" href="css/haiku-huespedes-v1.css?v=cereza-1">
     <link rel="stylesheet" href="css/haiku-huespedes-figma-v1.css">
     <link rel="stylesheet" href="css/sites-libro-reserva-v1.css">
     <link rel="stylesheet" href="css/sites-notificaciones-v1.css">
@@ -54,16 +54,70 @@
     <link rel="stylesheet" href="css/haiku-tema-v1.css">
     <link rel="stylesheet" href="css/haiku-tema-finanzas-compactas-v1.css">
     <link rel="stylesheet" href="css/haiku-tema-legibilidad-v1.css">
+    <link rel="stylesheet" href="css/haiku-cereza-v1.css?v=1">
+    <script src="js/haiku-cereza-nav-v1.js?v=1" defer></script>
 </head>
 
 <body>
 
-    <header class="sites-shell-topbar" aria-label="Barra superior">
-        <div class="sites-shell-topbar-title">
-            <span class="sites-shell-topbar-context">Operación</span>
-            <span class="sites-shell-topbar-separator" aria-hidden="true">/</span>
-            <strong>Proyecto H</strong>
-        </div>
+    <header class="sites-shell-topbar haiku-cereza-cabecera" aria-label="Barra superior">
+        <a class="haiku-cereza-marca" href="#seccion-resumen" aria-label="Haiku · Resumen">
+            <span class="sites-shell-brand-mark" aria-hidden="true">H</span><span>HAIKU</span>
+        </a>
+        <nav class="menu haiku-cereza-navegacion" aria-label="Navegación principal">
+            <button type="button" class="menu-item activo" data-seccion="resumen">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-7 9 7v10H3zM9 20v-7h6v7"/></svg><span>Resumen</span>
+            </button>
+            <button type="button" class="menu-item" data-seccion="calendario">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4M17 3v4M3 10h18"/></svg><span>Calendario</span>
+            </button>
+            <button type="button" class="menu-item" data-seccion="cabanas">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m2 11 10-8 10 8M4 10v11h16V10M9 21v-8h6v8"/></svg><span>Cabañas</span>
+            </button>
+            <details class="haiku-cereza-grupo">
+                <summary>Operación<span aria-hidden="true"></span></summary>
+                <div class="haiku-cereza-grupo-panel">
+                    <div class="haiku-cereza-grupo-columna">
+                        <span class="haiku-cereza-grupo-etiqueta">Agenda y cobros</span>
+                        <button type="button" class="menu-item" data-seccion="servicios">
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 17h16M6 17a6 6 0 0 1 12 0M12 11V8M3 21h18"/></svg><span>Servicios</span>
+                        </button>
+                        <button type="button" class="menu-item" data-seccion="pagos">
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20M6 15h4"/></svg><span>Pagos</span>
+                        </button>
+                    </div>
+                    <div class="haiku-cereza-grupo-columna">
+                        <span class="haiku-cereza-grupo-etiqueta">Seguimiento</span>
+                        <button type="button" class="menu-item" data-seccion="cierre">
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V2h6v2M9 10h6M9 14h6M9 18h4"/></svg><span>Cierre de turno</span>
+                        </button>
+                        <button type="button" class="menu-item" data-seccion="historial">
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7M3 4v4h4M12 7v5l3 2"/></svg><span>Historial</span>
+                        </button>
+                    </div>
+                </div>
+            </details>
+            <details class="haiku-cereza-grupo">
+                <summary>Gestión<span aria-hidden="true"></span></summary>
+                <div class="haiku-cereza-grupo-panel">
+                    <div class="haiku-cereza-grupo-columna">
+                        <span class="haiku-cereza-grupo-etiqueta">Estadías</span>
+                        <button type="button" class="menu-item" data-seccion="reservas">
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h7l2 2h9v12H3zM3 6v14"/></svg><span>Reservas</span>
+                        </button>
+                        <button type="button" class="menu-item" data-seccion="huespedes" hidden>
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="7" r="3"/><path d="M3 20v-2a6 6 0 0 1 12 0v2M16 4a3 3 0 0 1 0 6m3 10v-2a6 6 0 0 0-2-4"/></svg><span>Huéspedes</span>
+                        </button>
+                    </div>
+                    <div class="haiku-cereza-grupo-columna">
+                        <span class="haiku-cereza-grupo-etiqueta">Libro</span>
+                        <button type="button" class="menu-item" data-seccion="libro-reserva">
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5c-3-2-6-2-9-1v15c3-1 6-1 9 1 3-2 6-2 9-1V4c-3-1-6-1-9 1ZM12 5v15"/></svg><span>Libro de Reserva</span>
+                        </button>
+                    </div>
+                </div>
+            </details>
+        </nav>
 
         <div class="sites-shell-topbar-actions">
             <div class="sites-shell-searches">
@@ -99,6 +153,16 @@
                         <div id="notificaciones-contenido" class="notificaciones-contenido"></div>
                     </div>
                 </div>
+                <button type="button" id="haiku-acceso-chat" class="haiku-cereza-icono" aria-label="Abrir Haku Chat"
+                    aria-haspopup="dialog" aria-controls="haiku-asistente-panel" aria-expanded="false" hidden>
+                    <span class="haiku-cereza-icono-chat" aria-hidden="true"></span>
+                </button>
+                <div id="haiku-cuenta-acceso"></div>
+                <div class="haiku-tema-control">
+                    <button type="button" id="haiku-tema-boton" hidden aria-label="Cambiar a tema oscuro" title="Cambiar a tema oscuro">
+                        <span data-tema-icono aria-hidden="true">☾</span><span data-tema-texto>Tema oscuro</span>
+                    </button>
+                </div>
             </div>
         </div>
     </header>
@@ -112,79 +176,6 @@
         </header>
         <div id="sites-notificaciones-contenido" class="sites-notificaciones-body"></div>
     </aside>
-
-    <!-- =========================
-         BARRA LATERAL
-    ========================== -->
-    <aside class="sidebar sites-shell-sidebar">
-
-    <div class="sidebar-superior">
-
-    <div class="sidebar-fila-superior">
-
-        <div class="logo">
-            <span class="sites-shell-brand-mark" aria-hidden="true">H</span>
-            <h1>HAIKU</h1>
-        </div>
-
-    </div>
-
-
-</div>
-
-    <nav class="menu" aria-label="Navegación principal">
-        <span class="sites-shell-nav-label">OPERACIÓN</span>
-
-        <button type="button" class="menu-item activo" data-seccion="resumen">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-7 9 7v10H3zM9 20v-7h6v7"/></svg><span>Resumen</span>
-        </button>
-
-        <button type="button" class="menu-item" data-seccion="calendario">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4M17 3v4M3 10h18"/></svg><span>Calendario</span>
-        </button>
-
-        <button type="button" class="menu-item" data-seccion="cabanas">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m2 11 10-8 10 8M4 10v11h16V10M9 21v-8h6v8"/></svg><span>Cabañas</span>
-        </button>
-
-        <button type="button" class="menu-item" data-seccion="servicios">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 17h16M6 17a6 6 0 0 1 12 0M12 11V8M3 21h18"/></svg><span>Servicios</span>
-        </button>
-
-        <button type="button" class="menu-item" data-seccion="pagos">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20M6 15h4"/></svg><span>Pagos</span>
-        </button>
-
-        <button type="button" class="menu-item" data-seccion="cierre">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V2h6v2M9 10h6M9 14h6M9 18h4"/></svg><span>Cierre de turno</span>
-        </button>
-
-        <button type="button" class="menu-item" data-seccion="historial">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7M3 4v4h4M12 7v5l3 2"/></svg><span>Historial</span>
-        </button>
-
-        <span class="sites-shell-nav-label sites-shell-nav-label-gestion">GESTIÓN</span>
-        <button type="button" class="menu-item" data-seccion="reservas">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h7l2 2h9v12H3zM3 6v14"/></svg><span>Reservas</span>
-        </button>
-
-
-        <button type="button" class="menu-item" data-seccion="huespedes" hidden>
-            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="7" r="3"/><path d="M3 20v-2a6 6 0 0 1 12 0v2M16 4a3 3 0 0 1 0 6m3 10v-2a6 6 0 0 0-2-4"/></svg><span>Huéspedes</span>
-        </button>
-
-        <button type="button" class="menu-item" data-seccion="libro-reserva">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5c-3-2-6-2-9-1v15c3-1 6-1 9 1 3-2 6-2 9-1V4c-3-1-6-1-9 1ZM12 5v15"/></svg><span>Libro de Reserva</span>
-        </button>
-
-    </nav>
-    <div class="haiku-tema-control">
-        <button type="button" id="haiku-tema-boton" hidden aria-label="Cambiar a tema oscuro" title="Cambiar a tema oscuro">
-            <span data-tema-icono aria-hidden="true">☾</span><span data-tema-texto>Tema oscuro</span>
-        </button>
-    </div>
-</aside>
-
 
     <!-- =========================
          CONTENIDO PRINCIPAL

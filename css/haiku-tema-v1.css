@@ -38,13 +38,13 @@
 }
 
 @media screen {
-    html[data-haiku-tema="oscuro"] { color-scheme: dark; background: #101916; }
-    html[data-haiku-tema="oscuro"] body { background-color: #101916; color: #e8efea; }
-    html[data-haiku-tema="oscuro"] :is(.sites-shell-main, .seccion-app) { background-color: #101916 !important; }
-    html[data-haiku-tema="oscuro"] :is(input, textarea)::placeholder { color: #b1c2b7; opacity: 1; }
+    html[data-haiku-tema="oscuro"] { color-scheme: dark; background: var(--cereza-lienzo); }
+    html[data-haiku-tema="oscuro"] body { background-color: var(--cereza-lienzo); color: var(--cereza-texto); }
+    html[data-haiku-tema="oscuro"] :is(.sites-shell-main, .seccion-app) { background-color: var(--cereza-lienzo) !important; }
+    html[data-haiku-tema="oscuro"] :is(input, textarea)::placeholder { color: var(--cereza-secundario); opacity: 1; }
     html[data-haiku-tema="oscuro"] #contador-notificaciones { background-color: #8a5128; color: #fff; }
     html[data-haiku-tema="oscuro"] :is(button, input, select, textarea, a, summary, [tabindex]):focus-visible {
-        outline-color: #9fd2b3;
+        outline-color: var(--cereza-acento);
     }
     html[data-haiku-tema="oscuro"] {
         --haiku-reserva-pendiente-fondo: #243e51;
@@ -67,7 +67,7 @@
         --haiku-reserva-no-show-acento: #c6a48b;
     }
     html[data-haiku-tema="oscuro"] #seccion-resumen .sites-resumen-dia[data-reserva-estado] {
-        --franja-estado-bg: color-mix(in srgb, var(--franja-estado-acento) 18%, #101916);
+        --franja-estado-bg: color-mix(in srgb, var(--franja-estado-acento) 18%, var(--cereza-lienzo));
     }
     html[data-haiku-tema="oscuro"] #seccion-resumen .sites-resumen-dia[data-reserva-estado="hospedada"] { --franja-estado-bg: var(--haiku-reserva-hospedada-fondo); }
     html[data-haiku-tema="oscuro"] #seccion-resumen .sites-resumen-dia[data-reserva-estado="confirmada"] { --franja-estado-bg: #223557; }

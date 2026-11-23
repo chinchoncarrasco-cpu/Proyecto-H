@@ -20,7 +20,7 @@
 }
 
 .haiku-cuenta-menu-panel {
-    --haiku-cuenta-linea: #dce7df;
+    --haiku-cuenta-linea: var(--cereza-linea);
     --haiku-cuenta-verde: #174b3b;
     position: fixed;
     z-index: 99991;
@@ -32,9 +32,9 @@
     width: min(390px, calc(100vw - var(--sites-shell-sidebar-width, var(--haiku-sidebar-ancho, 240px))));
     height: 100dvh;
     overflow: hidden;
-    border-right: 1px solid #d4e2d8;
-    background: #f2f6f3;
-    color: #183a2e;
+    border-right: 1px solid var(--cereza-linea);
+    background: var(--cereza-lienzo);
+    color: var(--cereza-texto);
     box-shadow: 12px 0 35px rgba(16, 33, 25, .18);
     font-family: var(--sites-shell-font, Inter, "Segoe UI", Arial, sans-serif);
 }
@@ -61,13 +61,13 @@
     min-height: 58px;
     padding: 9px 14px;
     border-bottom: 1px solid #dce8df;
-    background: #fff;
+    background: var(--cereza-superficie);
     text-align: center;
 }
 
 .haiku-cuenta-titulos h2 {
     margin: 0;
-    color: #183a2e;
+    color: var(--cereza-texto);
     font-size: 16px;
     font-weight: 760;
     line-height: 1.15;
@@ -116,7 +116,7 @@
 .haiku-cuenta-tarjeta {
     border: 1px solid var(--haiku-cuenta-linea);
     border-radius: 10px;
-    background: #fff;
+    background: var(--cereza-superficie);
     box-shadow: 0 1px 3px rgba(24, 59, 40, .06);
 }
 
@@ -141,7 +141,7 @@
 
 .haiku-cuenta-perfil h3 {
     margin: 0;
-    color: #183a2e;
+    color: var(--cereza-texto);
     font-size: 15px;
     line-height: 1.25;
 }
@@ -172,7 +172,7 @@
 }
 
 .haiku-cuenta-badges span + span {
-    background: #eff5f0;
+    background: var(--cereza-relieve);
     color: #51805e;
 }
 
@@ -187,12 +187,12 @@
     justify-content: space-between;
     gap: 12px;
     padding-bottom: 7px;
-    border-bottom: 1px solid #e5ede7;
+    border-bottom: 1px solid var(--cereza-linea);
 }
 
 .haiku-cuenta-tarjeta h3 {
     margin: 0;
-    color: #294536;
+    color: var(--cereza-texto);
     font-size: 13px;
     font-weight: 740;
 }
@@ -203,7 +203,7 @@
 
 .haiku-cuenta-tarjeta dl > div {
     padding: 8px 0;
-    border-bottom: 1px solid #e7eee8;
+    border-bottom: 1px solid var(--cereza-linea);
 }
 
 .haiku-cuenta-tarjeta dl > div:last-child {
@@ -252,7 +252,7 @@
 
 .haiku-cuenta-permisos {
     padding-top: 9px;
-    border-top: 1px solid #e5ede7;
+    border-top: 1px solid var(--cereza-linea);
 }
 
 .haiku-cuenta-permisos > div {
@@ -266,7 +266,7 @@
     padding: 5px 7px;
     border: 1px solid #dde9df;
     border-radius: 5px;
-    background: #f5f9f6;
+    background: var(--cereza-relieve);
     color: #40624d;
     font-size: 10px;
     font-weight: 650;

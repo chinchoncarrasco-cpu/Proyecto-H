@@ -8,7 +8,7 @@
 .haiku-comparacion-acordeon.haiku-comparacion-acordeon--revision > summary { background:#fffaf0; border-left-color:#c5a264; }
 .haiku-comparacion-acordeon > :not(summary) { margin:8px 10px; }
 .haiku-comparacion-acordeon > .haiku-cancelacion-card { width:calc(100% - 20px); }
-.haiku-bloqueos-grupo > .haiku-comparacion-acordeon > button.haiku-cancelacion-boton { box-sizing:border-box; max-width:100%; min-height:36px; padding:7px 11px; border:1px solid #496b56; border-radius:9px; background:#496b56; color:#fff; font:inherit; font-size:.8rem; font-weight:700; white-space:normal; overflow-wrap:anywhere; cursor:pointer; }
+.haiku-bloqueos-grupo > .haiku-comparacion-acordeon > button.haiku-cancelacion-boton { box-sizing:border-box; max-width:100%; min-height:36px; padding:7px 11px; border:1px solid var(--cereza-linea-fuerte); border-radius:9px; background:#496b56; color:#fff; font:inherit; font-size:.8rem; font-weight:700; white-space:normal; overflow-wrap:anywhere; cursor:pointer; }
 .haiku-bloqueos-grupo > .haiku-comparacion-acordeon > button.haiku-cancelacion-boton:hover:not(:disabled) { background:#385742; }
 .haiku-bloqueos-grupo > .haiku-comparacion-acordeon > button.haiku-cancelacion-boton:focus-visible { outline:3px solid #b6cbbd; outline-offset:3px; }
 .haiku-bloqueos-grupo > .haiku-comparacion-acordeon > button.haiku-cancelacion-boton:disabled { opacity:.55; cursor:default; }
@@ -16,18 +16,18 @@
 /* Cancelaciones: estilos acotados a sus tarjetas; comparten la paleta de reconciliación. */
 .haiku-cancelacion-titulo { display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin:20px 0 10px; font-size:.88rem; color:#33483d; }
 .haiku-cancelacion-cantidad { border-radius:999px; padding:2px 8px; background:#edf2ee; font-size:.72rem; font-weight:700; }
-.haiku-cancelacion-card { box-sizing:border-box; min-width:0; width:100%; max-width:560px; margin:0 0 10px; padding:15px; border:1px solid #dce5df; border-radius:13px; background:#fff; color:#33483d; font-size:.82rem; line-height:1.5; overflow-wrap:anywhere; }
+.haiku-cancelacion-card { box-sizing:border-box; min-width:0; width:100%; max-width:560px; margin:0 0 10px; padding:15px; border:1px solid #dce5df; border-radius:13px; background:var(--cereza-superficie); color:#33483d; font-size:.82rem; line-height:1.5; overflow-wrap:anywhere; }
 .haiku-cancelacion-card .haiku-cancelacion-top { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:8px; }
 .haiku-cancelacion-card .haiku-cancelacion-badge { display:inline-block; border-radius:999px; padding:3px 9px; background:#eff3f0; color:#496352; font-size:.7rem; font-weight:700; }
 .haiku-cancelacion-card .haiku-cancelacion-cab { font-size:.76rem; font-weight:750; }
 .haiku-cancelacion-card .haiku-cancelacion-nombre { margin:10px 0 8px; color:inherit; font-size:.98rem; line-height:1.35; font-weight:750; }
 .haiku-cancelacion-card .haiku-cancelacion-chips { display:flex; flex-wrap:wrap; gap:6px; margin:0 0 12px; }
-.haiku-cancelacion-card .haiku-cancelacion-chip { min-width:0; border:1px solid #e3e9e5; border-radius:7px; padding:3px 7px; background:#f7f9f7; font-size:.73rem; }
+.haiku-cancelacion-card .haiku-cancelacion-chip { min-width:0; border:1px solid var(--cereza-linea); border-radius:7px; padding:3px 7px; background:var(--cereza-relieve); font-size:.73rem; }
 .haiku-cancelacion-card .haiku-cancelacion-secundario { margin:10px 0 2px; color:#637368; font-size:.75rem; }
 .haiku-cancelacion-card .haiku-cancelacion-origen,
 .haiku-cancelacion-card .haiku-cancelacion-nota { margin:3px 0; font-size:.8rem; color:inherit; }
 .haiku-cancelacion-card .haiku-cancelacion-accion { margin:2px 0 8px; color:inherit; font-size:.82rem; font-weight:700; }
-.haiku-cancelacion-card .haiku-cancelacion-boton { box-sizing:border-box; display:inline-flex; justify-content:center; align-items:center; min-height:40px; max-width:100%; margin:12px 0 0; padding:9px 14px; border:1px solid #496b56; border-radius:9px; background:#496b56; color:#fff; font:inherit; font-size:.8rem; font-weight:700; white-space:normal; overflow-wrap:anywhere; cursor:pointer; }
+.haiku-cancelacion-card .haiku-cancelacion-boton { box-sizing:border-box; display:inline-flex; justify-content:center; align-items:center; min-height:40px; max-width:100%; margin:12px 0 0; padding:9px 14px; border:1px solid var(--cereza-linea-fuerte); border-radius:9px; background:#496b56; color:#fff; font:inherit; font-size:.8rem; font-weight:700; white-space:normal; overflow-wrap:anywhere; cursor:pointer; }
 .haiku-cancelacion-card .haiku-cancelacion-boton:hover:not(:disabled) { background:#385742; }
 .haiku-cancelacion-card .haiku-cancelacion-boton--confirmar { background:#fff5f2; border-color:#cf9b8e; color:#813e30; }
 .haiku-cancelacion-card .haiku-cancelacion-boton--confirmar:hover:not(:disabled) { background:#f9e8e2; }
@@ -35,7 +35,7 @@
 .haiku-cancelacion-card .haiku-cancelacion-boton:disabled { opacity:.55; cursor:default; }
 .haiku-cancelacion-status:empty { display:none; }
 .haiku-cancelacion-status { margin-top:12px; padding:11px; border:1px solid #e6d8b5; border-radius:9px; background:#fffaf0; font-size:.8rem; }
-.haiku-cancelacion-preview { background:#f5f7f5; border-color:#dce5df; }
+.haiku-cancelacion-preview { background:var(--cereza-lienzo); border-color:#dce5df; }
 .haiku-cancelacion-etiqueta { font-size:.68rem; letter-spacing:.035em; color:#526457; }
 .haiku-cancelacion-card--resuelta { background:#f5faf6; border-color:#d3e4d7; }
 .haiku-cancelacion-card--resuelta .haiku-cancelacion-badge,
@@ -51,9 +51,9 @@
    el resultado guardado y las cancelaciones que requieren revisión manual. */
 .haiku-cancelacion-titulo--detectadas,
 .haiku-cancelacion-card--detectada {
-    --haku-cancelacion-ink: #17362d;
-    --haku-cancelacion-muted: #728079;
-    --haku-cancelacion-surface: #fff;
+    --haku-cancelacion-ink: var(--cereza-texto);
+    --haku-cancelacion-muted: var(--cereza-secundario);
+    --haku-cancelacion-surface: var(--cereza-superficie);
     --haku-cancelacion-soft: #f0f6f2;
     --haku-cancelacion-line: #d9e3de;
     --haku-cancelacion-libro: #a34b38;
@@ -65,16 +65,16 @@
 }
 html[data-haiku-tema="oscuro"] .haiku-cancelacion-titulo--detectadas,
 html[data-haiku-tema="oscuro"] .haiku-cancelacion-card--detectada {
-    --haku-cancelacion-ink: #e8efea;
-    --haku-cancelacion-muted: #b1c2b7;
-    --haku-cancelacion-surface: #1b2621;
+    --haku-cancelacion-ink: var(--cereza-texto);
+    --haku-cancelacion-muted: var(--cereza-secundario);
+    --haku-cancelacion-surface: var(--cereza-superficie);
     --haku-cancelacion-soft: #202d26;
-    --haku-cancelacion-line: #3e5145;
+    --haku-cancelacion-line: var(--cereza-linea);
     --haku-cancelacion-libro: #edb5a6;
     --haku-cancelacion-libro-soft: #442c27;
     --haku-cancelacion-pendiente: #f2c58d;
     --haku-cancelacion-action: #254736;
-    --haku-cancelacion-action-ink: #e8efea;
+    --haku-cancelacion-action-ink: var(--cereza-texto);
     --haku-cancelacion-focus: #9fd2b3;
 }
 :is(.haiku-asistente-root .haiku-asistente-panel, :root) .haiku-cancelacion-titulo.haiku-cancelacion-titulo--detectadas {
@@ -145,21 +145,21 @@ html[data-haiku-tema="oscuro"] .haiku-cancelacion-card--detectada {
 .haiku-cancelacion-flujo { min-width:0; max-width:100%; }
 .haiku-cancelacion-pantalla {
     /* Usa la escala de texto de las fichas de revisión de Haku. */
-    --haku-cancel-ui-bg:#fbfcfb;
+    --haku-cancel-ui-bg:var(--cereza-superficie);
     --haku-cancel-ui-card:#fff;
     --haku-cancel-ui-pill:#edf0ee;
     --haku-cancel-ui-pill-text:#526457;
     box-sizing:border-box; display:flex; flex-direction:column; width:100%; min-width:0; max-height:calc(100dvh - 16px); margin:0 0 8px;
-    overflow:hidden; border:1px solid var(--sites-shell-line, #dce5e0); border-radius:8px;
-    background:var(--haku-cancel-ui-bg); color:var(--sites-shell-ink-soft, #2a3c37);
+    overflow:hidden; border:1px solid var(--sites-shell-line, var(--cereza-linea)); border-radius:8px;
+    background:var(--haku-cancel-ui-bg); color:var(--sites-shell-ink-soft, var(--cereza-texto));
     font-family:var(--sites-shell-font, "Segoe UI", Arial, sans-serif); font-size:12px; line-height:1.4; letter-spacing:0;
     box-shadow:none; overflow-wrap:anywhere;
 }
 html[data-haiku-tema="oscuro"] .haiku-cancelacion-pantalla {
     color-scheme:dark;
-    --sites-shell-ink-soft:#e8efea;
-    --sites-shell-muted:#b1c2b7;
-    --sites-shell-line:#3e5145;
+    --sites-shell-ink-soft:var(--cereza-texto);
+    --sites-shell-muted:var(--cereza-secundario);
+    --sites-shell-line:var(--cereza-linea);
     --sites-shell-green:#9fd2b3;
     --sites-shell-green-soft:#22392b;
     --sites-shell-amber:#f2c58d;
@@ -169,12 +169,12 @@ html[data-haiku-tema="oscuro"] .haiku-cancelacion-pantalla {
     --haku-cancel-ui-bg:#16221b;
     --haku-cancel-ui-card:#1d2c23;
     --haku-cancel-ui-pill:#2e4235;
-    --haku-cancel-ui-pill-text:#e8efea;
+    --haku-cancel-ui-pill-text:var(--cereza-texto);
 }
 .haiku-cancelacion-pantalla *, .haiku-cancelacion-pantalla *::before, .haiku-cancelacion-pantalla *::after { box-sizing:border-box; }
 .haiku-cancelacion-pantalla .haiku-cancelacion-pantalla__cabecera {
     display:flex; align-items:center; justify-content:space-between; gap:8px; flex:none;
-    padding:4px 10px; border-bottom:1px solid var(--sites-shell-line, #dce5e0);
+    padding:4px 10px; border-bottom:1px solid var(--sites-shell-line, var(--cereza-linea));
 }
 .haiku-cancelacion-pantalla .haiku-cancelacion-pantalla__titulo {
     min-width:0; margin:0; color:inherit; font-size:14px; font-weight:700; line-height:1.35; letter-spacing:0;
@@ -189,9 +189,9 @@ html[data-haiku-tema="oscuro"] .haiku-cancelacion-pantalla {
 .haiku-cancelacion-pantalla .haiku-cancelacion-pantalla__reserva > h4 {
     margin:0; color:inherit; font-size:13px; font-weight:700; line-height:18px;
 }
-.haiku-cancelacion-pantalla__cabana { color:var(--sites-shell-muted, #687873); font-weight:650; line-height:18px; }
+.haiku-cancelacion-pantalla__cabana { color:var(--sites-shell-muted, var(--cereza-secundario)); font-weight:650; line-height:18px; }
 .haiku-cancelacion-pantalla .haiku-cancelacion-pantalla__fechas {
-    grid-column:1 / -1; margin:0; color:var(--sites-shell-muted, #687873); font-size:12px; line-height:17px;
+    grid-column:1 / -1; margin:0; color:var(--sites-shell-muted, var(--cereza-secundario)); font-size:12px; line-height:17px;
 }
 .haiku-cancelacion-pantalla__detalle,
 .haiku-cancelacion-pantalla__libro,
@@ -200,14 +200,14 @@ html[data-haiku-tema="oscuro"] .haiku-cancelacion-pantalla {
     display:flex; flex-wrap:wrap; align-items:center; gap:3px 5px; min-width:0;
 }
 .haiku-cancelacion-pantalla__detalle { justify-content:space-between; gap:4px 12px; }
-.haiku-cancelacion-pantalla__origen { color:var(--sites-shell-muted, #687873); font-size:11px; line-height:16px; }
-.haiku-cancelacion-pantalla__flecha { color:var(--sites-shell-muted, #687873); }
+.haiku-cancelacion-pantalla__origen { color:var(--sites-shell-muted, var(--cereza-secundario)); font-size:11px; line-height:16px; }
+.haiku-cancelacion-pantalla__flecha { color:var(--sites-shell-muted, var(--cereza-secundario)); }
 .haiku-cancelacion-pantalla__badge {
     max-width:100%; padding:1px 5px; border-radius:5px; background:var(--haku-cancel-ui-pill); color:var(--haku-cancel-ui-pill-text);
     font-size:12px; font-weight:600; line-height:16px;
 }
 .haiku-cancelacion-pantalla__badge--libro,
-.haiku-cancelacion-pantalla__badge--confirmada, .haiku-cancelacion-pantalla__badge--hospedada { background:var(--sites-shell-green-soft, #e6f2eb); color:var(--sites-shell-green, #22735c); }
+.haiku-cancelacion-pantalla__badge--confirmada, .haiku-cancelacion-pantalla__badge--hospedada { background:var(--cereza-verde-fondo); color:var(--cereza-verde); }
 .haiku-cancelacion-pantalla__badge--pendiente { background:var(--sites-shell-amber-soft, #fff2df); color:var(--sites-shell-amber, #a36522); }
 .haiku-cancelacion-pantalla__badge--cancelada { background:var(--sites-shell-red-soft, #f9e9e6); color:var(--sites-shell-red, #aa4e44); }
 .haiku-cancelacion-pantalla .haiku-cancelacion-pantalla__aviso {
@@ -219,18 +219,18 @@ html[data-haiku-tema="oscuro"] .haiku-cancelacion-pantalla {
 .haiku-cancelacion-pantalla__error-reserva:empty, .haiku-cancelacion-pantalla__mensajes:empty { display:none; }
 .haiku-cancelacion-pantalla .haiku-cancelacion-pantalla__pie {
     display:flex; flex:none; flex-wrap:wrap; justify-content:flex-end; gap:5px; padding:5px 10px;
-    border-top:1px solid var(--sites-shell-line, #dce5e0);
+    border-top:1px solid var(--sites-shell-line, var(--cereza-linea));
 }
 .haiku-cancelacion-pantalla .haiku-cancelacion-pantalla__boton {
     display:inline-flex; justify-content:center; align-items:center; min-width:0; min-height:32px; max-width:100%; margin:0; padding:4px 8px;
-    border:1px solid var(--sites-shell-line, #dce5e0); border-radius:6px; background:var(--haku-cancel-ui-card); color:var(--sites-shell-green, #22735c);
+    border:1px solid var(--sites-shell-line, var(--cereza-linea)); border-radius:6px; background:var(--haku-cancel-ui-card); color:var(--sites-shell-green, #22735c);
     box-shadow:none; font:inherit; font-size:12px; font-weight:650; white-space:normal; overflow-wrap:anywhere; cursor:pointer;
 }
 .haiku-cancelacion-pantalla .haiku-cancelacion-pantalla__boton--confirmar { background:#aa4e44; border-color:#aa4e44; color:#fff; }
-.haiku-cancelacion-pantalla .haiku-cancelacion-pantalla__boton--volver-revision { background:var(--sites-shell-green-soft, #e6f2eb); }
+.haiku-cancelacion-pantalla .haiku-cancelacion-pantalla__boton--volver-revision { background:var(--sites-shell-green-soft, var(--cereza-verde-fondo)); }
 .haiku-cancelacion-pantalla .haiku-cancelacion-pantalla__boton--ver { margin-inline-end:auto; }
 .haiku-cancelacion-pantalla .haiku-cancelacion-pantalla__boton--cerrar {
-    flex:none; width:30px; min-height:30px; padding:0; color:var(--sites-shell-muted, #687873); font-size:16px;
+    flex:none; width:30px; min-height:30px; padding:0; color:var(--sites-shell-muted, var(--cereza-secundario)); font-size:16px;
 }
 .haiku-cancelacion-pantalla .haiku-cancelacion-pantalla__boton:hover:not(:disabled) { filter:brightness(.95); }
 .haiku-cancelacion-pantalla .haiku-cancelacion-pantalla__boton:disabled { opacity:.55; cursor:default; }
@@ -334,7 +334,7 @@ html[data-haiku-tema="oscuro"] .haiku-cancelacion-pantalla {
     padding: 8px 10px;
     border: 1px solid #dce7e0;
     border-radius: 10px;
-    background: #f8fbf9;
+    background: var(--cereza-relieve);
     color: #52635a !important;
     font-size: .61rem !important;
     line-height: 1.45 !important;
@@ -346,7 +346,7 @@ html[data-haiku-tema="oscuro"] .haiku-cancelacion-pantalla {
     margin-top: 2px;
     padding: 8px 34px 8px 10px;
     border-color: #bccfc3;
-    background: #fff;
+    background: var(--cereza-superficie);
     color: #293d32;
     font-size: .66rem;
     font-weight: 760;
@@ -363,7 +363,7 @@ html[data-haiku-tema="oscuro"] .haiku-cancelacion-pantalla {
 
 .haiku-reconciliacion-ayuda-decision[data-tipo="pendiente"] {
     border-color: #e2e6e3;
-    background: #fafbfa;
+    background: var(--cereza-relieve);
 }
 
 .haiku-reconciliacion-ayuda-decision[data-tipo="misma"] {
@@ -403,7 +403,7 @@ html[data-haiku-tema="oscuro"] .haiku-cancelacion-pantalla {
     padding: 2px 7px;
     border: 1px solid #d4e2da;
     border-radius: 999px;
-    background: #edf5f0;
+    background: var(--cereza-relieve);
     color: #476354;
     font-size: .51rem;
     font-weight: 800;
@@ -443,19 +443,19 @@ html[data-haiku-tema="oscuro"] .haiku-cancelacion-pantalla {
    Cada opción conserva su tono y todos sus textos tienen contraste en oscuro. */
 @media screen {
     html[data-haiku-tema="oscuro"] .haiku-asistente-preview-lista .haiku-reconciliacion-explicacion {
-        background: #1f2b24;
-        border-color: #3e5145;
-        color: #b1c2b7 !important;
+        background: var(--cereza-relieve);
+        border-color: var(--cereza-linea);
+        color: var(--cereza-secundario) !important;
     }
 
     html[data-haiku-tema="oscuro"] .haiku-asistente-preview-lista .haiku-reconciliacion-ayuda-decision {
-        background: #1f2b24;
-        border-color: #3e5145;
-        color: #e8efea;
+        background: var(--cereza-relieve);
+        border-color: var(--cereza-linea);
+        color: var(--cereza-texto);
     }
     html[data-haiku-tema="oscuro"] .haiku-asistente-preview-lista .haiku-reconciliacion-ayuda-decision[data-tipo="misma"] {
         background: #20392c;
-        border-color: #496b56;
+        border-color: var(--cereza-linea-fuerte);
     }
     html[data-haiku-tema="oscuro"] .haiku-asistente-preview-lista .haiku-reconciliacion-ayuda-decision[data-tipo="estadia"] {
         background: #1c303e;
@@ -466,15 +466,15 @@ html[data-haiku-tema="oscuro"] .haiku-cancelacion-pantalla {
         border-color: #745633;
     }
     html[data-haiku-tema="oscuro"] .haiku-asistente-preview-lista .haiku-reconciliacion-ayuda-titulo {
-        color: #e8efea;
+        color: var(--cereza-texto);
     }
     html[data-haiku-tema="oscuro"] .haiku-asistente-preview-lista :is(.haiku-reconciliacion-ayuda-efecto, .haiku-reconciliacion-ayuda-lista, .haiku-reconciliacion-ayuda-lista li) {
-        color: #b1c2b7;
-        border-color: #3e5145;
+        color: var(--cereza-secundario);
+        border-color: var(--cereza-linea);
     }
     html[data-haiku-tema="oscuro"] .haiku-asistente-preview-lista .haiku-reconciliacion-ayuda-chip {
-        background: #1f2b24;
-        border-color: #496b56;
+        background: var(--cereza-relieve);
+        border-color: var(--cereza-linea-fuerte);
         color: #b9e6c9;
     }
 

@@ -105,7 +105,7 @@ async function main() {
                 await page.screenshot({ path: path.join(output, `${viewport.width}-${key}-claro.png`) });
                 // Cambiar desde otra pestaña también cubre los diálogos modales: no se
                 // fuerza un clic detrás de su overlay ni se modifica su gestión de foco.
-                await (viewport.width === 1600 && key === 'cuenta' ? page : control).locator('#haiku-tema-boton').click();
+                await control.locator('#haiku-tema-boton').click();
                 await page.waitForFunction(() => document.documentElement.dataset.haikuTema === 'oscuro');
                 const after = await page.evaluate(estadoVisual);
                 assert.deepEqual(after, before, `${viewport.width}/${key}: contenido, geometría, Libro y estado intactos`);
