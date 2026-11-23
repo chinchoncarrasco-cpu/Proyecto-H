@@ -454,9 +454,9 @@
     }
     function extensionNochesReserva(texto) {
         const extensiones = [];
-        const patron = /(?:^(?:se\s+)?(?:extiende|exteinde)|\b(?:(?:se\s+)?extendio|(?:se\s+)?agrego|(?:pidio|solicito)\s+(?:extender|agregar)))\s+(\d+)\s*noches?\b/g;
+        const patron = /(?:^(?:se\s+)?(?:extiende|exteinde)|\b(?:(?:se\s+)?extendio|(?:se\s+)?agrego|(?:pidio|solicito)\s+(?:extender|agregar)))\s+(\d+|una)\s*noches?\b/g;
         for (const fragmento of separarCampos(texto)) {
-            for (const match of normalizar(fragmento).matchAll(patron)) extensiones.push(Number(match[1]));
+            for (const match of normalizar(fragmento).matchAll(patron)) extensiones.push(match[1]==='una'?1:Number(match[1]));
         }
         return { cantidad: extensiones.length === 1 ? extensiones[0] : null, ambigua: extensiones.length > 1 };
     }
@@ -1560,7 +1560,7 @@
                 const geometriaInequivoca = !!dias.length && calendarioRegular && diasConsecutivos && cabRows.filter(c=>c.r===cab.r).length===1 && mergeSeguro;
                 const geometriaResueltaTexto = !fd && !geometriaInequivoca && !contenidoContradictorio &&
                     cabRows.filter(c=>c.r===cab.r).length===1 && fechasTexto.length===1 && fechasTexto[0]===h.fechaISO &&
-                    Number.isInteger(nochesTexto) && nochesTexto>0 && nochesExtensionTexto===null && !extensionTexto.ambigua;
+                    Number.isInteger(nochesTexto) && nochesTexto>=nochesGeometria && nochesExtensionTexto===null && !extensionTexto.ambigua;
                 const fechaCheckin = geometriaResueltaTexto ? fechasTexto[0] : h.fechaISO;
                 const noches = geometriaResueltaTexto ? nochesTexto : nochesGeometria;
                 const fechasOcupadas = geometriaResueltaTexto

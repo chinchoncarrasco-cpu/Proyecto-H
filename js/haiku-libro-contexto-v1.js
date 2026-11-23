@@ -25,8 +25,8 @@
     function fraseCalendario(e){
         if(!e)return '';
         const dias=e.noches;
-        return `Las celdas cubren ${dias.length===1?`la noche del ${fecha(dias[0])}`:`${dias.length} noches: del ${fecha(dias[0])} al ${fecha(dias.at(-1))}`}`+
-            (e.siguiente_libre?`; el ${fecha(e.siguiente_libre.fecha)} figura «LIBRE».`:'.');
+        return `Las celdas cubren ${dias.length===1?`la noche del ${fecha(dias[0])}`:`${dias.length} noches del ${fecha(dias[0])} al ${fecha(dias.at(-1))}`}.`+
+            (e.siguiente_libre?` El ${fecha(e.siguiente_libre.fecha)} figura «LIBRE».`:'');
     }
     function mismaPersona(a,b){
         const S=root.HAIKU_LIBRO_SEMANTICA;
@@ -35,6 +35,25 @@
         if(da&&db&&da!==db)return false;
         const nombre=S?.mismaPersona?.(a.titular,b.titular) ?? Boolean(texto(a.titular)&&texto(a.titular)===texto(b.titular));
         return Boolean(da&&da===db||nombre);
+    }
+    function actualizarCambiosDelLibro(registro,actual,calendario){
+        const cambios=lista(registro.cambios).map(c=>({...c,ahora:structuredClone(c.campo==='observaciones_libro'?
+            root.HAIKU_LIBRO_SEMANTICA.separarCampos(actual.texto_original||''):actual[c.campo])}));
+        const anterior=registro.anterior;
+        const nochesAnteriores=calendario?.noches.indexOf(anterior?.fecha_checkout);
+        // Si ya existía un aviso por otra edición, conservar también la
+        // extensión demostrada por las celdas de la misma estadía.
+        if(registro.tipo==='modificacion'&&nochesAnteriores>0&&
+            registro.actual?.id===actual.id&&anterior.tipo_estadia==='alojamiento'&&
+            anterior.fecha_checkin===actual.fecha_checkin&&Number(anterior.cabana)===Number(actual.cabana)&&
+            mismaPersona(anterior,actual)){
+            const extension=[
+                {campo:'fecha_checkout',antes:anterior.fecha_checkout,ahora:actual.fecha_checkout},
+                {campo:'noches',antes:nochesAnteriores,ahora:actual.noches}
+            ];
+            return [...extension.filter(c=>!cambios.some(x=>x.campo===c.campo)),...cambios];
+        }
+        return cambios;
     }
     async function actualizarDesdeLibro(registros,libro=root.HAIKU_LIBRO_RESERVA_V1,{periodo}={}){
         if(!registros.length)return [];
@@ -161,13 +180,13 @@
                                 'La cobertura de la cabaña y sus fechas no acredita la ausencia. Requiere revisión.'}};
             }
             const actual=structuredClone(candidatos[0]);
+            const calendario=evidenciaCalendario(actual,datosHojas.get(hoja(actual)));
             return {...registro,actual,fuente_vigente:{estado:'verificada',generacion:lectura.estado().generacion,
                 motivo:hoja(actual)!==hoja(r)||actual.cabana!==r.cabana||actual.fecha_checkin!==r.fecha_checkin||actual.fecha_checkout!==r.fecha_checkout?
                     'Encontré continuidad en otra ubicación del Libro. Revisa el cambio; no es una baja.':undefined,
                 actualizada:JSON.stringify(actual)!==JSON.stringify(registro.actual),
-                calendario:evidenciaCalendario(actual,datosHojas.get(hoja(actual)))},
-                cambios:lista(registro.cambios).map(c=>({...c,ahora:structuredClone(c.campo==='observaciones_libro'?
-                    root.HAIKU_LIBRO_SEMANTICA.separarCampos(actual.texto_original||''):actual[c.campo])}))};
+                calendario},
+                cambios:actualizarCambiosDelLibro(registro,actual,calendario)};
         });
         // Dos avisos de la misma ficha y la misma versión son un caso. Se
         // conservan todos sus campos e IDs para retirar sólo los avisos resueltos.
@@ -242,7 +261,9 @@
             const nochesTexto=r.noches_texto_efectivas??r.noches_texto,frase=fraseCalendario(calendario);
             if(calendario)contexto.calendario=calendario;
             if(nochesTexto!=null&&Number(nochesTexto)!==Number(r.noches))contexto.avisos.push({codigo:'noches_contradictorias',texto:
-                `El texto dice ${nochesTexto} noche${Number(nochesTexto)===1?'':'s'}. ${frase||`Las fechas del Libro abarcan ${r.noches} noche${Number(r.noches)===1?'':'s'}.`} Falta aclarar la salida correcta.`});
+                `El texto dice ${nochesTexto} noche${Number(nochesTexto)===1?'':'s'}. ${frase
+                    ?frase+' Se usa la duración de las celdas.'
+                    :`Las fechas del Libro abarcan ${r.noches} noche${Number(r.noches)===1?'':'s'}. Falta comprobar la salida.`}`});
             else if(frase)contexto.hechos.push(frase);
             const fin=datos.finanzas;
             const cargos=lista(fin?.cargos).filter(c=>c.estadia_id===s.id&&c.tipo_cargo==='alojamiento'&&c.estado==='activo');
@@ -278,7 +299,7 @@
         return contexto;
     }
     async function enriquecer(items,cliente,opciones={}){
-        const datos=await cargar(items,cliente,opciones);
+        const datos=opciones.consultarHistorialYFinanzas===false?{}:await cargar(items,cliente,opciones);
         datos.servicios=opciones.comparacion?.serviciosDetalle;datos.notas=opciones.comparacion?.notasDetalle;
         return items.map(item=>({...item,contexto:construir(item,datos)}));
     }

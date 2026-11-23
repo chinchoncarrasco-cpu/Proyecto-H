@@ -56,7 +56,8 @@ async function comprobarNavegacionAvisoLargo(browser,url) {
                         notas:i===3?Array.from({length:75},(_,j)=>`Nota extensa de prueba ${j+1}`):[]}}));
                 const pendientes=modificadas.map(({actual:r},i)=>({titular:`Pendiente ficticio ${i+1}`,cabana:r.cabana,
                     tipo:'servicio',fechaIngreso:r.fecha_checkin,servicios:[{nombre:'Masaje',hora:'16:00',
-                        motivos:['Falta duración del masaje.'],texto:'Evidencia ficticia de la ficha '+(i+1)}]}));
+                        motivos:['Falta duración del masaje.'],texto:'Evidencia ficticia de la ficha '+(i+1)}],
+                    ...(i===0?{extension:{salidaAntes:'2099-11-14',salidaLibro:'2099-11-15',nochesAntes:1,nochesLibro:2}}:{})}));
                 const resultado={estado:'ok',libro_actual:{generacion:1},generado_en:'2026-11-13T20:00:00.000Z',
                     modificadas,incorporacion:{listos,pendientes}};
                 window.__navegacionAviso={lecturas:0,chat:0,escrituras:0};
@@ -174,10 +175,14 @@ async function comprobarNavegacionAvisoLargo(browser,url) {
             const filas=aviso.locator('.haku-libro-casos__fila');
             assert.equal(await filas.count(),total);
             if(movil)assert.equal(await aviso.locator('.haku-libro-casos__fila[aria-expanded="true"]').count(),0);
+            const detalle=aviso.locator('.haku-libro-casos__detalle');
+            const primeraFila=filas.first();
+            assert.match(await primeraFila.innerText(),/Extensión · 1 → 2 noches/);
+            if(await primeraFila.getAttribute('aria-expanded')!=='true')await primeraFila.click();
+            assert.match(await detalle.innerText(),/Extensión en el Libro · 2 noches\s+Salida 14 → 15 nov\./);
             const ultimaFila=filas.last();
             await ultimaFila.evaluate(el=>el.parentElement.scrollIntoView({block:'center'}));
             await ultimaFila.click();
-            const detalle=aviso.locator('.haku-libro-casos__detalle');
             assert.match(await detalle.textContent(),new RegExp(`Evidencia ficticia de la ficha ${total}`));
             assert.equal(await ultimaFila.getAttribute('aria-expanded'),'true');
             if(movil)assert.equal(await ultimaFila.evaluate(el=>{
@@ -392,7 +397,7 @@ async function comprobarCasosDelAviso(browser, url) {
                         color:getComputedStyle(el.parentElement).backgroundColor};
                 });
                 assert.deepEqual(medidas,{visible:true,sinDesborde:true,movil:width<720,altoBoton:width<720?44:38,
-                    color:tema==='oscuro'?'rgb(32, 45, 38)':'rgb(255, 253, 251)'},tema+' '+width);
+                    color:tema==='oscuro'?'rgb(35, 31, 37)':'rgb(255, 253, 251)'},tema+' '+width);
                 if(capturas)await aviso.screenshot({path:path.join(capturas,'casos-'+tema+'-'+width+'.png')});
             }
         }
@@ -1040,7 +1045,10 @@ async function comprobarPendientesTrasConfirmar(browser,url){
             for(const width of [1100,390,320]){
                 await page.setViewportSize({width,height:900});
                 assert.equal(await burbuja.evaluate(el=>el.scrollWidth<=el.clientWidth+1),true,`${tema} ${width}: aviso sin desbordes`);
-                assert.equal(await incorporando.evaluate(el=>getComputedStyle(el,'::before').animationName),'haku-aviso-incorporando');
+                assert.deepEqual(await incorporando.evaluate(el=>({
+                    animacion:getComputedStyle(el,'::before').animationName,
+                    fondo:getComputedStyle(el).backgroundColor,opacidad:getComputedStyle(el).opacity
+                })),{animacion:'haku-aviso-incorporando',fondo:tema==='oscuro'?'rgb(145, 59, 87)':'rgb(120, 38, 63)',opacidad:'1'});
             }
         }
         await page.evaluate(()=>{
@@ -1059,6 +1067,7 @@ async function comprobarPendientesTrasConfirmar(browser,url){
         });
         await reciboMixto.getByText('Guardado hasta ahora',{exact:true}).waitFor();
         assert.match(await encabezadoMixto.innerText(),/1 servicio · 1 nota/);
+        assert.equal(await burbuja.getByRole('button',{name:'Revisando…',exact:true}).isDisabled(),true);
         assert.equal(await burbuja.getByText('Revisando los cambios restantes…',{exact:true}).isVisible(),true);
         assert.equal(await pendienteMixto.isVisible(),false,'el conteo anterior no se muestra durante el recálculo');
         await encabezadoMixto.click();
@@ -1070,7 +1079,7 @@ async function comprobarPendientesTrasConfirmar(browser,url){
             }
         }
         await page.evaluate(()=>{__reanudarPendientesAviso();__esperaPendientesAviso=null;});
-        await incorporando.waitFor({state:'detached'});
+        await burbuja.getByRole('button',{name:'Revisando…',exact:true}).waitFor({state:'hidden'});
         assert.match(await encabezadoMixto.innerText(),/Incorporado\s*1 servicio · 1 nota/,
             'recibo conservado al llegar otro aviso; errores: '+JSON.stringify(errors));
         assert.equal(await reciboMixto.getAttribute('open'),'','el detalle abierto se conserva al terminar');
@@ -1210,7 +1219,7 @@ async function comprobarPendientesTrasConfirmar(browser,url){
                 assert.ok(medidas.height<=150,`${tema} ${width}: resumen compacto (${medidas.height})`);
                 assert.ok(medidas.button>=32,'Ver informe conserva un objetivo de toque cómodo');
                 assert.equal(medidas.text,tema==='oscuro'?'rgb(244, 236, 239)':'rgb(44, 35, 41)');
-                assert.equal(medidas.accent,tema==='oscuro'?'rgb(58, 50, 60)':'rgb(40, 108, 78)');
+                assert.equal(medidas.accent,tema==='oscuro'?'rgb(240, 173, 191)':'rgb(120, 38, 63)');
                 await page.waitForFunction(()=>[...document.querySelectorAll('.haku-libro-resumen img')].every(img=>img.complete&&img.naturalWidth===6));
                 const puntos=await resumen.locator('img:visible').evaluateAll(xs=>xs.map(x=>({w:x.getBoundingClientRect().width,h:x.getBoundingClientRect().height,src:x.getAttribute('src')})));
                 assert.equal(puntos.length,4);

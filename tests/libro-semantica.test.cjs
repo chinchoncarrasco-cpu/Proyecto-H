@@ -115,7 +115,7 @@ test('explicit numeric extension reconciles the structured base duration with ca
  assert.deepEqual(angelo.advertencias,[]);assert.deepEqual(angelo.servicios,[]);
  assert.equal(S.asociar(angelo,[{...angelo,id:'proyecto-h'}]).estado,'asociada');
 
- for(const nota of ['extendió 1 noche','agregó 1 noche','solicitó agregar 1 noche']){
+ for(const nota of ['extendió 1 noche','EXTENDIÓ UNA NOCHE CON TARIFA ESPECIAL POR PAGAR','agregó 1 noche','solicitó agregar 1 noche']){
   const r=S.normalizarHoja(hojaDosNoches(`Persona Prueba // 1 noche // ${nota}`),'Sep26').reservas[0];
   assert.equal(r.noches_texto_efectivas,2,nota);assert.deepEqual(r.advertencias,[],nota);
  }
@@ -213,6 +213,13 @@ test('incomplete merge and nonconsecutive calendar remain blocking geometry warn
  const a=S.normalizarHoja(incompleta,'Sep26').reservas[0];
  assert.equal(a.geometria_inequivoca,false);assert.match(a.advertencias.join(' '),/geometría.*incompleta o ambigua/i);
  assert.equal(S.asociar(a,[{...a,id:'proyecto-h',advertencias:[]}]).estado,'ambigua');
+
+ const textoAntiguo=hojaDosNoches('Persona Prueba // 1 noche // 21.09.2026');
+ textoAntiguo.combinaciones[0].e.c=7;
+ const dudosa=S.normalizarHoja(textoAntiguo,'Sep26').reservas[0];
+ assert.equal(dudosa.noches,2);
+ assert.equal(dudosa.geometria_resuelta_texto,false);
+ assert.match(dudosa.advertencias.join(' '),/geometría.*incompleta o ambigua/i);
 
  const hueco=hojaDosNoches('Persona Prueba // 2 noches');hueco.celdas.find(c=>c.c===6).fechaISO='2026-09-23';hueco.celdas.find(c=>c.c===6).valor='23 sep';hueco.celdas.find(c=>c.c===10).fechaISO='2026-09-24';hueco.celdas.find(c=>c.c===10).valor='24 sep';
  const b=S.normalizarHoja(hueco,'Sep26');
