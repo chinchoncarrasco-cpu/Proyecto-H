@@ -4,11 +4,11 @@
 
 .haku-cloudbeds-informes {
     container: haku-cloudbeds-informes / inline-size;
-    --informe-borde: var(--haku-compacto-borde, #dbe3de);
+    --informe-borde: var(--haku-compacto-borde, var(--cereza-linea));
     --informe-superficie: var(--haku-compacto-superficie, #fbfcfb);
-    --informe-suave: var(--haku-compacto-suave, #eef4ef);
-    --informe-texto: var(--haku-compacto-texto, #172019);
-    --informe-secundario: var(--haku-compacto-secundario, #586c60);
+    --informe-suave: var(--haku-compacto-suave, var(--cereza-relieve));
+    --informe-texto: var(--haku-compacto-texto, var(--cereza-texto));
+    --informe-secundario: var(--haku-compacto-secundario, var(--cereza-secundario));
     --informe-acento: var(--haku-compacto-acento, #286c4e);
     --informe-diferencia: var(--haku-compacto-aviso, #825016);
     min-width: 0;
@@ -78,7 +78,7 @@
 .haku-cloudbeds-informes__acciones { display: flex; flex-wrap: wrap; gap: 5px; }
 .haku-cloudbeds-informes button.haku-cloudbeds-informes__principal {
     border-color: var(--informe-acento);
-    background: var(--haku-compacto-seleccion, #e6f2eb);
+    background: var(--haku-compacto-seleccion, var(--cereza-verde-fondo));
     color: var(--informe-acento);
     font-weight: 650;
 }

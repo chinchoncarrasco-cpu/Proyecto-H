@@ -60,7 +60,7 @@ const server = http.createServer((req, res) => {
             const before = await page.locator('#haiku-asistente-mensajes').innerHTML();
             await page.locator('#haiku-asistente-borrar-historial').click(); await checkBounds();
             assert.equal(await page.locator('.hk-dialogo h2').textContent(), '¿Borrar esta conversación?');
-            assert.equal(await page.locator('.hk-dialogo').evaluate(n => getComputedStyle(n).backgroundColor), tema === 'claro' ? 'rgb(251, 252, 251)' : 'rgb(27, 38, 33)');
+            assert.equal(await page.locator('.hk-dialogo').evaluate(n => getComputedStyle(n).backgroundColor), tema === 'claro' ? 'rgb(255, 253, 251)' : 'rgb(35, 31, 37)');
             assert.equal(await page.evaluate(() => document.activeElement.textContent), 'Conservar');
             for (let i = 0; i < 6; i++) { await page.keyboard.press('Tab'); assert.equal(await page.evaluate(() => !!document.activeElement.closest('.hk-dialogo')), true); }
             await page.screenshot({ path: path.join(out, `historial-${tema}-${width}.png`) });

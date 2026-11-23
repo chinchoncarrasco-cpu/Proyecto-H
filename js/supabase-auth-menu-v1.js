@@ -85,6 +85,7 @@
         boton.type = "button";
         boton.id = BOTON_ID;
         boton.className = "menu-item haiku-cuenta-menu-boton";
+        boton.setAttribute("aria-label", "Cuenta");
         boton.setAttribute("aria-haspopup", "dialog");
         boton.setAttribute("aria-expanded", "false");
         boton.setAttribute("aria-controls", PANEL_ID);
@@ -184,7 +185,7 @@
     }
 
     function instalarCuentaMenu() {
-        const menu = document.querySelector("nav.menu");
+        const menu = document.getElementById("haiku-cuenta-acceso") ?? document.querySelector("nav.menu");
         if (!menu) return false;
 
         const boton = crearBoton(menu);

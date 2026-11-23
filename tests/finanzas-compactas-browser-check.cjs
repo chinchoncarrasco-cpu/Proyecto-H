@@ -19,7 +19,7 @@ async function verificar(p,selector,nombre,width,tema){
   const r=await el.boundingBox();assert.ok(r.x>=0&&r.x+r.width<=width+1,`${nombre}: dentro del viewport`);
   assert.deepEqual(await el.evaluate(verificarInterior),[],`${nombre}/${width}/${tema}: sin desbordes`);
   assert.deepEqual(await p.evaluate(auditarContraste,selector),[],`${nombre}/${width}/${tema}: contraste`);
-  assert.equal(await el.evaluate(e=>getComputedStyle(e).backgroundColor),tema==='oscuro'?'rgb(27, 38, 33)':'rgb(251, 252, 251)');
+  assert.equal(await el.evaluate(e=>getComputedStyle(e).backgroundColor),tema==='oscuro'?'rgb(35, 31, 37)':'rgb(255, 253, 251)');
   const icono=el.locator('.haiku-compacto-cerrar-icono').first();
   if(await icono.count())assert.deepEqual(await icono.evaluate(e=>{const r=e.getBoundingClientRect();return[r.width,r.height,getComputedStyle(e).maskImage.includes('/assets/icons/finanzas-compactas/cerrar.svg')]}),[16,16,true]);
 }

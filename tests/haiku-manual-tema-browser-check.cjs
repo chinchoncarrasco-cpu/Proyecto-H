@@ -64,7 +64,7 @@ async function main() {
     const server = http.createServer((req,res)=>{
         const u=new URL(req.url,'http://localhost');
         if (u.pathname === '/') {
-            const styles=['styles','sites-shell-v1','supabase-asistente-v1','supabase-haku-reconciliacion-v1','sites-asistente-v1','haiku-tema-oscuro-v1','haiku-tema-v1','haiku-libro-pagos-ui-v1'];
+            const styles=['styles','haiku-paleta-v1','sites-shell-v1','supabase-asistente-v1','supabase-haku-reconciliacion-v1','sites-asistente-v1','haiku-tema-oscuro-v1','haiku-tema-v1','haiku-libro-pagos-ui-v1'];
             res.setHeader('Content-Type','text/html; charset=utf-8');
             res.end('<!doctype html><html lang="es" data-haiku-tema="claro"><head><meta name="viewport" content="width=device-width,initial-scale=1">'+
                 styles.map(s=>`<link rel="stylesheet" href="/css/${s}.css">`).join('')+
@@ -87,28 +87,28 @@ async function main() {
             await page.setViewportSize({width,height:1200});
             await page.goto(`http://127.0.0.1:${server.address().port}/?caso=${name}`);
             const panel=page.locator('.haiku-incorporacion-manual-pago-panel');
-            assert.equal(await panel.evaluate(e=>getComputedStyle(e).backgroundColor),'rgb(255, 255, 255)');
+            assert.equal(await panel.evaluate(e=>getComputedStyle(e).backgroundColor),'rgb(255, 253, 251)');
             await page.locator('input[type="text"]').evaluateAll(es=>es.forEach(e=>e.value='Revisión de ejemplo conservada'));
             await page.locator('input[type="checkbox"]').evaluateAll(es=>es.forEach(e=>e.checked=true));
             await page.locator('details').evaluateAll(es=>es.forEach(e=>e.open=true));
             const before=await page.evaluate(state);
             await page.evaluate(()=>document.documentElement.dataset.haikuTema='oscuro');
             assert.deepEqual(await page.evaluate(state),before,`${width}/${name}: geometría, campos y estado intactos`);
-            assert.equal(await panel.evaluate(e=>getComputedStyle(e).backgroundColor),'rgb(27, 36, 32)');
-            assert.equal(await panel.evaluate(e=>getComputedStyle(e).color),'rgb(232, 239, 234)');
+            assert.equal(await panel.evaluate(e=>getComputedStyle(e).backgroundColor),'rgb(35, 31, 37)');
+            assert.equal(await panel.evaluate(e=>getComputedStyle(e).color),'rgb(244, 236, 239)');
             assert.deepEqual(await page.evaluate(contrast),[],`${width}/${name}: contraste`);
             const primary=panel.locator('.haiku-manual-primario');
             if (await primary.count()) {
                 const disabled=await primary.isDisabled();
                 await primary.evaluate(e=>e.disabled=false);
-                assert.equal(await primary.evaluate(e=>getComputedStyle(e).backgroundColor),'rgb(34, 115, 92)');
+                assert.equal(await primary.evaluate(e=>getComputedStyle(e).backgroundColor),'rgb(145, 59, 87)');
                 assert.deepEqual(await page.evaluate(contrast),[],`${width}/${name}: contraste de acción disponible`);
                 await primary.focus();
-                assert.equal(await primary.evaluate(e=>getComputedStyle(e).outlineColor),'rgb(159, 210, 179)');
+                assert.equal(await primary.evaluate(e=>getComputedStyle(e).outlineColor),'rgb(240, 173, 191)');
                 await primary.evaluate((e,d)=>{e.blur();e.disabled=d;},disabled);
             }
             assert.equal(await panel.evaluate(e=>e.scrollWidth<=e.clientWidth+1),true,`${width}/${name}: sin desborde`);
-            assert.deepEqual(await panel.locator('input,select,.haiku-manual-destino,.haiku-manual-secundario').evaluateAll(es=>es.filter(e=>getComputedStyle(e).backgroundColor==='rgb(255, 255, 255)').map(e=>e.className)),[],`${name}: sin superficies blancas`);
+            assert.deepEqual(await panel.locator('input,select,.haiku-manual-destino,.haiku-manual-secundario').evaluateAll(es=>es.filter(e=>getComputedStyle(e).backgroundColor==='rgb(255, 253, 251)').map(e=>e.className)),[],`${name}: sin superficies blancas`);
             await panel.screenshot({path:path.join(output,`${width}-${name}-oscuro.png`)});
             await page.evaluate(()=>document.documentElement.dataset.haikuTema='claro');
             assert.deepEqual(await page.evaluate(state),before,`${width}/${name}: regreso a claro`);
@@ -118,7 +118,7 @@ async function main() {
         assert.deepEqual(errors,[]);assert.deepEqual(failures,[]);
         await page.evaluate(()=>document.documentElement.dataset.haikuTema='oscuro');
         await page.emulateMedia({media:'print'});
-        assert.equal(await page.locator('.haiku-incorporacion-manual-pago-panel').evaluate(e=>getComputedStyle(e).backgroundColor),'rgb(255, 255, 255)');
+        assert.equal(await page.locator('.haiku-incorporacion-manual-pago-panel').evaluate(e=>getComputedStyle(e).backgroundColor),'rgb(255, 253, 251)');
         console.log(`${views} casos de navegador aprobados. ${output}`);
     } finally {await browser.close();await new Promise(resolve=>server.close(resolve));}
 }

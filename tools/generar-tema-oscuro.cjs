@@ -17,10 +17,10 @@ async function main() {
         open() {}, write: value => { html = value; }, close() {} };
     await vm.runInNewContext(read('panel.html').match(/<script>([\s\S]*)<\/script>/)[1], {
         document, window: { supabase: { createClient() {} } },
-        fetch: async () => ({ ok: true, text: async () => read('index.html') }), Date, console
+        fetch: async () => ({ ok: true, text: async () => read('index.html') }), Date, console, URLSearchParams, location: { search: "" }
     });
     const files = [...html.matchAll(/href="(css\/[^"?]+\.css)/g)].map(m => m[1])
-        .filter(file => !file.includes('/haiku-tema'));
+        .filter(file => !file.includes('/haiku-tema') && !file.includes('/haiku-cereza'));
     const sources = [];
     // Estilos locales de tarjetas que Haku monta después de abrirse.
     for (const file of fs.readdirSync(path.join(root, 'js')).sort()) {
@@ -46,7 +46,7 @@ async function main() {
             });
             function collect(rules) {
                 for (const rule of rules) {
-                    if (rule.style) for (const p of rule.style) if (p.startsWith('--') && !p.startsWith('--haiku-reserva-')) {
+                    if (rule.style) for (const p of rule.style) if (p.startsWith('--') && !p.startsWith('--haiku-reserva-') && !p.startsWith('--cereza-')) {
                         const v = rule.style.getPropertyValue(p).trim();
                         if (CSS.supports('color', v) && !v.includes('var(')) variables[p] = v;
                     }
@@ -68,16 +68,18 @@ async function main() {
                 const blue = b > g + 5 && b > r;
                 const saturated = max-min > 30;
                 let out = value;
+                // Resolver superficies neutras con la misma paleta que el resto del panel.
+                // Mantener los colores semánticos de estados y documentos.
                 if (/border|outline/.test(property)) out = saturated && max < 190
-                    ? (red ? '#f3b2a8' : warm ? '#f2c58d' : blue ? '#a6ccee' : '#9fd2b3') : '#3e5145';
+                    ? (red ? '#f3b2a8' : warm ? '#f2c58d' : blue ? '#a6ccee' : '#9fd2b3') : '#3a323c';
                 else if (/background/.test(property)) {
                     if (min > 160) out = max-min > 20
                         ? (red ? '#3c2928' : r > g+5 ? '#34271b' : b > r+4 ? '#1d2d39' : '#1e3025')
-                        : min < 245 ? '#1f2b24' : '#1b2420';
+                        : min < 245 ? '#2b262d' : '#231f25';
                 } else if (/shadow/.test(property)) { return value; }
                 else if (max < 220) out = saturated
                     ? (red ? '#f3b2a8' : warm ? '#f2c58d' : blue ? '#a6ccee' : '#9fd2b3')
-                    : max > 105 ? '#b1c2b7' : '#e8efea';
+                    : max > 105 ? '#baadb5' : '#f4ecef';
                 if (out !== value && a.length > 3 && a[3] < 1) {
                     const h = out.slice(1); return `rgba(${parseInt(h.slice(0,2),16)}, ${parseInt(h.slice(2,4),16)}, ${parseInt(h.slice(4,6),16)}, ${a[3]})`;
                 }

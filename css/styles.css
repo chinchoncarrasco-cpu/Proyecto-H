@@ -9,28 +9,28 @@
 }
 
 :root {
-    --fondo: #f4f6f8;
-    --panel: #ffffff;
+    --fondo: var(--cereza-lienzo);
+    --panel: var(--cereza-superficie);
     --sidebar: #17211c;
     --sidebar-hover: #26352d;
 
-    --texto: #202723;
-    --texto-suave: #78817c;
-    --borde: #e3e7e5;
+    --texto: var(--cereza-texto);
+    --texto-suave: var(--cereza-secundario);
+    --borde: var(--cereza-linea);
 
-    --verde: #2f7653;
-    --verde-suave: #e5f3eb;
+    --verde: var(--cereza-verde);
+    --verde-suave: var(--cereza-verde-fondo);
 
-    --azul: #3778a5;
-    --azul-suave: #e8f2f8;
+    --azul: var(--cereza-azul);
+    --azul-suave: var(--cereza-azul-fondo);
 
-    --rojo: #b95050;
-    --rojo-suave: #faeaea;
+    --rojo: var(--cereza-rojo);
+    --rojo-suave: var(--cereza-rojo-fondo);
 
-    --amarillo: #a97624;
-    --amarillo-suave: #fff3d9;
+    --amarillo: var(--cereza-dorado);
+    --amarillo-suave: var(--cereza-dorado-fondo);
 
-    --gris-suave: #edf0ee;
+    --gris-suave: var(--cereza-neutro-fondo);
 
     /* Paleta histórica de estados de reserva. */
     --haiku-reserva-pendiente-fondo: #8ec2df;

@@ -38,7 +38,7 @@ html[data-haku-mobile-assistant="1"] .haiku-asistente-pie {
 #haku-mobile-assistant-gate {
     position: fixed; inset: 0; z-index: 999998; display: flex; flex-direction: column;
     align-items: center; justify-content: center; gap: 12px; padding: 24px;
-    background: #132019; color: #f2f5f3; text-align: center; font-family: system-ui, sans-serif;
+    background: var(--cereza-lienzo); color: #f2f5f3; text-align: center; font-family: system-ui, sans-serif;
 }
 #haku-mobile-assistant-gate[hidden] { display: none; }
 #haku-mobile-assistant-gate p { max-width: 360px; line-height: 1.5; }

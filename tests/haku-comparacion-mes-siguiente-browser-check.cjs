@@ -262,7 +262,7 @@ async function titularesDelMes(browser, ancho, tema) {
         }));
         assert.equal(estilo.desborde,false);
         assert.equal(estilo.columnas,ancho>=701?"grid":"none");
-        assert.equal(estilo.fondo,tema==="oscuro"?"rgb(27, 38, 33)":"rgb(251, 252, 251)");
+        assert.equal(estilo.fondo,tema==="oscuro"?"rgb(35, 31, 37)":"rgb(255, 253, 251)");
 
         await page.locator("#haiku-asistente-texto").fill("Haku, titulares y cabañas el 1 de noviembre de 2026");
         await page.locator("#haiku-asistente-texto").press("Control+Enter");

@@ -13,7 +13,7 @@ body:has(#seccion-reservas.activa) > main.contenido.sites-shell-main {
     max-width: none;
     min-width: 0;
     padding: 0;
-    background: #f8fbf9;
+    background: var(--cereza-relieve);
     color: #23392d;
     font-family: var(--sites-shell-font, Inter, "Segoe UI", Arial, sans-serif);
 }
@@ -44,7 +44,7 @@ body:has(#seccion-reservas.activa) > main.contenido.sites-shell-main {
 #seccion-reservas .reservations-heading :is(.eyebrow, .sites-reservas-kicker, .subtitulo) {
     display: block;
     margin: 0 0 6px;
-    color: #648171;
+    color: var(--cereza-secundario);
     font-size: 10px;
     font-weight: 780;
     letter-spacing: .15em;
@@ -52,7 +52,7 @@ body:has(#seccion-reservas.activa) > main.contenido.sites-shell-main {
 }
 #seccion-reservas .reservations-heading :is(h1, h2) {
     margin: 0;
-    color: #243a2e;
+    color: var(--cereza-texto);
     font-size: 28px;
     font-weight: 750;
     letter-spacing: -.04em;
@@ -60,7 +60,7 @@ body:has(#seccion-reservas.activa) > main.contenido.sites-shell-main {
 }
 #seccion-reservas .reservations-heading p:not(.eyebrow):not(.subtitulo):not(.sites-reservas-kicker) {
     margin: 6px 0 0;
-    color: #718177;
+    color: var(--cereza-secundario);
     font-size: 13px;
     line-height: 1.4;
 }
@@ -76,7 +76,7 @@ body:has(#seccion-reservas.activa) > main.contenido.sites-shell-main {
     padding: 0 11px;
     border: 1px solid #d1ded4;
     border-radius: 5px;
-    background: #fff;
+    background: var(--cereza-superficie);
     box-shadow: none;
     color: #31654a;
     font-size: 12px;
@@ -85,7 +85,7 @@ body:has(#seccion-reservas.activa) > main.contenido.sites-shell-main {
     cursor: pointer;
 }
 #seccion-reservas .rv-refresh:hover,
-#seccion-reservas .reservas-boton-secundario:hover { background: #f1f7f3; }
+#seccion-reservas .reservas-boton-secundario:hover { background: var(--cereza-relieve); }
 #seccion-reservas .rv-refresh:disabled { opacity: .65; cursor: wait; }
 
 #seccion-reservas .rv-surface {
@@ -93,7 +93,7 @@ body:has(#seccion-reservas.activa) > main.contenido.sites-shell-main {
     min-width: 0;
     border: 1px solid #dbe5dd;
     border-radius: 9px;
-    background: #fff;
+    background: var(--cereza-superficie);
     box-shadow: 0 3px 13px #1f3d2b07;
 }
 #seccion-reservas .rv-toolbar,
@@ -122,9 +122,9 @@ body:has(#seccion-reservas.activa) > main.contenido.sites-shell-main {
     min-height: 36px;
     height: 36px;
     padding: 0 11px;
-    border: 1px solid #d5e1d8;
+    border: 1px solid var(--cereza-linea);
     border-radius: 5px;
-    background: #fff;
+    background: var(--cereza-superficie);
     color: #253c2e;
     font-size: 12px;
     font-weight: 400;
@@ -151,17 +151,17 @@ body:has(#seccion-reservas.activa) > main.contenido.sites-shell-main {
     padding: 0 10px;
     border: 1px solid #d3dfd6;
     border-radius: 5px;
-    background: #fff;
+    background: var(--cereza-superficie);
     color: #315a42;
     font-size: 11px;
     font-weight: 700;
     white-space: nowrap;
     cursor: pointer;
 }
-#seccion-reservas .rv-tool:hover:not(:disabled) { background: #f1f6f2; }
+#seccion-reservas .rv-tool:hover:not(:disabled) { background: var(--cereza-relieve); }
 #seccion-reservas .rv-tool:disabled,
 #seccion-reservas .reservas-accion-masiva.rv-tool:disabled {
-    background: #f7f9f7;
+    background: var(--cereza-relieve);
     color: #97a79b;
     cursor: not-allowed;
 }
@@ -188,7 +188,7 @@ body:has(#seccion-reservas.activa) > main.contenido.sites-shell-main {
     padding: 13px;
     border: 1px solid #cfddd1;
     border-radius: 7px;
-    background: #fff;
+    background: var(--cereza-superficie);
     box-shadow: 0 14px 36px #193a2725;
 }
 #seccion-reservas .rv-filter-panel { width: 365px; }
@@ -248,9 +248,9 @@ body:has(#seccion-reservas.activa) > main.contenido.sites-shell-main {
     min-width: 0;
     height: 32px;
     padding: 0 7px;
-    border: 1px solid #d7e3d9;
+    border: 1px solid var(--cereza-linea);
     border-radius: 4px;
-    background: #fff;
+    background: var(--cereza-superficie);
     color: #2e4635;
     font-size: 11px;
 }
@@ -295,13 +295,13 @@ body:has(#seccion-reservas.activa) > main.contenido.sites-shell-main {
     padding: 0 9px;
     border: 1px solid #d4e0d7;
     border-radius: 4px;
-    background: #f8faf8;
+    background: var(--cereza-relieve);
     color: #336549;
     font-size: 11px;
     font-weight: 680;
     cursor: pointer;
 }
-#seccion-reservas .rv-pop-foot button:hover { background: #ecf5ee; }
+#seccion-reservas .rv-pop-foot button:hover { background: var(--cereza-verde-fondo); }
 #seccion-reservas .sites-reservas-pop-close {
     display: block;
     margin: 11px 0 0 auto;
@@ -323,7 +323,7 @@ body:has(#seccion-reservas.activa) > main.contenido.sites-shell-main {
     padding: 5px 7px;
     border: 1px solid #dce9dc;
     border-radius: 4px;
-    background: #f4f9f5;
+    background: var(--cereza-relieve);
     color: #37674b;
     font-size: 10px;
     font-weight: 670;
@@ -337,7 +337,7 @@ body:has(#seccion-reservas.activa) > main.contenido.sites-shell-main {
     padding: 2px 6px;
     border: 1px solid #dce9dc;
     border-radius: 4px;
-    background: #f4f9f5;
+    background: var(--cereza-relieve);
     color: #37674b;
     font-size: 10px;
     font-weight: 670;
@@ -360,14 +360,14 @@ body:has(#seccion-reservas.activa) > main.contenido.sites-shell-main {
     color: #3b4f40;
     font-size: 11px;
 }
-#seccion-reservas .rv-table thead { background: #f4f8f5; }
+#seccion-reservas .rv-table thead { background: var(--cereza-relieve); }
 #seccion-reservas .rv-table th {
     box-sizing: border-box;
     height: 36px;
     padding: 0 9px;
-    border-top: 1px solid #e1eae3;
+    border-top: 1px solid var(--cereza-linea);
     border-bottom: 1px solid #dbe6de;
-    background: #f4f8f5;
+    background: var(--cereza-relieve);
     color: #607568;
     font-size: 10px;
     font-weight: 760;
@@ -398,15 +398,15 @@ body:has(#seccion-reservas.activa) > main.contenido.sites-shell-main {
     box-sizing: border-box;
     height: 55px;
     padding: 7px 9px;
-    border-bottom: 1px solid #e7eee8;
+    border-bottom: 1px solid var(--cereza-linea);
     background: transparent;
     color: #3b4f40;
     font-variant-numeric: tabular-nums;
     vertical-align: middle;
 }
-#seccion-reservas .rv-table tbody tr:hover { background: #fbfdfb; }
+#seccion-reservas .rv-table tbody tr:hover { background: var(--cereza-relieve); }
 #seccion-reservas .rv-table tbody tr.rv-needs-attention {
-    background: linear-gradient(90deg, #fffaf4 0, #fff 85px);
+    background: linear-gradient(90deg, #fffaf4 0, var(--cereza-superficie) 85px);
 }
 #seccion-reservas .rv-table tbody tr.rv-needs-attention:hover { background: #fffaf4; }
 #seccion-reservas .rv-select-col { width: 38px; text-align: center !important; }
@@ -433,7 +433,7 @@ body:has(#seccion-reservas.activa) > main.contenido.sites-shell-main {
     cursor: pointer;
 }
 #seccion-reservas .rv-detail-col button:hover,
-#seccion-reservas .sites-reservas-detail-action:hover { background: #eaf3ec; }
+#seccion-reservas .sites-reservas-detail-action:hover { background: var(--cereza-relieve); }
 #seccion-reservas .rv-col-guest { min-width: 185px; max-width: 245px; }
 #seccion-reservas .rv-col-cabin { min-width: 91px; }
 #seccion-reservas .rv-col-stay { min-width: 165px; }
@@ -551,9 +551,9 @@ body:has(#seccion-reservas.activa) > main.contenido.sites-shell-main {
 #seccion-reservas .rv-pagination select {
     height: 29px;
     padding: 0 6px;
-    border: 1px solid #d5e1d7;
+    border: 1px solid var(--cereza-linea);
     border-radius: 4px;
-    background: #fff;
+    background: var(--cereza-superficie);
     color: #345941;
     font-size: 11px;
 }
@@ -564,15 +564,15 @@ body:has(#seccion-reservas.activa) > main.contenido.sites-shell-main {
     min-height: 28px;
     height: 28px;
     padding: 0;
-    border: 1px solid #d5e1d7;
+    border: 1px solid var(--cereza-linea);
     border-radius: 4px;
-    background: #fff;
+    background: var(--cereza-superficie);
     color: #37664a;
     font-size: 18px;
     cursor: pointer;
 }
 #seccion-reservas .rv-page-buttons button:hover:not(:disabled),
-#seccion-reservas .rv-pagination > button:hover:not(:disabled) { background: #f1f7f2; }
+#seccion-reservas .rv-pagination > button:hover:not(:disabled) { background: var(--cereza-relieve); }
 #seccion-reservas .rv-page-buttons button:disabled,
 #seccion-reservas .rv-pagination > button:disabled { opacity: .4; cursor: not-allowed; }
 #seccion-reservas .rv-page-buttons strong { color: #45654e; font-size: 11px; font-weight: 660; }
@@ -589,8 +589,8 @@ body:has(#seccion-reservas.activa) > main.contenido.sites-shell-main {
     #seccion-reservas .reservations-heading :is(h1, h2) { font-size: 24px; }
     #seccion-reservas .sites-reservas-columns-menu { display: none; }
     #seccion-reservas .rv-table-scroll { display: none; }
-    #seccion-reservas .rv-mobile-list { display: block; border-top: 1px solid #e4ede6; }
-    #seccion-reservas .rv-mobile-row { padding: 11px 14px; border-bottom: 1px solid #e4ede6; }
+    #seccion-reservas .rv-mobile-list { display: block; border-top: 1px solid var(--cereza-linea); }
+    #seccion-reservas .rv-mobile-row { padding: 11px 14px; border-bottom: 1px solid var(--cereza-linea); }
     #seccion-reservas .rv-mobile-row.attention { background: #fffcf8; }
     #seccion-reservas .rv-mobile-main { display: flex; align-items: center; gap: 9px; }
     #seccion-reservas .rv-mobile-main > button {

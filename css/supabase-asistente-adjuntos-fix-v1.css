@@ -48,7 +48,7 @@
     overflow-x: auto;
     overflow-y: hidden;
     padding: 9px 14px 10px !important;
-    background: #fff;
+    background: var(--cereza-superficie);
     scrollbar-width: thin;
 }
 

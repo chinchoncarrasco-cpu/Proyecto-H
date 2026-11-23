@@ -7,7 +7,7 @@ const server=http.createServer((req,res)=>{
     const pathname=new URL(req.url,'http://localhost').pathname;
     if(pathname==='/')return res.writeHead(200,{'Content-Type':'text/html;charset=utf-8'}).end(
         '<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'+
-        ['styles','supabase-asistente-v1','supabase-haku-reconciliacion-v1','sites-asistente-v1','haiku-tema-oscuro-v1','haiku-tema-v1','haiku-tema-finanzas-compactas-v1']
+        ['styles','haiku-paleta-v1','supabase-asistente-v1','supabase-haku-reconciliacion-v1','sites-asistente-v1','haiku-tema-oscuro-v1','haiku-tema-v1','haiku-tema-finanzas-compactas-v1']
             .map(s=>`<link rel="stylesheet" href="/css/${s}.css">`).join('')+
         '</head><body style="margin:0"><div class="haiku-asistente-root"><div class="haiku-asistente-panel" id="haiku-asistente-panel">'+
         '<header class="haiku-asistente-cabecera">Haku<button id="haiku-asistente-cerrar" aria-label="Cerrar Haku">×</button></header><div class="haiku-asistente-mensajes">'+
@@ -59,7 +59,7 @@ const server=http.createServer((req,res)=>{
             await page.waitForFunction(()=>[...document.styleSheets].some(s=>s.href?.includes('haiku-libro-pagos-ui-v1.css')));
             assert.equal(await panel.count(),1);
             assert.doesNotMatch(await out.innerText(),/Interpretación operativa|Reglas de lectura|DEJAR BATAS|Seleccionados:/);
-            assert.equal(await panel.evaluate(el=>getComputedStyle(el).backgroundColor),tema==='oscuro'?'rgb(27, 36, 32)':'rgb(255, 255, 255)');
+            assert.equal(await panel.evaluate(el=>getComputedStyle(el).backgroundColor),tema==='oscuro'?'rgb(35, 31, 37)':'rgb(255, 253, 251)');
             const desbordes=await out.evaluate(el=>[el,...el.querySelectorAll('*')].filter(x=>x.getClientRects().length&&x.scrollWidth>x.clientWidth+1).map(x=>x.className));
             assert.deepEqual(desbordes,[],`${width}/${tema}: sin desbordes`);
             if(process.env.HAKU_HISTORIAL_MANUAL_SCREENSHOT_DIR){
