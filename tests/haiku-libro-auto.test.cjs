@@ -98,6 +98,25 @@ test('lectura aislada mantiene actual/anterior y hojas en cola durante dos actua
     assert.equal(new Uint8Array(workers[3].data.buffer)[0],4);
     workers[3].onmessage({data:{ok:true,resultado:{valor:4}}});assert.equal((await fresca).valor,4);
 });
+test('la lectura reutiliza el índice y las huellas de los mismos bytes al rotar la copia anterior',async()=>{
+    const h=cargador(),workers=[];
+    h.ctx.crypto=globalThis.crypto;
+    h.ctx.Worker=class {constructor(){workers.push(this);}postMessage(data){this.data=data;}terminate(){}};
+    await h.cargar([1]);
+    const primera=await h.ctx.lecturaTest();
+    assert.deepEqual(Array.from((await primera.consultarIndice('actual')).nombres),['Sep26']);
+    const consulta=primera.consultarHuellas('actual',['Sep26']);await tick();
+    const previas={version_huella:2,nombres:['Sep26'],huellas:{Sep26:{sha256:'anterior'}}};
+    workers[0].onmessage({data:{ok:true,resultado:previas}});await consulta;
+    await h.cargar([2]);
+    const siguiente=await h.ctx.lecturaTest();
+    assert.deepEqual(await siguiente.consultarHuellas('anterior',['Sep26']),previas);
+    assert.equal(workers.length,1);
+    const nuevas=siguiente.consultarHuellas('actual',['Sep26']);await tick();
+    assert.equal(new Uint8Array(workers[1].data.buffer)[0],2);
+    workers[1].onmessage({data:{ok:true,resultado:{...previas,huellas:{Sep26:{sha256:'actual'}}}}});
+    assert.equal((await nuevas).huellas.Sep26.sha256,'actual');
+});
 test('consulta del lector Haku finaliza con su copia y escrituras antiguas siguen bloqueadas',async()=>{
     const ctx={HAIKU_LIBRO_SEMANTICA:require('../js/haiku-libro-semantica-v1.js')};
     vm.runInNewContext(fs.readFileSync(require.resolve('../js/haiku-libro-consultas-v1.js'),'utf8'),ctx);
@@ -269,6 +288,30 @@ test('el aviso automático espera cambios en los datos y se ve antes de comproba
     terminarRevision();await tick();
     assert.equal(h.botones().length,1);assert.equal(h.calls(),1);
     assert.equal(h.ids['haiku-asistente-mensajes'].children.length,1);
+});
+test('el cotejo de abonos y el de cambios avanzan juntos y se comparte la lectura de abonos',async()=>{
+    let resolverAbonos,consultasAbonos=0,consultasCambios=0;
+    const cambio={actual:{...row,id:'reserva-ficticia'}};
+    const h=interfaz(async()=>res({nuevas:[cambio],abonos:[{reservas:[cambio.actual]}],
+        libro_actual:{generacion:2}}),{proyectar:true});
+    h.window.haikuSesion={usuario:{activo:true},roles:['administrador']};
+    h.window.HAIKU_LIBRO_CONSULTAS={
+        compararAbonosAviso(){
+            consultasAbonos++;
+            return new Promise(resolve=>resolverAbonos=resolve);
+        },
+        async revalidarCambiosDetectados(cambios){
+            consultasCambios++;
+            return {items:cambios,resueltos:[]};
+        }
+    };
+    const api=h.window.HAIKU_ASISTENTE_LIBRO_ACTUALIZACION_V1;
+    const manual=api.obtenerResultado(),aviso=api.obtenerResultadoAviso();
+    await tick();
+    assert.deepEqual([consultasAbonos,consultasCambios],[1,1]);
+    resolverAbonos(['asociado']);
+    assert.equal((await manual).abonos[0].estado,'asociado');
+    assert.equal((await aviso).abonos[0].estado,'asociado');
 });
 test('cerrar la espera descarta el aviso tardío sin reiniciar la comparación',async()=>{
     let resolver;const h=interfaz(()=>new Promise(r=>resolver=r));

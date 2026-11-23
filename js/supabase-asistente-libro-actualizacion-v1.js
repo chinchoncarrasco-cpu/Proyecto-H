@@ -520,8 +520,9 @@
                     const resultadoPendientes=await revalidarCambios(vigentes,{generacion:g});
                     if(!resultadoPendientes)throw new Error('No pude revalidar los cambios detectados contra Proyecto H.');
                     if(contexto){
-                        resultadoPendientes.items=await contexto.enriquecer(resultadoPendientes.items||[],root.haikuSupabase,{comparacion:{
-                            serviciosDetalle:resultadoPendientes.serviciosContexto,notasDetalle:resultadoPendientes.notasContexto}});
+                        resultadoPendientes.items=await contexto.enriquecer(lista(resultadoPendientes.items),root.haikuSupabase,{
+                            consultarHistorialYFinanzas:dependencias.consultarHistorialYFinanzas,
+                            comparacion:{serviciosDetalle:resultadoPendientes.serviciosContexto,notasDetalle:resultadoPendientes.notasContexto}});
                         const porId=new Map(vigentes.map(x=>[x.id,x]));
                         resultadoPendientes.resueltos=[...new Set((resultadoPendientes.resueltos||[]).flatMap(id=>porId.get(id)?.ids_origen||[id]))];
                     }
@@ -596,6 +597,10 @@
     function pendienteParaAviso(item,{operaciones,notas,porComprobar=false}={}) {
         const r=item.actual||item.anterior||{};
         const cambios=lista(item.cambios);
+        const salida=cambios.find(c=>c.campo==='fecha_checkout');
+        const noches=cambios.find(c=>c.campo==='noches');
+        const extension=salida?.antes<salida?.ahora&&Number.isInteger(noches?.antes)&&noches.ahora>noches.antes
+            ? {salidaAntes:salida.antes,salidaLibro:salida.ahora,nochesAntes:noches.antes,nochesLibro:noches.ahora} : null;
         const cambiosServicio=cambios.filter(c=>c.campo==='servicios');
         const servicios=(operaciones??lista(item.contexto?.servicios).filter(s=>s.estado!=='en_sistema')).map(s=>{
             const motivos=razonesServicio(s);
@@ -611,6 +616,7 @@
             reserva:`${r.titular||'Reserva'} · CAB ${r.cabana??'—'}`,
             titular:r.titular,cabana:r.cabana,fechaIngreso:r.fecha_checkin,detectadoEn:item.detectado_en,
             tipo:cambiosServicio.length||servicios.length?'servicio':'reserva',
+            ...(extension?{extension}:{}),
             concepto:conceptos.length===1?conceptos[0]:null,
             origen:r.coordenadas_origen,
             servicios,
@@ -714,7 +720,8 @@
         if(!puedeIncorporar(resultado))return Promise.reject(new Error('Este aviso no contiene cambios completos para incorporar. Revisa los pendientes.'));
         let estado=operacionesAviso.get(resultado);
         if(!estado){
-            estado={cache:crearCachePendientes({soloAviso:true,reutilizarFuente:true}),decisiones:new Map(),aprobados:new Set(),recibos:[]};
+            estado={cache:crearCachePendientes({soloAviso:true,reutilizarFuente:true,consultarHistorialYFinanzas:false}),
+                decisiones:new Map(),aprobados:new Set(),recibos:[]};
             operacionesAviso.set(resultado,estado);
         }
         if(estado.terminado)return Promise.resolve(estado.terminado);
@@ -752,6 +759,7 @@
                 if(!estado.reservasTerminadas){
                     const entrada=limitarPreparacion(estado.inicial.preparacion);
                     if(!estado.plan&&entrada?.reservas.length){
+                        informar('preparar');
                         estado.entrada=entrada;
                         estado.plan=await api.prepararIncorporacion(estado.entrada,estado.decisiones,estado.aprobados);
                         // Los avisos de «pagos pendientes» son notas. Este acceso
@@ -790,7 +798,8 @@
                     estado.serviciosTerminados=true;
                 }
                 informar(estado.cierreTerminado?'pendientes':'cierre');
-                let pendientes=await estado.cache.obtener(resultado,{revalidar:true});
+                let pendientes=estado.recibos.length
+                    ? await estado.cache.obtener(resultado,{revalidar:true}) : estado.inicial;
                 // Al guardar un servicio pueden quedar sus notas listas para el
                 // writer de la reserva. Completar esa etapa en el mismo clic.
                 const entradaFinal=limitarPreparacion(pendientes.preparacion,true);
@@ -835,11 +844,30 @@
         return ['nuevas','modificadas','cancelaciones_confirmadas','ya_no_aparecen','abonos']
             .some(tipo => lista(resultado[tipo]).length > 0);
     }
-    async function obtenerResultado({alDetectar, soloCambiosNuevos = false} = {}) {
+    async function leerResultado({alDetectar, soloCambiosNuevos = false} = {}) {
         if (!instalar()) throw new Error('Haku todavía no está disponible.');
         const dejarDeObservar = typeof alDetectar === 'function' ? observarDeteccion(alDetectar, soloCambiosNuevos) : null;
         try { return await cacheCompartida.obtener(); }
         finally { dejarDeObservar?.(); }
+    }
+    const comprobacionesAbonos=new WeakMap();
+    function comprobarAbonos(resultado){
+        if(!puedeRevisarAbonos(resultado))return;
+        if(!comprobacionesAbonos.has(resultado)){
+            const tarea=Promise.resolve().then(async()=>{
+                const generacion=resultado.libro_actual?.generacion;
+                const estados=await root.HAIKU_LIBRO_CONSULTAS.compararAbonosAviso(resultado.abonos,generacion);
+                if(generacion!==root.HAIKU_LIBRO_RESERVA_V1?.estado().generacion)return;
+                resultado.abonos.forEach((abono,i)=>{if(estados[i])abono.estado=estados[i];});
+            }).catch(()=>{comprobacionesAbonos.delete(resultado);});
+            comprobacionesAbonos.set(resultado,tarea);
+        }
+        return comprobacionesAbonos.get(resultado);
+    }
+    async function obtenerResultado(opciones){
+        const resultado=await leerResultado(opciones);
+        await comprobarAbonos(resultado);
+        return resultado;
     }
     async function conservarRegistros(resultado){
         const origen=generacionInforme(resultado);
@@ -851,7 +879,7 @@
         }catch(_){return extraerCambiosDetectados(resultado,origen);}
     }
     async function obtenerResultadoAviso(opciones) {
-        const resultado=await obtenerResultado(opciones);
+        const resultado=await leerResultado(opciones);
         if (opciones?.soloCambiosNuevos) {
             if (generacionInforme(resultado) !== root.HAIKU_LIBRO_RESERVA_V1?.estado().generacion || resultado.estado === 'sin_linea_base') return null;
             if (!tieneCambiosDelLibro(resultado)) {
@@ -859,14 +887,15 @@
                 return resultado.estado === 'sin_cambios' && !lista(resultado.advertencias).length ? null : resultado;
             }
         }
+        const comprobacionAbonos=comprobarAbonos(resultado);
         try{
-            const pendientes=await cachePendientesCompartida.obtener(resultado);
+            const [pendientes]=await Promise.all([cachePendientesCompartida.obtener(resultado),comprobacionAbonos]);
             registroLeido.set(resultado,pendientes.registrosAviso);
             const aviso=proyectarPendientesAviso(resultado,pendientes.registrosAviso,{resueltos:lista(pendientes.resueltos).length>0});
             aviso.incorporacion=clasificarIncorporacionAviso(pendientes);
             return aviso;
         }catch(_){
-            const registros=await conservarRegistros(resultado);
+            const [registros]=await Promise.all([conservarRegistros(resultado),comprobacionAbonos]);
             const aviso=proyectarPendientesAviso(resultado,registros,{sinVerificar:true});
             aviso.incorporacion={listos:[],pendientes:registros.map(x=>pendienteParaAviso(x,{porComprobar:true,operaciones:[]}))};
             return aviso;
@@ -914,16 +943,10 @@
                     if(libro.estado().generacion===g&&JSON.stringify(fusion.cambios)!==JSON.stringify(lista(previo.cambios)))await libro.guardarCambiosDetectados(fusion);
                 }
             }catch(error){console.warn('HAIKU · No se pudo conservar el historial local de cambios:',error);}
-            if (puedeRevisarAbonos(resultado)) {
-                try {
-                    const estados = await root.HAIKU_LIBRO_CONSULTAS.compararAbonosAviso(resultado.abonos, resultado.libro_actual?.generacion);
-                    resultado.abonos.forEach((abono, i) => { if (estados[i]) abono.estado = estados[i]; });
-                } catch (_) { /* El informe del Libro sigue disponible para revisar los abonos. */ }
-            }
             return resultado;
         },generacion);
         cacheCompartida = cache;
-        const cachePendientes=cachePendientesCompartida=crearCachePendientes();
+        const cachePendientes=cachePendientesCompartida=crearCachePendientes({consultarHistorialYFinanzas:false,reutilizarFuente:true});
         root.addEventListener('haiku:libro-cambio',()=>{
             generacionDetectada=generacionConCambios=undefined;
             cache.invalidar();cachePendientes.invalidar();
@@ -999,8 +1022,15 @@
                     const pendientes=await cacheActual.obtener(resultado,{revalidar});
                     if(revision!==revisionVista||zona.isConnected===false)return;
                     if(cacheActual===cachePendientes)registroLeido.set(resultado,pendientes.registrosAviso);
-                    if(conservarVista)renderizarConVista(pendientes,referencia);
-                    else zona.innerHTML=renderizarPendientes(pendientes);
+                    const contexto=root.HAIKU_LIBRO_CONTEXTO_V1;
+                    const presentacion=cacheActual===cachePendientes&&contexto?.enriquecer
+                        ? {...pendientes,preparacion:pendientes.preparacion,
+                            items:await contexto.enriquecer(lista(pendientes.items),root.haikuSupabase,{comparacion:{
+                            serviciosDetalle:pendientes.serviciosContexto,notasDetalle:pendientes.notasContexto}})}
+                        : pendientes;
+                    if(revision!==revisionVista||zona.isConnected===false)return;
+                    if(conservarVista)renderizarConVista(presentacion,referencia);
+                    else zona.innerHTML=renderizarPendientes(presentacion);
                     for(const [indice,item]of lista(pendientes.items).entries())if(item.retirosServicios?.length){
                         const card=zona.querySelectorAll?.('.haku-pendiente-detalle')?.[indice];
                         if(card)root.HAIKU_LIBRO_CONSULTAS?.renderizarCambiosLibro?.(card,item.retirosServicios);

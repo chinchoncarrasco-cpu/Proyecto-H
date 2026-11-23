@@ -37,7 +37,7 @@ test('dos días ocupados y texto de dos noches se corroboran: no crea una contra
  const item=await contextoCalendario(calendarioDias(2));
  assert.equal(item.actual.fecha_checkout,'2026-11-15');assert.deepEqual(item.contexto.calendario.noches,['2026-11-13','2026-11-14']);
  assert.ok(!item.contexto.avisos.some(x=>x.codigo==='noches_contradictorias'));
- assert.match(item.contexto.hechos.join(' '),/2 noches: del 13-11-2026 al 14-11-2026/);
+ assert.match(item.contexto.hechos.join(' '),/2 noches del 13-11-2026 al 14-11-2026/);
 });
 test('no inventa LIBRE por una celda vacía, ni usa el LIBRE de otra cabaña',async()=>{
  const data=calendarioDias(1,{libre:false});data.espacios.push({fecha:'2026-11-14',cabana:8,estado:'libre_explicito',origen:{celda:'BD10'}});
@@ -48,6 +48,37 @@ test('duración explícita con extensión se contrasta completa y no sólo con l
  const item=await contextoCalendario(calendarioDias(2,{texto:'1 noche // pidió extender 1 noche'}));
  assert.equal(item.actual.noches_texto,1);assert.equal(item.actual.noches_texto_efectivas,2);
  assert.ok(!item.contexto.avisos.some(x=>x.codigo==='noches_contradictorias'));
+});
+test('la extensión de celdas sobrevive a un aviso anterior que sólo incluía notas',async()=>{
+ const anterior=calendarioDias(1,{texto:'1 noche'});
+ const actual=calendarioDias(2,{texto:'1 noche // EXTENDIÓ UNA NOCHE CON TARIFA ESPECIAL POR PAGAR'});
+ const [reserva]=anterior.reservas;
+ const nota={campo:'notas_importantes',antes:['Nota anterior'],ahora:[]};
+ const extension=[{campo:'fecha_checkout',antes:'2026-11-14',ahora:'2026-11-15'},
+  {campo:'noches',antes:1,ahora:2}];
+ const informe=global.HAIKU_LIBRO_DIFERENCIAS_V1.comparar([anterior],[actual]);
+ assert.deepEqual(informe.modificadas[0].cambios.slice(0,2),extension);
+ const fuente={crearLectura:async()=>({
+  estado:()=>({generacion:4}),listarHojas:()=>['Nov26'],consultarHoja:async()=>actual
+ })};
+ const pendiente=registro({anterior:reserva,actual:reserva,cambios:[nota]});
+ const [vigente]=await C.actualizarDesdeLibro([pendiente],fuente);
+ assert.deepEqual(vigente.cambios,[...extension,nota]);
+ assert.deepEqual(vigente.fuente_vigente.calendario.noches,['2026-11-13','2026-11-14']);
+ assert.deepEqual(pendiente.cambios,[nota]);
+ const ctx={HAIKU_LIBRO_SEMANTICA:S,structuredClone,console,Intl,Date,haikuTienePermiso:()=>true};
+ vm.runInNewContext(fs.readFileSync(require.resolve('../js/haiku-libro-consultas-v1.js'),'utf8'),ctx);
+ const tabla={id:'e1',reserva_id:'r1',fecha_ingreso:reserva.fecha_checkin,fecha_salida:reserva.fecha_checkout,
+  estado_estadia:'confirmada',tipo_estadia:'alojamiento',adultos:2,cabanas:{numero:reserva.cabana},
+  reservas:{id:'r1',titular_nombre:reserva.titular,estado_reserva:'confirmada'}};
+ const db={auth:{getSession:async()=>({data:{session:{user:{id:'operador-ficticio'}}}})},from(nombre){
+  const q={select(){return q},order(){return q},range:async()=>({data:nombre==='reserva_estadias'?[tabla]:[]})};
+  return q;
+ },rpc(){assert.fail('Detectar la extensión no escribe en Proyecto H');}};
+ const resultado=await ctx.HAIKU_LIBRO_CONSULTAS.revalidarCambiosDetectados([vigente],db,{generacion:4});
+ assert.deepEqual(Array.from(resultado.items[0].cambios,c=>c.campo),['fecha_checkout','noches','observaciones_libro']);
+ assert.equal(resultado.items[0].requiereConfirmarEstadia,true);
+ assert.equal(resultado.reservas.length,0);
 });
 test('geometría incierta o fechas deducidas del texto no se presentan como celdas comprobadas',async()=>{
  for(const cambios of [{geometria_inequivoca:false},{geometria_resuelta_texto:true}]){
@@ -98,6 +129,17 @@ test('explica cobros y pagos de la noche retirada sin alterar cantidades ni emit
 test('las lecturas se agrupan: 100 tarjetas no generan 100 consultas',async()=>{
  const llamadas=[];await C.enriquecer(Array.from({length:100},()=>caso()),cliente(tablas,llamadas),{puedeVerPagos:true});
  assert.deepEqual(llamadas.sort(),['estadia_noches','eventos_auditoria','vista_estado_cargos']);
+});
+test('la burbuja conserva el contexto de servicios sin consultar auditoría ni cobros',async()=>{
+ const llamadas=[];
+ const item=caso({cambios:[...registro().cambios,{campo:'servicios'}]});
+ const [resultado]=await C.enriquecer([item],cliente(tablas,llamadas),{
+  consultarHistorialYFinanzas:false,puedeVerPagos:true,
+  comparacion:{serviciosDetalle:[{estado:'faltante',reserva:item.actual,servicio:{concepto:'tonel'}}]}
+ });
+ assert.deepEqual(llamadas,[]);
+ assert.equal(resultado.contexto.servicios[0].concepto,'tonel');
+ assert.equal(resultado.contexto.finanzas,null);
 });
 test('notas y servicios reutilizan la comparación, sin lecturas financieras innecesarias',async()=>{
  const llamadas=[];const out=await C.enriquecer([caso({cambios:[{campo:'servicios'}]})],cliente(tablas,llamadas),{comparacion:{serviciosDetalle:[{estado:'en_sistema',reserva:r(),servicio:{concepto:'masaje',hora:'16:00'}},{estado:'faltante',reserva:r(),servicio:{concepto:'tonel',hora:'17:15'}}]}});

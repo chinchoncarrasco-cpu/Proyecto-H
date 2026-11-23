@@ -1825,11 +1825,11 @@ html[data-haku-mobile-assistant="1"] .haku-comprobante-notas > summary { min-hei
 .haku-libro-auto.haku-libro-auto {
     z-index: 90020; /* Visible y accionable sobre Haku y su inspector (90000/90010). */
     --aviso-fondo: var(--cereza-relieve);
-    --aviso-superficie: var(--sites-shell-surface, #fff);
-    --aviso-borde: var(--sites-shell-line, #d9e3de);
-    --aviso-texto: var(--sites-shell-ink, var(--cereza-texto));
-    --aviso-secundario: var(--sites-shell-muted, var(--cereza-secundario));
-    --aviso-acento: var(--sites-shell-green, #22735c);
+    --aviso-superficie: var(--cereza-superficie);
+    --aviso-borde: var(--cereza-linea);
+    --aviso-texto: var(--cereza-texto);
+    --aviso-secundario: var(--cereza-secundario);
+    --aviso-acento: var(--cereza-acento);
     display: flex; flex-direction: column; gap: 6px;
     width: min(388px, calc(100vw - 36px)); max-height: min(390px, calc(100dvh - 100px));
     border-radius: 9px; padding: 0; overflow: hidden;
@@ -1953,7 +1953,8 @@ html[data-haku-mobile-assistant="1"] .haku-comprobante-notas > summary { min-hei
 .haku-libro-auto__acciones { display: flex; flex: none; flex-wrap: wrap; gap: 5px; padding: 7px 12px; border-top: 1px solid var(--aviso-borde); }
 .haku-libro-auto.haku-libro-auto button { margin: 0; min-height: 28px; padding: 4px 8px; border-radius: 4px; border-color: var(--aviso-borde); background: var(--aviso-superficie); color: var(--aviso-acento); font-family: inherit; font-size: 12px; line-height: 18px; font-weight: 400; }
 .haku-libro-auto.haku-libro-auto button:focus-visible { outline: 2px solid var(--aviso-acento); outline-offset: 2px; }
-.haku-libro-auto.haku-libro-auto .haku-libro-auto__incorporar { background: var(--aviso-acento); color: var(--aviso-superficie); border-color: var(--aviso-acento); font-weight: 600; }
+.haku-libro-auto.haku-libro-auto .haku-libro-auto__incorporar { background: var(--cereza-primario); color: var(--cereza-sobre-primario); border-color: var(--cereza-primario); font-weight: 600; }
+.haku-libro-auto.haku-libro-auto .haku-libro-auto__incorporar[aria-busy="true"] { opacity: 1; }
 .haku-libro-auto__incorporar[aria-busy="true"]::before { content: ''; display: inline-block; width: 11px; height: 11px; margin-right: 6px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; vertical-align: -2px; animation: haku-aviso-incorporando .7s linear infinite; }
 .haku-libro-auto__resultado { display: grid; gap: 6px; font-size: 12px; line-height: 17px; overflow-wrap: anywhere; }
 .haku-libro-auto__resultado:empty { display: none; }
@@ -1973,13 +1974,6 @@ html[data-haku-mobile-assistant="1"] .haku-comprobante-notas > summary { min-hei
 @media (prefers-reduced-motion: reduce) { .haku-libro-auto__incorporar[aria-busy="true"]::before { animation: none; } }
 .haku-incorporacion-aviso { min-width: 0; }
 .haku-incorporacion-aviso__contenido { min-width: 0; overflow-wrap: anywhere; }
-html[data-haiku-tema="oscuro"] .haku-libro-auto.haku-libro-auto {
-    --aviso-fondo: #202d26; --aviso-superficie: #1b2621; --aviso-borde: var(--cereza-linea);
-    --aviso-texto: var(--cereza-texto); --aviso-secundario: var(--cereza-secundario); --aviso-acento: #9fd2b3;
-    background: var(--aviso-fondo); color: var(--aviso-texto); border-color: var(--aviso-borde);
-}
-html[data-haiku-tema="oscuro"] .haku-libro-auto.haku-libro-auto button { background: var(--aviso-superficie); color: var(--aviso-acento); border-color: var(--aviso-borde); }
-html[data-haiku-tema="oscuro"] .haku-libro-auto.haku-libro-auto .haku-libro-auto__incorporar { background: var(--aviso-acento); color: var(--aviso-superficie); border-color: var(--aviso-acento); }
 .haku-libro-auto.haku-libro-auto .haku-libro-auto__prioridades .haku-libro-auto__prioridad {
     display: inline-flex; flex: 1; align-items: center; justify-content: center; gap: 4px;
     min-width: 0; min-height: 26px; padding: 3px 5px; border: 0; border-radius: 2px;
@@ -1996,19 +1990,11 @@ html[data-haiku-tema="oscuro"] .haku-libro-auto.haku-libro-auto .haku-libro-auto
 
 /* Casos pendientes del aviso de incorporación (Figma 2:203 y 2:423). */
 .haku-libro-auto.haku-libro-auto--con-pendientes {
-    --aviso-fondo: var(--cereza-superficie); --aviso-borde: #c9dacf;
-    --aviso-texto: #172c24; --aviso-secundario: #50665c; --aviso-acento: #22694e;
-    --casos-detalle: #f4f8f5; --casos-linea: var(--cereza-linea); --casos-seleccion: var(--cereza-verde-fondo);
-    --casos-borde-seleccion: #9cbfaa; --casos-principal: #246b52; --casos-texto-principal: #fff;
-    --casos-dato: #8d5d27; --casos-dato-fondo: #f8efe1;
+    --aviso-fondo: var(--cereza-superficie);
+    --casos-detalle: var(--cereza-relieve); --casos-linea: var(--cereza-linea); --casos-seleccion: var(--cereza-seleccion);
+    --casos-borde-seleccion: var(--cereza-linea-fuerte); --casos-principal: var(--cereza-primario); --casos-texto-principal: var(--cereza-sobre-primario);
+    --casos-dato: var(--cereza-dorado); --casos-dato-fondo: var(--cereza-dorado-fondo);
     right: 18px; bottom: 74px;
-    box-shadow: 0 2px 5px #0917111c, 0 11px 28px -5px #09171138;
-}
-html[data-haiku-tema="oscuro"] .haku-libro-auto.haku-libro-auto--con-pendientes {
-    --aviso-borde: #4b6253; --aviso-acento: #b0dcc1;
-    --casos-detalle: #1b2621; --casos-linea: #384b40; --casos-seleccion: #30483b;
-    --casos-borde-seleccion: #5c876f; --casos-principal: #9fd2b3; --casos-texto-principal: #152c21;
-    --casos-dato: #f2c48d; --casos-dato-fondo: #44382a;
     box-shadow: 0 2px 5px #0917111c, 0 11px 28px -5px #09171138;
 }
 .haku-libro-auto.haku-libro-auto--casos-abiertos {
@@ -2170,13 +2156,13 @@ html .haku-libro-auto--con-pendientes .haku-libro-casos button.haku-libro-casos_
 /* Resumen de actualización aprobado en Figma (32:181). Ocupa el ancho real
    de Haku; la densidad responde al panel, también cuando está acoplado. */
 .haiku-asistente-root .haiku-asistente-panel .haiku-asistente-mensajes > .haiku-asistente-mensaje.haku-libro-resumen {
-    --aviso-borde: var(--sites-shell-line, var(--cereza-linea));
-    --aviso-texto: var(--sites-shell-ink, var(--cereza-texto));
-    --aviso-secundario: var(--cereza-secundario); --aviso-acento: #286c4e;
-    --resumen-suave: var(--cereza-relieve); --resumen-aviso: #825016;
+    --aviso-borde: var(--cereza-linea);
+    --aviso-texto: var(--cereza-texto);
+    --aviso-secundario: var(--cereza-secundario); --aviso-acento: var(--cereza-acento);
+    --resumen-suave: var(--cereza-relieve); --resumen-aviso: var(--cereza-dorado);
     container-type: inline-size; display: flex; flex-direction: column; gap: 4px;
     box-sizing: border-box; flex: 0 0 auto; align-self: stretch; width: 100%; max-width: none; min-width: 0;
-    margin: 0; padding: 0 2px 0 10px; border: 0; border-left: 2px solid var(--aviso-acento);
+    margin: 0; padding: 0 2px 0 10px; border: 0; border-left: 2px solid; border-left-color: var(--aviso-acento);
     border-radius: 0; background: transparent; box-shadow: none; color: var(--aviso-texto);
     font: 400 13px/19px var(--sites-shell-font, Inter, "Segoe UI", Arial, sans-serif); white-space: normal;
 }
@@ -2221,10 +2207,6 @@ html .haku-libro-auto--con-pendientes .haku-libro-casos button.haku-libro-casos_
 .haku-libro-resumen .haku-libro-auto__caso { padding-bottom: 4px; }
 .haku-libro-resumen .haku-libro-auto__caso p { margin: 0; }
 .haku-libro-resumen__caso .haku-libro-auto__cabecera { display: none; } /* El título general ya identifica el cambio. */
-html[data-haiku-tema="oscuro"] .haiku-asistente-root .haiku-asistente-panel .haiku-asistente-mensajes > .haiku-asistente-mensaje.haku-libro-resumen {
-    --aviso-borde: var(--cereza-linea); --aviso-texto: var(--cereza-texto); --aviso-secundario: var(--cereza-secundario);
-    --aviso-acento: #9fd2b3; --resumen-suave: #28382f; --resumen-aviso: #f0c584;
-}
 html[data-haiku-tema="oscuro"] .haiku-asistente-panel .haku-libro-resumen .haku-libro-resumen__punto--claro { display: none; }
 html[data-haiku-tema="oscuro"] .haiku-asistente-panel .haku-libro-resumen .haku-libro-resumen__punto--oscuro { display: inline-block; }
 @container (max-width: 400px) {

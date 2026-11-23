@@ -67,6 +67,7 @@
     let colaConsulta = Promise.resolve();
     const cacheConsultas = new Map();
     const MAX_CACHE_CONSULTAS = 8;
+    const cacheHuellas = new Map();
     let revisionMemoriaVisual = 0;
 
     function copiaLocal(accion, registro) {
@@ -125,6 +126,7 @@
     async function quitarLibro() {
         const id = ++operacionLibro;
         limpiarMemoria();
+        cacheHuellas.clear();
         cierresCancelacionSesion.clear();
         if (!persistenciaLocal) {
             notificarVistaLibro("eliminado", false);
@@ -865,7 +867,8 @@
                 if (!restaurado) {
                     actualizarEstado(archivoNombre, "Guardando copia en este navegador…");
                     try {
-                        const guardado = await copiaLocal("guardar", { nombre: archivoNombre, buffer, guardado_en: new Date().toISOString() });
+                        const guardado = await copiaLocal("guardar", { nombre: archivoNombre, buffer,
+                            version: archivoVersion, guardado_en: new Date().toISOString() });
                         actualizacion = guardado.actualizacion;
                         if (cargaId === operacionLibro) persistenciaConfirmada = true;
                         estadoLocal = " · guardado en este navegador";
@@ -971,19 +974,28 @@
                 if (!["actual", "anterior"].includes(version)) throw new Error("Versión no válida");
                 const key = `${version}:${tipo}:${JSON.stringify(nombre)}`;
                 if (cache.has(key)) return structuredClone(cache.get(key));
-                let buffer = actual;
+                let buffer = actual, versionBytes = estado.version;
                 if (version === "anterior") {
                     if (!persistenciaLocal && ["indice", "indice_nombres", "huellas"].includes(tipo)) return null;
                     if (!persistido) throw new Error("El Libro actual no está guardado; no se puede comparar con la versión anterior.");
                     const previo = await anteriorSeguro;
                     if (previo.error) throw previo.error;
                     buffer = previo.registro?.buffer;
+                    versionBytes = previo.registro?.version;
                     if (!buffer) {
                         if (["indice", "indice_nombres", "huellas"].includes(tipo)) return null;
                         throw new Error("Todavía no hay un Libro anterior. Carga una versión diferente para compararlas.");
                     }
                 }
+                // La copia que era actual pasa a ser la anterior. Sus huellas
+                // siguen siendo válidas para los mismos bytes y las mismas hojas.
+                const claveHuellas = tipo === "huellas" && versionBytes && JSON.stringify([versionBytes, nombre]);
+                if (claveHuellas && cacheHuellas.has(claveHuellas)) return structuredClone(cacheHuellas.get(claveHuellas));
                 const resultado = await leerConsulta(buffer, nombre, tipo, true);
+                if (claveHuellas && estado.generacion === operacionLibro && nombre.every(hoja => resultado.huellas?.[hoja]?.sha256)) {
+                    if (cacheHuellas.size >= MAX_CACHE_CONSULTAS) cacheHuellas.delete(cacheHuellas.keys().next().value);
+                    cacheHuellas.set(claveHuellas, resultado);
+                }
                 const guardarCache=(clave,valor,semantica)=>{
                     if(cache.size>=MAX_CACHE_CONSULTAS&&!cache.has(clave))cache.delete(cache.keys().next().value);
                     cache.set(clave,valor);
@@ -1015,7 +1027,8 @@
                 }
                 return seleccion.map(h=>salida.get(h));
             },
-            consultarIndice: (version = "actual") => consultar("", version, "indice_nombres"),
+            consultarIndice: (version = "actual") => version === "actual"
+                ? Promise.resolve({ nombres: [...hojas] }) : consultar("", version, "indice_nombres"),
             consultarHuellas: (version = "actual", nombres = []) => consultar([...nombres], version, "huellas"),
             buscarHojas: nombre => consultar(nombre, "actual", "buscar"),
             buscarHojasBove: numero => consultar(numero, "actual", "buscar_bove")

@@ -294,7 +294,8 @@
         const origen=[p.origen?.hoja,p.origen?.celda].filter(Boolean).map(v=>notaBreve(v,24)).join(', ');
         return {titular:notaBreve(p.titular||legado?.[1]||p.reserva,100)||'Reserva',
             cabana:`CAB ${p.cabana??legado?.[2]??'—'}`,fechaIngreso,detectadoEn:p.detectadoEn,
-            origen,resumen:`${principal.nombre} · ${motivoCortoPendiente(principal)}`,bloques};
+            origen,resumen:p.extension?`Extensión · ${p.extension.nochesAntes} → ${p.extension.nochesLibro} noches`
+                :`${principal.nombre} · ${motivoCortoPendiente(principal)}`,bloques};
     }
     function agruparMovimientos(movimientos, vistaPrevia) {
         const grupos=new Map();
@@ -437,6 +438,12 @@
                 hora.setAttribute('datetime',deteccion.iso);hora.title=deteccion.descripcion;
                 hora.setAttribute('aria-label',deteccion.descripcion);
             }
+            const extension=pendientes[i].extension;
+            if(extension){
+                const cambio=nodo(contenido,'div','haku-libro-casos__grupo');
+                nodo(cambio,'h4','haku-libro-casos__servicio',`Extensión en el Libro · ${extension.nochesLibro} noches`);
+                nodo(cambio,'p','haku-libro-casos__motivo',`Salida ${cambioFecha(extension.salidaAntes,extension.salidaLibro)}`);
+            }
             for(const bloque of cambiosLibro?.length?[]:c.bloques){
                 const grupo=nodo(contenido,'div','haku-libro-casos__grupo');
                 nodo(grupo,'h4','haku-libro-casos__servicio',bloque.titulo);
@@ -556,7 +563,7 @@
             const doc=root.document;
             if (!doc.getElementById('haku-libro-auto-estilo')) {
                 const estilo=doc.createElement('style');estilo.id='haku-libro-auto-estilo';
-                estilo.textContent='.haku-libro-auto{position:fixed;right:18px;bottom:88px;width:min(340px,calc(100vw - 36px));box-sizing:border-box;z-index:10000;background:#f7faf8;color:#26342c;border:1px solid #cadfd1;border-radius:16px;padding:14px;box-shadow:0 6px 22px #183e2426;font:13px/1.5 system-ui;overflow-wrap:anywhere;max-height:45vh;overflow:auto}.haku-libro-auto--revision{background:#fffaf1;border-color:#ead8bc}.haku-libro-auto p{margin:7px 0}.haku-libro-auto button{cursor:pointer;background:white;color:#245438;border:1px solid #cadfd1;border-radius:8px;padding:6px 10px;margin:5px 6px 0 0}.haku-libro-auto button:disabled{cursor:default;opacity:.6}';
+                estilo.textContent='.haku-libro-auto{position:fixed;right:18px;bottom:88px;width:min(340px,calc(100vw - 36px));box-sizing:border-box;z-index:10000;background:var(--cereza-superficie,#fffdfb);color:var(--cereza-texto,#2c2329);border:1px solid var(--cereza-linea,#e7deda);border-radius:16px;padding:14px;box-shadow:0 6px 22px #21151b26;font:13px/1.5 system-ui;overflow-wrap:anywhere;max-height:45vh;overflow:auto}.haku-libro-auto--revision{background:var(--cereza-relieve,#faf6f3);border-color:var(--cereza-linea,#e7deda)}.haku-libro-auto p{margin:7px 0}.haku-libro-auto button{cursor:pointer;background:var(--cereza-superficie,#fffdfb);color:var(--cereza-acento,#78263f);border:1px solid var(--cereza-linea,#e7deda);border-radius:8px;padding:6px 10px;margin:5px 6px 0 0}.haku-libro-auto button:disabled{cursor:default;opacity:.6}';
                 doc.head.appendChild(estilo);
             }
             cerrarVistaLista?.();
@@ -997,6 +1004,7 @@
             }
             const pasosIncorporacion={
                 comprobar:'Comprobando cambios del Libro…',
+                preparar:'Preparando la incorporación en Proyecto H…',
                 reservas:'Guardando reservas y cambios en Proyecto H…',
                 servicios:'Revisando servicios y notas…',
                 cierre:'Revisando los cambios restantes…',
@@ -1011,7 +1019,7 @@
                     mostrarRecibo(incorporado,resumen,fase==='pendientes'?'Incorporado':'Guardado hasta ahora');
                     nodo(estadoGuardado,'p','haku-libro-auto__aviso',texto);
                 }else estadoGuardado.textContent=texto;
-                if(fase==='pendientes')for(const b of botonesIncorporar)b.textContent='Revisando…';
+                if(fase==='cierre'||fase==='pendientes')for(const b of botonesIncorporar)b.textContent='Revisando…';
                 posicionarAviso();
             }
             function botonIncorporar(contenedor){
