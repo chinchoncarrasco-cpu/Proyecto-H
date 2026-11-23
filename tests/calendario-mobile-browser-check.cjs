@@ -181,9 +181,12 @@ async function comprobarAnchoConPaneles(page, temas) {
             await reserva.click();
             await ficha.locator('[data-reserva-contenido]').waitFor({ state: 'visible' });
             await comprobarAjuste(antes.ancho, `${width} ${tema} ambos`);
-            const enlaceCalendario = page.getByRole('navigation', { name: 'Navegación principal' })
-                .locator('[data-seccion=calendario].activo');
-            await enlaceCalendario.click({ trial: true });
+            const menu = page.getByRole('navigation', { name: 'Navegación principal' });
+            await menu.locator('[data-seccion=calendario].activo').click({ trial: true });
+            const gestion = menu.getByText('Gestión', { exact: true });
+            await gestion.click();
+            await menu.locator('[data-seccion=libro-reserva]').click({ trial: true });
+            await gestion.click();
             if (temas && width === 1920) await page.screenshot({ path: path.join(temas, `calendario-paneles-${tema}.png`) });
 
             await haku.locator('#haiku-asistente-cerrar').click();
