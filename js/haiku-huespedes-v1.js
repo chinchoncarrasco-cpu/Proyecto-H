@@ -253,9 +253,19 @@
     }
 
 
-    function row(title, subtitle, action, glyph, person) {
-        return box("hu-integrante",box("hu-identidad",person ? avatar(person) : glyph&&box("hu-tipo-icono",icon(glyph)),
+    function row(title, subtitle, action, visual, person) {
+        const marker=typeof visual==="string"?icon(visual):visual;
+        return box("hu-integrante",box("hu-identidad",person ? avatar(person) : marker&&box("hu-tipo-icono",marker),
             box("",el("strong","hu-nombre",title),subtitle&&muted(subtitle))),action);
+    }
+    function vehicleVisual(vehicle) {
+        const path=vehicle.foto||vehicle.fotos_adicionales?.[0];
+        if(!path) return "vehicle";
+        const image=el("img","hu-vehiculo-miniatura");
+        image.alt="";
+        if(vehicle.foto)image.style.objectPosition="50% "+(vehicle.foto_posicion_y??50)+"%";
+        api.signed(path).then(src=>{if(image.isConnected)image.src=src;}).catch(()=>{});
+        return image;
     }
     function group(title,action,...rows) {
         return box("hu-separador hu-bloque"+(/^(Acompañantes|Integrantes|Perfil de esta)/.test(title)?" hu-sin-borde":""),box("hu-subtitulo",el("h4","",title),action),
@@ -323,7 +333,8 @@
         const clothing=local.filter(x=>x.categoria==="vestimenta");
         const related=box("hu-relacionados",
             v&&row("Vestimenta de hoy",clothing.length?[clothing[0].superior,clothing[0].inferior,clothing[0].texto].filter(Boolean).join(" · "):"Sin registrar",edit&&btn("Editar",()=>editPhoto({kind:"persona",path:p.foto})),"shirt"),
-            ...profile.vehiculos.map(x=>row(x.modelo||x.tipo,["Vehículo",x.tipo,x.color].filter(Boolean).join(" · "),btn("Ver perfil",()=>editEntity("vehiculo",x)),"vehicle")),
+            ...profile.vehiculos.map(x=>row(x.modelo||x.tipo,["Vehículo",x.tipo,x.color].filter(Boolean).join(" · "),
+                btn("Ver perfil",()=>editEntity("vehiculo",x)),vehicleVisual(x))),
             ...profile.mascotas.map(x=>row(x.nombre,["Mascota",x.especie,x.tamano].filter(Boolean).join(" · "),btn("Ver perfil",()=>editEntity("mascota",x)),"pet")));
         const content=[header,
             box("hu-linea",muted(p.numero_documento?(p.tipo_documento==="rut"?"RUT ":"Documento ")+"••••"+p.numero_documento.slice(-4):"Sin documento"),
