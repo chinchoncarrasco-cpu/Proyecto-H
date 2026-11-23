@@ -1,48 +1,10 @@
 /* Approved source: Figma JGnBc0FElO2BamoS6xfYk7, 131:3139 (V1.1).
-   All shell rules are scoped to the active Guests section. */
+   Directorio y ficha de Huéspedes dentro de la navegación compartida. */
 @font-face{font-family:HakuGuests;src:url('../assets/huespedes/fonts/Inter-Regular.woff') format('woff');font-weight:400;font-display:swap}
 @font-face{font-family:HakuGuests;src:url('../assets/huespedes/fonts/Inter-Medium.woff') format('woff');font-weight:500;font-display:swap}
 @font-face{font-family:HakuGuests;src:url('../assets/huespedes/fonts/Inter-SemiBold.woff') format('woff');font-weight:600;font-display:swap}
 @font-face{font-family:HakuGuests;src:url('../assets/huespedes/fonts/Inter-Bold.woff') format('woff');font-weight:700;font-display:swap}
-body:has(#seccion-huespedes.activa){--sites-shell-sidebar-width:184px;--sites-shell-header-height:64px}
-body:has(#seccion-huespedes.activa)>main.contenido.sites-shell-main{padding:0!important;min-width:0}
-body:has(#seccion-huespedes.activa)>.sites-shell-topbar{padding-inline:24px}
-body:has(#seccion-huespedes.activa) .sites-shell-topbar .busqueda-palabra-wrap{display:none!important}
-body:has(#seccion-huespedes.activa) .sidebar.sites-shell-sidebar nav.menu .menu-item{padding:9px 12px;min-height:38px;font-size:13px}
-.hu-shell-brand,.hu-shell-more,.hu-shell-supplies{display:none}
-.hu-shell-supplies[hidden]{display:none!important}
-@media(min-width:781px){
- body:has(#seccion-huespedes.activa){--sites-shell-font:HakuGuests,Inter,system-ui,sans-serif}
- body:has(#seccion-huespedes.activa) .sidebar.sites-shell-sidebar{background:#1b2621;border-right:1px solid #3e5145}
- html:not([data-haiku-tema=oscuro]) body:has(#seccion-huespedes.activa) .sidebar.sites-shell-sidebar{background:#fff;border-color:#d9e3de}
- body:has(#seccion-huespedes.activa) .sites-shell-sidebar .logo,body:has(#seccion-huespedes.activa) .sites-shell-nav-label{display:none}
- body:has(#seccion-huespedes.activa) .hu-shell-brand{display:grid;gap:4px;padding:28px 20px 20px;min-height:102px;color:#9fd2b3}
- html:not([data-haiku-tema=oscuro]) body:has(#seccion-huespedes.activa) .hu-shell-brand{color:#173d33}
- body:has(#seccion-huespedes.activa) .hu-shell-brand strong{font-size:28px;line-height:34px}
- body:has(#seccion-huespedes.activa) .hu-shell-brand .hu-muted{color:#b1c2b7}
- html:not([data-haiku-tema=oscuro]) body:has(#seccion-huespedes.activa) .hu-shell-brand .hu-muted{color:#728079}
- body:has(#seccion-huespedes.activa) .sites-shell-sidebar nav.menu{padding:0 10px 16px;gap:6px}
- body:has(#seccion-huespedes.activa) .sites-shell-sidebar nav.menu .menu-item{font-weight:400;color:#e8efea}
- html:not([data-haiku-tema=oscuro]) body:has(#seccion-huespedes.activa) .sites-shell-sidebar nav.menu .menu-item{color:#17362d}
- body:has(#seccion-huespedes.activa) .sites-shell-sidebar nav.menu .activo{background:#254736}
- html:not([data-haiku-tema=oscuro]) body:has(#seccion-huespedes.activa) .sites-shell-sidebar nav.menu .activo{background:#dceee4}
- body:has(#seccion-huespedes.activa) .menu-item[data-seccion=resumen]{order:1}
- body:has(#seccion-huespedes.activa) .menu-item[data-seccion=calendario]{order:2}
- body:has(#seccion-huespedes.activa) .menu-item[data-seccion=reservas]{order:3}
- body:has(#seccion-huespedes.activa) .menu-item[data-seccion=cabanas]{order:4}
- body:has(#seccion-huespedes.activa) .menu-item[data-seccion=huespedes]{order:5}
- body:has(#seccion-huespedes.activa) .menu-item[data-seccion=servicios]{order:6}
- body:has(#seccion-huespedes.activa) :is(.hu-shell-supplies,.hu-shell-more){display:flex;align-items:center;border:0;background:transparent;font-size:13px;font-weight:400;padding:9px 12px;min-height:38px;gap:12px;text-align:left;color:#e8efea}
- html:not([data-haiku-tema=oscuro]) body:has(#seccion-huespedes.activa) :is(.hu-shell-supplies,.hu-shell-more){color:#17362d}
- body:has(#seccion-huespedes.activa) .hu-shell-supplies{order:7}
- body:has(#seccion-huespedes.activa) .hu-shell-supplies svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
- body:has(#seccion-huespedes.activa) .hu-shell-more{order:8}
- body:has(#seccion-huespedes.activa) .sites-shell-sidebar .menu-item:is([data-seccion=pagos],[data-seccion=cierre],[data-seccion=historial],[data-seccion=libro-reserva]){order:9}
- body:has(#seccion-huespedes.activa) nav.menu:not(.hu-nav-extra-open) .menu-item:is([data-seccion=pagos],[data-seccion=cierre],[data-seccion=historial],[data-seccion=libro-reserva]){display:none}
- body:has(#seccion-huespedes.activa) .sites-shell-topbar .busqueda-reservas-wrap{width:340px!important}
- body:has(#seccion-huespedes.activa) .sites-shell-topbar .boton-nueva-reserva{background:transparent;color:#9fd2b3;border:1px solid #3e5145;font-size:12px;min-height:36px}
- html:not([data-haiku-tema=oscuro]) body:has(#seccion-huespedes.activa) .sites-shell-topbar .boton-nueva-reserva{color:#173d33;border-color:#d9e3de}
-}
+main.contenido.sites-shell-main:has(> #seccion-huespedes.activa){max-width:none;min-width:0;padding:0}
 #seccion-huespedes{padding:24px!important;font-family:HakuGuests,Inter,system-ui,sans-serif;font-size:13px;line-height:19px}
 #seccion-huespedes *{box-sizing:border-box}
 .huespedes-titulo{margin-bottom:14px;min-height:81px}
@@ -232,7 +194,7 @@ body:has(#seccion-huespedes.activa) .sidebar.sites-shell-sidebar nav.menu .menu-
 .hu-radio-row>div{display:grid;gap:4px}
 .hu-radio-row:disabled{opacity:1}
 .hu-radio-dot{font-size:15px}
-@media(max-width:1000px) and (min-width:761px){.hu-layout{grid-template-columns:minmax(0,1fr) minmax(320px,1fr)}}
+@media(max-width:1000px) and (min-width:761px){.hu-layout{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:760px){
  #seccion-huespedes{padding:16px 12px!important}
  .huespedes-titulo{min-height:35px;margin-bottom:10px}

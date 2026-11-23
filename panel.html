@@ -68,6 +68,8 @@
                 html = html.replace(/href="css\/haiku-tareas-generales-v1\.css(?:\?[^"]*)?"/, `href="css/haiku-tareas-generales-v1.css?v=${version}"`);
                 html = html.replace(/href="css\/revision-plantilla-v1\.css(?:\?[^"]*)?"/,
                     `href="css/revision-plantilla-v1.css?v=${version}"`);
+                html = html.replace('href="css/haiku-huespedes-figma-v1.css"',
+                    `href="css/haiku-huespedes-figma-v1.css?v=${version}"`);
                 html = html.replace("</head>", `<link rel="stylesheet" href="css/haiku-libro-resoluciones-v1.css?v=${version}">\n<link rel="stylesheet" href="css/supabase-pagos-v4-fix.css?v=${version}">\n<link rel="stylesheet" href="css/supabase-webpay-v1.css?v=${version}">\n<link rel="stylesheet" href="css/supabase-historial-v1.css?v=${version}">
 <link rel="stylesheet" href="css/supabase-reservas-v1.css?v=${version}">
 <link rel="stylesheet" href="css/supabase-reservas-compact-v1.css?v=${version}">

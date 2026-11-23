@@ -103,8 +103,6 @@
     function allowed() {
         const ok = Boolean(window.haikuSesion && window.haikuTienePermiso?.("huespedes.ver"));
         menu.hidden = !ok;
-        const supplies=document.querySelector(".hu-shell-supplies");
-        if(supplies)supplies.hidden=!window.haikuTienePermiso?.("cabanas.ver");
         return ok;
     }
     function change(key,value) {
@@ -767,24 +765,6 @@
         },"Guardar cambios",[name(profile.persona),profile.visita?.numero&&"Cabaña "+profile.visita.numero].filter(Boolean).join(" · "));
     }
     const searchIcon=root.querySelector("[data-hu-search-icon]");
-    // Guests uses the approved shell treatment, retaining the real navigation buttons.
-    const shellNav=document.querySelector(".sites-shell-sidebar nav.menu");
-    if(shellNav){
-        const more=btn("Más",()=>{
-            const open=shellNav.classList.toggle("hu-nav-extra-open");more.setAttribute("aria-expanded",String(open));
-        },{cls:"hu-shell-more"});
-        more.setAttribute("aria-expanded","false");
-        const supplies=btn("Insumos",()=>{
-            document.querySelector('.menu-item[data-seccion="cabanas"]')?.click();
-            document.querySelector('#cabinsTabs [data-cab-tab="supplies"]')?.click();
-        },{cls:"hu-shell-supplies"});
-        const suppliesIcon=document.querySelector('.menu-item[data-seccion="cierre"] svg')?.cloneNode(true);
-        if(suppliesIcon)supplies.prepend(suppliesIcon);
-        const moreIcon=el("img","hu-icono");moreIcon.src="assets/huespedes/nav-more.svg";moreIcon.alt="";more.prepend(moreIcon);
-        shellNav.append(supplies,more);
-        const logo=document.querySelector(".sites-shell-sidebar .logo");
-        logo?.after(box("hu-shell-brand",el("strong","","HAKU"),muted("Operación")));
-    }
     searchIcon.append(icon("search"));
     root.querySelector("[name=hu-buscar]").oninput=event=>{
         clearTimeout(timer);
