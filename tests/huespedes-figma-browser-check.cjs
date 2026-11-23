@@ -35,9 +35,11 @@ function shell(page){
 }
 async function assertSharedShell(page){
  const menu=page.locator('.sites-shell-sidebar nav.menu');
+ await settled(page);
  const guestShell=await shell(page);
  await menu.locator('[data-seccion=calendario]').evaluate(button=>button.click());
  await page.locator('#seccion-calendario.activa').waitFor();
+ await settled(page);
  assert.deepEqual(guestShell,await shell(page),'Huéspedes usa el mismo encabezado y menú que Calendario');
  await menu.locator('[data-seccion=huespedes]').evaluate(button=>button.click());
  await page.locator('#seccion-huespedes.activa').waitFor();
