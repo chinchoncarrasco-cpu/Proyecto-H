@@ -107,7 +107,7 @@ async function preparar(page, tema, movil) {
             const revision = pagos.first().locator(".haku-cloudbeds-informes__revision-pago");
             assert.match(await revision.innerText(), /Saldo después CLP \$75\.000/);
             assert.equal(await revision.evaluate(e => getComputedStyle(e).backgroundColor),
-                tema === "oscuro" ? "rgb(40, 56, 47)" : "rgb(238, 244, 239)");
+                tema === "oscuro" ? "rgb(43, 38, 45)" : "rgb(250, 246, 243)");
             assert.equal(await revision.locator(".haku-cloudbeds-informes__pago-resumen").evaluate(e => getComputedStyle(e).display), movil ? "block" : "grid");
             const cambios = await grupo.evaluate(async e => {
                 const contenedor = e.querySelector(".haku-cloudbeds-informes__grupo-pagos");
