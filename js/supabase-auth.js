@@ -220,7 +220,7 @@
 
     function validarSesion(session) {
         if (!session?.user) {
-            cerrarSesionLocal("Sin sesión activa.");
+            cerrarSesionLocal("Ingresa para continuar.");
             return Promise.resolve(false);
         }
         const { access_token: token, user: { id: usuario } } = session;
@@ -428,7 +428,7 @@
             if (data.session) {
                 await validarSesion(data.session);
             } else {
-                mostrarLogin("Sin sesión activa.");
+                mostrarLogin("Ingresa para continuar.");
             }
         } catch (error) {
             console.error(
