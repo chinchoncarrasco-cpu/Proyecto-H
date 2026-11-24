@@ -13,7 +13,7 @@
     const detail = root.querySelector(".hu-ficha");
     const dialog = root.querySelector("dialog");
     const roles = {titular:"Titular", acompanante:"Acompañante", borrador:"Borrador"};
-    const labels = {todos:"Todos", hospedados:"Hospedados", historial:"Historial", pendientes:"Por completar"};
+    const labels = {todos:"Todos", hospedados:"Hospedados", historial:"Historial", pendientes:"Por completar", completados:"Completados"};
     const stayGroups = {hospedados:"Hospedados ahora", por_ingresar:"Por ingresar", historial:"Historial"};
     const groups = ["Motivo","Compañía","Intereses","Atención"];
     const filtersState = {p_estado:"todos",p_busqueda:null,p_tipo:null,p_origen:null,p_etiqueta:null};
@@ -208,7 +208,7 @@
             sections.push(group);
         }
         directory.replaceChildren(...(sections.length?[heading,...sections]:[message("No hay estadías para estos filtros.")]));
-        if (sections.length) directory.append(box("hu-lista-pie",muted(totals.textContent),muted("Orden por cabaña")));
+        if (sections.length) directory.append(box("hu-lista-pie",muted(totals.textContent),muted("Check-in más reciente primero")));
         if (data.filas.length < count) directory.append(btn("Cargar más",event=>{
             const button=event.currentTarget;
             button.disabled=true;
