@@ -84,6 +84,7 @@ const day = '2026-01-19';
    await seed(); const {page,errores}=await abrir(width,theme);
    const tasks=page.locator('#cabinsGeneralTasks');
    assert.equal(await tasks.locator('.tg-task').count(),6);
+   assert.equal(await tasks.locator('.tg-table').first().evaluate(n=>getComputedStyle(n).backgroundColor),theme==='claro'?'rgb(255, 253, 251)':'rgb(35, 31, 37)');
    assert.ok(await page.evaluate(()=>document.querySelector('#aseo-resumen').compareDocumentPosition(document.querySelector('#cabinsGeneralTasks'))&Node.DOCUMENT_POSITION_FOLLOWING));
    const filtros=await page.locator('#cabinsFilters').evaluate(n=>({client:n.clientWidth,scroll:n.scrollWidth,buttons:n.children.length}));
    assert.equal(filtros.buttons,8); if(width<700)assert.ok(filtros.scroll<=filtros.client+1);

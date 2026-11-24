@@ -47,8 +47,8 @@ main.contenido.sites-shell-main:has(> #seccion-huespedes.activa){max-width:none;
 }
 .hu-estadia-grupo-cabecera h3{display:flex;align-items:center;gap:8px;margin:0;font-size:13px;line-height:19px;font-weight:600}
 .hu-estadia-grupo-cabecera h3::before{content:"";width:7px;height:7px;flex:none;border-radius:50%;background:var(--guest-muted)}
-[data-estadia-estado=hospedados]>.hu-estadia-grupo-cabecera h3{color:var(--guest-accent)}
-[data-estadia-estado=hospedados]>.hu-estadia-grupo-cabecera h3::before{background:var(--guest-accent)}
+[data-estadia-estado=hospedados]>.hu-estadia-grupo-cabecera h3{color:var(--cereza-verde)}
+[data-estadia-estado=hospedados]>.hu-estadia-grupo-cabecera h3::before{background:currentColor}
 .hu-estadia-item{border-bottom:1px solid var(--guest-border)}
 .hu-estadia-grupo .hu-estadia-item:last-child{border-bottom:0}
 .hu-estadia-grupo+.hu-estadia-grupo,.hu-lista-pie{border-top:1px solid var(--guest-border)}

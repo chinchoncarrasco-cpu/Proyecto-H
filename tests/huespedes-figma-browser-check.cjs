@@ -88,6 +88,10 @@ async function assertSharedShell(page){
    await page.evaluate(()=>document.fonts.ready);
    await page.waitForFunction(()=>document.querySelector('.hu-avatar-perfil img')?.complete);
    await assertSharedShell(page);
+   const primary=theme==='claro'?'rgb(120, 38, 63)':'rgb(145, 59, 87)';
+   const selected=theme==='claro'?'rgb(243, 228, 233)':'rgb(64, 38, 49)';
+   assert.equal(await section.locator('.huespedes-titulo [data-primario]').evaluate(n=>getComputedStyle(n).backgroundColor),primary);
+   assert.equal(await section.locator('.hu-estadia-fila').filter({has:page.locator('.hu-estadia-titular[aria-current="true"]')}).evaluate(n=>getComputedStyle(n).backgroundColor),selected);
    await settled(page);await page.screenshot({path:path.join(out,'web-'+theme+'-perfil.png'),fullPage:true});
    measurements.push({client:'web',theme,geometry:await section.evaluate(n=>Object.fromEntries(['.hu-layout','.hu-lista','.hu-ficha','.hu-estadia-fila'].map(key=>{const r=n.querySelector(key).getBoundingClientRect();return [key,{x:r.x,y:r.y,w:r.width,h:r.height}];})))});
    const geometry=measurements.at(-1).geometry;
@@ -118,6 +122,7 @@ async function assertSharedShell(page){
    await page.setViewportSize({width:390,height:850});
    await assertSharedShell(page);
    assert.ok(await section.evaluate(node=>node.scrollWidth<=node.clientWidth+1),'Huéspedes cabe en el ancho del móvil');
+   assert.equal(await section.locator('.hu-chip[aria-pressed="true"]').evaluate(n=>getComputedStyle(n).backgroundColor),selected);
    assert.deepEqual(errors,[]);await page.close();
    if(!native)continue;
    const mobile=await browser.newPage({viewport:{width:390,height:1141},colorScheme:theme==='oscuro'?'dark':'light',hasTouch:true,isMobile:true});

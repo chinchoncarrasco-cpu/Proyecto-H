@@ -75,17 +75,17 @@ html[data-haiku-tema="oscuro"] .haku-guia-imagen {
     width: 44px;
     height: 44px;
     padding: 0;
-    border: 1px solid #d3e3d8;
+    border: 1px solid var(--cereza-linea-fuerte);
     border-radius: 50%;
-    background: #203d30;
-    color: #f8fbf8;
+    background: var(--cereza-primario);
+    color: var(--cereza-sobre-primario);
     box-shadow: 0 5px 18px #182d2235;
     font: inherit;
     font-size: 18px;
     font-weight: 760;
     letter-spacing: -.09em;
 }
-.haiku-asistente-root .haiku-asistente-boton:hover { background: #2b644d; transform: translateY(-2px); }
+.haiku-asistente-root .haiku-asistente-boton:hover { background: var(--cereza-primario); transform: translateY(-2px); }
 .haiku-asistente-root .haiku-asistente-boton[aria-expanded="true"] { visibility: hidden; }
 .haiku-asistente-root .haiku-asistente-overlay {
     position: fixed;
@@ -134,8 +134,8 @@ html[data-haiku-tema="oscuro"] .haku-guia-imagen {
     height: 34px;
     padding-right: 2px;
     border-radius: 9px;
-    background: #203f32;
-    color: #f2f8f3;
+    background: var(--cereza-primario);
+    color: var(--cereza-sobre-primario);
     font-size: 18px;
     font-weight: 740;
     letter-spacing: -.1em;
@@ -458,7 +458,7 @@ html[data-haiku-tema="oscuro"] .haku-guia-imagen {
 .haiku-asistente-root .haiku-asistente-panel .haiku-asistente-quitar:hover { background: var(--cereza-verde-fondo); }
 
 .haiku-asistente-root .haiku-asistente-panel :is(button, textarea, summary):focus-visible,
-.haiku-asistente-root .haiku-asistente-boton:focus-visible { outline: 3px solid #93bca9; outline-offset: 2px; }
+.haiku-asistente-root .haiku-asistente-boton:focus-visible { outline: 3px solid var(--cereza-acento); outline-offset: 2px; }
 @media (max-width: 600px) {
     .haiku-asistente-root .haiku-asistente-panel {
         inset: 0 !important;

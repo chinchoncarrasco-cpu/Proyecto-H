@@ -50,6 +50,9 @@ const scripts = new Set(['js/historial.js', 'js/calendario.js', 'js/checklist.js
     window.HAIKU_CABANAS_SITES_V1.pintar();
    }, theme);
    await page.locator('.menu-item[data-seccion="cabanas"]').click();
+   const surface=theme==='claro'?'rgb(255, 253, 251)':'rgb(35, 31, 37)';
+   const accent=theme==='claro'?'rgb(120, 38, 63)':'rgb(240, 173, 191)';
+   const background=locator=>locator.evaluate(n=>getComputedStyle(n).backgroundColor);
    assert.deepEqual(await page.locator('#cabinsSummary .cb-summary-count').allTextContents(), ['2','1','8']);
    assert.deepEqual(await page.locator('#cabinsSummary .cb-cabin-number').allTextContents(), ['3','7','5','1','2','4','6','8','9','10','11']);
    const summary = await page.locator('#cabinsSummary').boundingBox();
@@ -59,6 +62,9 @@ const scripts = new Set(['js/historial.js', 'js/calendario.js', 'js/checklist.js
    assert.equal(await page.locator('.cb-tracking-row [data-supply-open]').count(), 0);
    assert.deepEqual(await page.locator('[data-cb-elapsed]').allTextContents(), ['36 min','23 min']);
    await page.locator('[data-cab-tab="supplies"]').click();
+   assert.equal(await background(page.locator('#cabinsSuppliesSummary')),surface);
+   assert.equal(await background(page.locator('.cb-supply-cabin').first()),surface);
+   assert.equal(await page.locator('.cb-supply-cabin .cb-outline').first().evaluate(n=>getComputedStyle(n).color),accent);
    const details = page.locator('[data-insumos-destinos]');
    await details.locator('summary').click();
    assert.equal(await details.getAttribute('open'), '');
@@ -100,11 +106,34 @@ const scripts = new Set(['js/historial.js', 'js/calendario.js', 'js/checklist.js
    assert.equal(await page.locator('[data-cab-tab="review"]').count(), 0);
    await page.locator('[data-cab-tab="supplies"]').click();
    assert.equal(await page.locator('#cabinsSuppliesCabins article').count(), 11);
+   await page.evaluate(()=>{
+    window.haikuSesion={auth:{id:'usuario-sintetico'}};
+    window.haikuSupabase={async rpc(name,{p_fecha}) {
+     if(name==='haiku_operacion_dia') return {data:[{fecha:p_fecha,numero:3,cabana_id:'cab-3',salida_estadia_id:'salida-prueba',salida_titular:'Titular de prueba'}]};
+     if(name==='haiku_revisiones_checkout_dia_v2') return {data:{fecha:p_fecha,puede_editar:false,revisiones:[{
+      fecha_operativa:p_fecha,cabana_id:'cab-3',estadia_id:'salida-prueba',revision:1,
+      hora_out:null,hora_out_definida:false,encargado:'',recuperados:[],revision_estado:'pendiente',chequeados:['llaves']
+     }]}};
+     throw new Error('RPC inesperada: '+name);
+    }};
+   });
+   await page.locator('[data-cab-tab="checkout"]').click();
+   const checkout=page.locator('#cabinsCheckout .co-list-row');
+   await checkout.waitFor();
+   const review=checkout.locator('button.co-primary');
+   await review.waitFor();
+   assert.equal(await background(checkout),surface);
+   assert.equal(await background(review),theme==='claro'?'rgb(120, 38, 63)':'rgb(145, 59, 87)');
+   if(width<=720) {
+    assert.equal(await page.locator('#cabinsCheckoutList').evaluate(n=>getComputedStyle(n).borderTopWidth),'0px');
+    assert.equal(await checkout.evaluate(n=>getComputedStyle(n).borderBottomColor),theme==='claro'?'rgb(231, 222, 218)':'rgb(58, 50, 60)');
+   }
+   if(process.env.HAKU_UI_SHOTS) await page.locator('#seccion-cabanas').screenshot({path:path.join(process.env.HAKU_UI_SHOTS,`checkout-${width}-${theme}.png`)});
    const overflow = await page.locator('#seccion-cabanas').evaluate(n => n.scrollWidth - n.clientWidth);
    assert.ok(overflow <= 1, 'sin desborde horizontal: ' + overflow);
    assert.deepEqual(errors, []);
    await page.close();
-   console.log('Web ' + width + 'px ' + theme + ': resumen, seguimiento, destinos y revisión alineada OK.');
+   console.log('Web ' + width + 'px ' + theme + ': resumen, seguimiento, insumos y Check out OK.');
   }
  } finally { await browser.close(); }
 })().catch(e => { console.error(e); process.exitCode = 1; });

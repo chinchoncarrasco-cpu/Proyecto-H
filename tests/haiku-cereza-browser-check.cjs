@@ -83,6 +83,9 @@ async function run() {
                 if (width >= 1171) assert.ok((await header.boundingBox()).height <= 64, "la navegación comparte una línea");
                 assert.equal(await header.evaluate(n => getComputedStyle(n).backgroundColor), expected.shell);
                 assert.equal(await page.locator("#boton-nueva-reserva").evaluate(n => getComputedStyle(n).backgroundColor), expected.primary);
+                assert.equal(await bubble.evaluate(n => getComputedStyle(n).backgroundColor), expected.primary);
+                await bubble.hover();
+                assert.equal(await bubble.evaluate(n => getComputedStyle(n).backgroundColor), expected.primary, "la Burbuja mantiene el cereza al pasar el puntero");
                 for (const target of [chat, page.locator("#haiku-tema-boton"), nav, group, page.locator("#busqueda-palabra")]) {
                     const box = await target.boundingBox();
                     assert.ok(box && box.x >= 0 && box.x + box.width <= width + 1, "controles dentro de la ventana");
