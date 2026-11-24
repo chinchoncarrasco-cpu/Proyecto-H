@@ -19,6 +19,7 @@ test('directorio por estadía, asociaciones, filtros y permisos', async () => {
       'supabase/migrations/20261122014301_huespedes_directorio_estadias.sql',
       'supabase/migrations/20261122042015_huespedes_vigencia_hospedados.sql',
       'supabase/migrations/20261124010200_huespedes_completados_orden_checkin.sql',
+      'supabase/migrations/20261124021200_huespedes_completados_ficha_titular.sql',
     ]) await db.exec(read(file));
     await db.exec("set time zone 'America/Santiago'");
     await db.exec(read('tests/huespedes-v1-postgres.test.sql').split('set local role authenticated;')[0] + 'commit;');
@@ -58,17 +59,39 @@ test('directorio por estadía, asociaciones, filtros y permisos', async () => {
     const pending = await directory('pendientes');
     const completed = await directory('completados');
     assert.deepEqual(pending.filas.map(row=>row.estadia_id),[stay(1),stay(6),stay(4),stay(3),stay(2)]);
-    assert.deepEqual(completed.filas.map(row=>row.estadia_id),[stay(8),stay(5)],'el check-in más reciente va primero aunque sea de otra cabaña');
-    assert.ok(completed.filas.every(row=>!row.pendiente));
-    assert.equal(completed.conteos.completados,2);
-    assert.equal(all.conteos.completados+all.conteos.pendientes,all.conteos.todos);
+    assert.deepEqual(completed.filas.map(row=>row.estadia_id),[stay(1),stay(4),stay(3),stay(2),stay(8),stay(5)],
+      'fichas completas ordenadas por check-in dentro de cada grupo');
+    const completedWithPendingCompanion = completed.filas.find(row=>row.estadia_id===stay(1));
+    assert.equal(completedWithPendingCompanion.pendiente,true);
+    assert.equal(completedWithPendingCompanion.foto,null,'la foto es recomendada');
+    assert.equal('ficha_completa' in completedWithPendingCompanion,false,'conserva el contrato del directorio');
+    assert.equal(completed.conteos.completados,6);
+    assert.equal(pending.conteos.completados,6);
+    assert.equal(all.conteos.completados,6);
     assert.deepEqual((await directory('completados','Ciro','Loft')).filas.map(row=>row.estadia_id),[stay(5)]);
-    assert.deepEqual((await directory('completados',null,null,null,1)).filas.map(row=>row.estadia_id),[stay(5)]);
+    assert.deepEqual((await directory('completados',null,null,null,4)).filas.map(row=>row.estadia_id),[stay(8),stay(5)]);
     assert.deepEqual((await directory('todos',null,null,null,4)).filas.map(row=>row.estadia_id),[stay(2),stay(8),stay(5)]);
     const legacy = (await db.query("select public.haiku_huesped_directorio_v1('todos','XY790') data")).rows[0].data;
     assert.equal(legacy.filas[0].id,guest(3),'el buscador de vinculación admite perfiles sin estadía');
 
     await db.exec('reset role');
+    for (const [field, update] of [
+      ['identificación del titular', 'update public.huespedes set tipo_documento=null,numero_documento=null where id=$1'],
+      ['etiquetas', 'delete from public.haiku_huesped_etiquetados where ficha_id=$1'],
+      ['preferencias', "update public.haiku_huesped_registros set texto=chr(9)||chr(10) where ficha_id=$1 and categoria='preferencia'"],
+      ['notas', "update public.haiku_huesped_registros set texto='   ' where ficha_id=$1 and categoria='nota'"],
+    ]) {
+      await db.exec('begin');
+      try {
+        await db.query(update,[guest(1)]);
+        await db.exec('set local role authenticated');
+        const remaining = await directory('completados');
+        assert.deepEqual(remaining.filas.map(row=>row.estadia_id),[stay(4),stay(3),stay(8)],field);
+        assert.equal(remaining.conteos.completados,3,field);
+      } finally {
+        await db.exec('rollback');
+      }
+    }
     await db.query("update public.reservas set estado_reserva='hospedada' where id=$1",
       ['a2000000-0000-4000-8000-000000000001']);
     await db.query(`update public.reserva_estadias
@@ -101,6 +124,7 @@ test('directorio por estadía, asociaciones, filtros y permisos', async () => {
 
     await login(2);
     assert.equal((await directory()).puede_editar,false);
+    assert.equal((await directory('completados')).filas.length,6);
     await login(3);
     await assert.rejects(directory(), /No tienes permiso/);
     await assert.rejects(directory('completados'), /No tienes permiso/);
