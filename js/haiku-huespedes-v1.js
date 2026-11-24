@@ -23,6 +23,8 @@
     const expandedStays = new Map();
     let data, profile, selected, activeStay, listRequest = 0, detailRequest = 0, timer, scrollY = 0;
     let historyOpen = false, baseOpen = false, sessionKey;
+    let photoViewer, suspendedForm, disposeForm;
+    const privacyBlocked = () => document.documentElement.classList.contains("haiku-privacidad-bloqueada");
 
     function el(tag,cls,...children) {
         const item = document.createElement(tag);
@@ -88,15 +90,26 @@
         if (["23505","HLI01"].includes(error?.code)) return "El documento ya está registrado. Busca y vincula el perfil correcto.";
         return error?.message || "No se pudo conectar con Proyecto H.";
     }
-    function showPhoto(src,label,remove) {
+    function closePhoto() {
+        const viewer=photoViewer;
+        photoViewer=undefined;
+        if(!viewer)return;
+        if(viewer.open)viewer.close();
+        viewer.remove();
+    }
+    function showPhoto(src,label,{remove,positionY}={}) {
+        if(privacyBlocked()||!allowed())return;
+        closePhoto();
         const image=el("img","");
         image.src=src;image.alt=label;
-        const close=btn("Cerrar foto",()=>viewer.close(),{glyph:"close",iconOnly:true});
+        if(positionY!=null)image.style.objectPosition="50% "+positionY+"%";
+        const close=btn("Cerrar foto",closePhoto,{cls:"hu-photo-close",glyph:"close",iconOnly:true});
         const viewer=el("dialog","hu-dialogo hu-photo-viewer",close,image,
-            remove&&btn("Quitar foto",()=>{remove();viewer.close();}));
+            remove&&btn("Quitar foto",()=>{remove();closePhoto();},{cls:"hu-photo-remove"}));
         viewer.setAttribute("aria-label",label);
-        viewer.addEventListener("click",event=>{if(event.target===viewer)viewer.close();});
-        viewer.addEventListener("close",()=>viewer.remove(),{once:true});
+        viewer.addEventListener("click",event=>{if(event.target===viewer)closePhoto();});
+        viewer.addEventListener("close",()=>{if(photoViewer===viewer)closePhoto();},{once:true});
+        photoViewer=viewer;
         root.append(viewer);viewer.showModal();close.focus();
     }
     function message(text,retry) { return box("hu-empty",el("p","",text),retry&&btn("Reintentar",retry)); }
@@ -261,11 +274,19 @@
     function vehicleVisual(vehicle) {
         const path=vehicle.foto||vehicle.fotos_adicionales?.[0];
         if(!path) return "vehicle";
+        const positionY=vehicle.foto ? vehicle.foto_posicion_y??50 : undefined;
         const image=el("img","hu-vehiculo-miniatura");
         image.alt="";
-        if(vehicle.foto)image.style.objectPosition="50% "+(vehicle.foto_posicion_y??50)+"%";
-        api.signed(path).then(src=>{if(image.isConnected)image.src=src;}).catch(()=>{});
-        return image;
+        if(positionY!=null)image.style.objectPosition="50% "+positionY+"%";
+        const thumb=btn("Ampliar foto del vehículo",()=>showPhoto(image.src,"Foto del vehículo",{positionY}),
+            {cls:"hu-vehicle-thumb",iconOnly:true});
+        thumb.append(icon("vehicle"));thumb.disabled=true;
+        image.onload=()=>{
+            if(!thumb.isConnected)return;
+            thumb.replaceChildren(image);thumb.disabled=false;
+        };
+        api.signed(path).then(src=>{if(thumb.isConnected)image.src=src;}).catch(()=>{});
+        return thumb;
     }
     function group(title,action,...rows) {
         return box("hu-separador hu-bloque"+(/^(Acompañantes|Integrantes|Perfil de esta)/.test(title)?" hu-sin-borde":""),box("hu-subtitulo",el("h4","",title),action),
@@ -369,6 +390,32 @@
     function sameView(ctx) {
         return ctx.revision===detailRequest&&ctx.session===sessionKey;
     }
+    function clearForm() {
+        disposeForm?.();
+        disposeForm=undefined;
+        dialog.replaceChildren();
+    }
+    function dismissDialogs() {
+        closePhoto();
+        suspendedForm=undefined;
+        if(dialog.open)dialog.close();
+        clearForm();
+    }
+    function syncPrivacy() {
+        if(privacyBlocked()) {
+            closePhoto();
+            if(dialog.open) {
+                suspendedForm=dialog.firstElementChild;
+                dialog.close();
+            }
+        } else if(suspendedForm) {
+            const form=suspendedForm;
+            suspendedForm=undefined;
+            if(dialog.firstElementChild!==form)return;
+            if(allowed())dialog.showModal();
+            else clearForm();
+        }
+    }
     dialog.addEventListener("cancel",event=>{
         if(dialog.firstElementChild?.getAttribute("aria-busy")==="true") event.preventDefault();
     });
@@ -397,8 +444,10 @@
                 closer.disabled=backButton.disabled=confirm.disabled=false;
             }
         };
-        dialog.replaceChildren(form);
-        if(!dialog.open) dialog.showModal();
+        clearForm();
+        dialog.append(form);
+        if(privacyBlocked())suspendedForm=form;
+        else if(!dialog.open)dialog.showModal();
         return form;
     }
     function write(action,payload,ctx) {
@@ -406,7 +455,12 @@
         return api.rpc("guardar",{p_id:ctx?.id??null,p_reserva:ctx?.res??null,p_accion:action,p_datos:payload});
     }
     async function refresh(ctx,form,id=ctx.id) {
-        if(dialog.open&&dialog.firstElementChild===form) dialog.close();
+        if(dialog.firstElementChild===form) {
+            if(suspendedForm===form) {
+                suspendedForm=undefined;
+                clearForm();
+            } else if(dialog.open)dialog.close();
+        }
         if(!sameView(ctx)) return;
         const loading=openProfile(id,ctx.res,id===ctx.id);
         const revision=detailRequest;
@@ -587,7 +641,7 @@
         form.querySelector("footer button").textContent="Volver al huésped";
         if(vehicle){
             form.classList.add("hu-vehicle-form");
-            dialog.addEventListener("close",gallery.dispose,{once:true});
+            disposeForm=gallery.dispose;
         }
         if(!edit) form.querySelectorAll("input,select,textarea").forEach(x=>{x.disabled=true;});
     }
@@ -634,10 +688,11 @@
             list.replaceChildren(...items.map((item,i)=>{
                 const label="Foto adicional "+(i+1),image=el("img","");
                 image.alt="";
-                const thumb=btn(label,()=>showPhoto(image.src,label,edit?()=>{
+                const remove=edit?()=>{
                     if(item.url)URL.revokeObjectURL(item.url);
                     items.splice(items.indexOf(item),1);render();
-                }:null),{cls:"hu-gallery-thumb",iconOnly:true});
+                }:undefined;
+                const thumb=btn(label,()=>showPhoto(image.src,label,{remove}),{cls:"hu-gallery-thumb",iconOnly:true});
                 thumb.append(image);thumb.disabled=true;
                 Promise.resolve(item.url||api.signed(item.value)).then(src=>{
                     if(thumb.isConnected&&src){image.src=src;thumb.disabled=false;}
@@ -790,7 +845,9 @@
     root.querySelector("[data-hu-registrar]").onclick=()=>{
         if(profile?.puede_editar) editRecord({});
     };
-    dialog.addEventListener("close",()=>{if(!dialog.open) dialog.replaceChildren();});
+    dialog.addEventListener("close",()=>{if(!dialog.open&&!suspendedForm)clearForm();});
+    window.addEventListener("haiku:privacidad-cambio",syncPrivacy);
+    new MutationObserver(syncPrivacy).observe(document.documentElement,{attributes:true,attributeFilter:["class"]});
     menu.addEventListener("click",()=>{if(allowed()) void list(Boolean(data));});
     function session(){
         const user=window.haikuSesion?.auth?.id;
@@ -806,7 +863,7 @@
         expandedStays.clear();
         directory.replaceChildren();detail.replaceChildren(message("Selecciona un huésped."));
         totals.textContent="";root.dataset.ficha="false";
-        if(dialog.open) dialog.close();
+        dismissDialogs();
         if(allowed()&&root.classList.contains("activa")) void list();
         else if(menu.hidden&&root.classList.contains("activa")) document.querySelector('[data-seccion="resumen"]')?.click();
     }
@@ -819,7 +876,7 @@
             data=profile=selected=activeStay=undefined;
             expandedStays.clear();
             directory.replaceChildren();detail.replaceChildren();totals.textContent="";
-            if(dialog.open) dialog.close();
+            dismissDialogs();
         }
     });
     if(window.haikuSesion) session();
