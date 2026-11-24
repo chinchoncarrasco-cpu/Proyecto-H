@@ -44,13 +44,13 @@ const day = '2026-01-19';
   };
   async function seed() {
    await cola; await db.exec('reset role; truncate tareas_generales_movimientos,tareas_generales; set role authenticated');
-   for (const tipo of ['lavanderia','cocina','recepcion','jardines_terraza','banos']) await command(tipo,'asignar',0,{encargado:'Camila',revisor:'Felipe'});
+   for (const tipo of ['lavanderia','cocina','recepcion','jardines_terraza']) await command(tipo,'asignar',0,{encargado:'Camila',revisor:'Felipe'});
    await command('lavanderia','iniciar',1); await command('cocina','realizar',1);
    await command('recepcion','realizar',1); await command('recepcion','verificar',2);
    await command('jardines_terraza','asignar',0,{encargado:'Camila'},'2026-01-18');
    await command('jardines_terraza','nota',1,{nota:'Revisar limpieza del turno anterior.'},'2026-01-18');
   }
-  browser = await chromium.launch({ headless:true });
+  browser = await chromium.launch({ headless:true, executablePath:process.env.HAIKU_BROWSER_PATH||undefined });
   async function abrir(width, theme) {
    const page = await browser.newPage({ viewport:{width,height:1000},timezoneId:'America/Santiago' });
    const errores=[]; page.on('pageerror', e => errores.push(e.message));
@@ -80,7 +80,7 @@ const day = '2026-01-19';
    await page.locator('.menu-item[data-seccion="cabanas"]').click();
    return {page,errores};
   }
-  for(const width of [1440,390,320])for(const theme of ['claro','oscuro']){
+  for(const width of [1440,1180,390,320])for(const theme of ['claro','oscuro']){
    await seed(); const {page,errores}=await abrir(width,theme);
    const tasks=page.locator('#cabinsGeneralTasks');
    assert.equal(await tasks.locator('.tg-task').count(),6);
@@ -88,6 +88,14 @@ const day = '2026-01-19';
    assert.ok(await page.evaluate(()=>document.querySelector('#aseo-resumen').compareDocumentPosition(document.querySelector('#cabinsGeneralTasks'))&Node.DOCUMENT_POSITION_FOLLOWING));
    const filtros=await page.locator('#cabinsFilters').evaluate(n=>({client:n.clientWidth,scroll:n.scrollWidth,buttons:n.children.length}));
    assert.equal(filtros.buttons,8); if(width<700)assert.ok(filtros.scroll<=filtros.client+1);
+   const banos=tasks.locator(`[data-tg-key="${day}:banos"]`);
+   assert.equal(await banos.locator('[data-tg-state]').isDisabled(),true);
+   assert.equal(await banos.locator('[data-tg-state-hint]').isVisible(),false);
+   assert.equal(await tasks.locator('.tg-assignment-guide').isVisible(),true);
+   assert.equal(await banos.locator('[data-tg-save-assignment]').isVisible(),false);
+   assert.equal(await banos.locator('[data-tg-action="nota"]').isVisible(),false);
+   const pendingBox=await banos.locator('.tg-row').boundingBox();
+   assert.ok(pendingBox.height<=(width>1100?66:174),`fila pendiente compacta a ${width}px: ${pendingBox.height}px`);
    const jardines=tasks.locator(`[data-tg-key="${day}:jardines_terraza"]`);
    assert.equal(await jardines.locator('.tg-detail').count(),0);
    assert.equal(await jardines.locator('.tg-row input').count(),2);
@@ -133,7 +141,7 @@ const day = '2026-01-19';
    await jardines.getByRole('button',{name:'Historial de Limpiar jardines y terraza',exact:true}).click();
    const dimensiones=await jardines.locator('.tg-row').evaluate(n=>({height:n.getBoundingClientRect().height,client:n.clientWidth,scroll:n.scrollWidth}));
    assert.ok(dimensiones.scroll<=dimensiones.client+1,`controles dentro de la fila en ${width}/${theme}`);
-   assert.ok(dimensiones.height<(width>1100?155:340),`fila compacta en ${width}/${theme}: ${dimensiones.height}`);
+   assert.ok(dimensiones.height<(width>1100?82:202),`fila compacta en ${width}/${theme}: ${dimensiones.height}`);
    if(process.env.HAKU_UI_SHOTS){fs.mkdirSync(process.env.HAKU_UI_SHOTS,{recursive:true});await tasks.screenshot({path:path.join(process.env.HAKU_UI_SHOTS,`tareas-${width}-${theme}.png`)});}
    assert.deepEqual(errores,[]); await page.close();
    console.log(`PASS tareas generales, filtros y revisión: ${width}px ${theme}`);
