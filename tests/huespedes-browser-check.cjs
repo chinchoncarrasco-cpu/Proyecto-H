@@ -17,6 +17,26 @@ const allowed = new Set(['js/historial.js','js/calendario.js','js/checklist.js',
   'js/haiku-huespedes-api-v1.js','js/haiku-huespedes-v1.js']);
 const sqlFile = filename => fs.readFileSync(path.join(root, filename), 'utf8');
 
+async function assertCenteredPhoto(photo) {
+  await photo.waitFor();
+  const {x,y,width,height,viewportWidth,viewportHeight,radius} = await photo.evaluate(image=>{
+    const {x,y,width,height}=image.getBoundingClientRect();
+    return {x,y,width,height,viewportWidth:document.documentElement.clientWidth,
+      viewportHeight:document.documentElement.clientHeight,radius:getComputedStyle(image).borderRadius};
+  });
+  assert.ok(width>100&&width===height,'el visor conserva una burbuja redonda');
+  assert.equal(radius,'50%');
+  assert.ok(Math.abs(x+width/2-viewportWidth/2)<=2,'foto centrada en horizontal');
+  assert.ok(Math.abs(y+height/2-viewportHeight/2)<=2,'foto centrada en vertical');
+}
+
+function setPrivacyState(page,blocked) {
+  return page.evaluate(bloqueada=>{
+    document.documentElement.classList.toggle('haiku-privacidad-bloqueada',bloqueada);
+    window.dispatchEvent(new CustomEvent('haiku:privacidad-cambio',{detail:{bloqueada}}));
+  },blocked);
+}
+
 (async () => {
   const db = new PGlite();
   const images = new Map();
@@ -191,10 +211,11 @@ const sqlFile = filename => fs.readFileSync(path.join(root, filename), 'utf8');
         await card.getByRole('button',{name:'Ampliar foto de perfil',exact:true}).click();
         await viewer.waitFor();
         const portraitImage=viewer.getByRole('img',{name:'Foto de perfil',exact:true});
-        const portrait=await portraitImage.boundingBox();
-        assert.ok(portrait.width>100&&portrait.width===portrait.height);
-        assert.equal(await portraitImage.evaluate(n=>getComputedStyle(n).borderRadius),'50%');
-        await viewer.getByRole('button',{name:'Cerrar foto'}).click();
+        await assertCenteredPhoto(portraitImage);
+        await setPrivacyState(page,true);
+        await viewer.waitFor({state:'detached'});
+        await setPrivacyState(page,false);
+        assert.equal(await viewer.count(),0,'el desbloqueo mantiene el visor cerrado');
         await card.locator('summary[aria-label="Más opciones del huésped"]').click();
         await card.getByRole('button',{name:'Agregar vehículo',exact:true}).click();
         const vehicleForm=section.locator('.hu-vehicle-form');
@@ -215,6 +236,15 @@ const sqlFile = filename => fs.readFileSync(path.join(root, filename), 'utf8');
         await vehicleForm.getByLabel('Seleccionar fotos adicionales',{exact:true}).setInputFiles(file);
         const thumb=vehicleForm.getByRole('button',{name:'Foto adicional 1',exact:true});
         await thumb.click();
+        await setPrivacyState(page,true);
+        await viewer.waitFor({state:'detached'});
+        await vehicleForm.waitFor({state:'hidden'});
+        assert.equal(await section.locator('dialog[open]').count(),0,'el PIN tiene acceso sin un diálogo modal delante');
+        await setPrivacyState(page,false);
+        await vehicleForm.waitFor();
+        assert.equal(await vehicleForm.getByLabel('Tipo de vehículo').inputValue(),type);
+        await thumb.click();
+        await viewer.getByRole('img',{name:'Foto adicional 1',exact:true}).evaluate(image=>image.decode());
         await viewer.getByRole('button',{name:'Cerrar foto'}).click();
         assert.equal(await vehicleForm.evaluate(node=>node.scrollWidth>node.clientWidth+1),false);
         await vehicleForm.getByRole('button',{name:'Guardar vehículo',exact:true}).click();
@@ -230,10 +260,28 @@ const sqlFile = filename => fs.readFileSync(path.join(root, filename), 'utf8');
         assert.equal(await thumbnail.evaluate(image=>getComputedStyle(image).objectPosition),'50% '+position+'%');
         const tile=await thumbnail.boundingBox();
         assert.deepEqual([tile.width,tile.height],[34,34]);
+        const enlargeVehicle=vehicleRow.getByRole('button',{name:'Ampliar foto del vehículo',exact:true});
+        const vehicleImage=viewer.getByRole('img',{name:'Foto del vehículo',exact:true});
+        await enlargeVehicle.click();
+        await assertCenteredPhoto(vehicleImage);
+        assert.equal(await vehicleImage.evaluate(image=>getComputedStyle(image).objectPosition),'50% '+position+'%');
+        await page.keyboard.press('Escape');
+        await viewer.waitFor({state:'detached'});
 
         const openVehicle=vehicleRow.getByRole('button',{name:'Ver perfil',exact:true});
         const saveVehicle=vehicleForm.getByRole('button',{name:'Guardar vehículo',exact:true});
         await openVehicle.click();
+        const framedPhoto=vehicleForm.locator('.hu-vehicle-photo>img');
+        await framedPhoto.evaluate(image=>image.decode());
+        const framing=await framedPhoto.evaluate(image=>{
+          const photo=image.getBoundingClientRect(),box=image.parentElement.getBoundingClientRect();
+          return {width:photo.width,height:photo.height,frameWidth:box.width,frameHeight:box.height,
+            position:getComputedStyle(image).objectPosition,fit:getComputedStyle(image).objectFit};
+        });
+        assert.ok(Math.abs(framing.width-framing.frameWidth)<=2&&Math.abs(framing.height-framing.frameHeight)<=2,
+          'la foto ocupa el encuadre completo sin desbordarlo');
+        assert.equal(framing.position,'50% '+position+'%');
+        assert.equal(framing.fit,'cover');
         await vehicleForm.getByLabel('Elegir imagen',{exact:true}).setInputFiles(file);
         await vehicleForm.locator('.hu-vehicle-photo canvas:not([hidden])').waitFor();
         await saveVehicle.click();
@@ -246,6 +294,9 @@ const sqlFile = filename => fs.readFileSync(path.join(root, filename), 'utf8');
         await vehicleForm.getByRole('button',{name:'Quitar',exact:true}).click();
         await saveVehicle.click();
         await thumbnailAt(stored.fotos_adicionales[0]).evaluate(image=>image.decode());
+        await enlargeVehicle.click();
+        await assertCenteredPhoto(vehicleImage);
+        await viewer.getByRole('button',{name:'Cerrar foto'}).click();
         await openVehicle.click();
         await vehicleForm.getByRole('button',{name:'Foto adicional 1',exact:true}).click();
         await viewer.getByRole('button',{name:'Quitar foto',exact:true}).click();
