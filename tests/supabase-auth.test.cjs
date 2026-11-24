@@ -42,7 +42,10 @@ async function entorno(consultar, { sesionInicial = null, errorIngreso = null } 
     vm.runInNewContext(fuente, {
         window, document, CustomEvent,
         console: { info() {}, warn() {}, error() {} },
-        localStorage: { getItem() { return null; }, setItem() {} },
+        localStorage: {
+            getItem(key) { return key === 'haikuLoginEmail' ? 'anterior@example.test' : null; },
+            setItem() {}
+        },
         requestAnimationFrame(callback) { callback(); },
         setTimeout(callback) { tareas.push(callback); }
     });
@@ -56,6 +59,7 @@ async function entorno(consultar, { sesionInicial = null, errorIngreso = null } 
         window, cierres, completar, notificar, consultas: () => consultas, avisos: () => avisos,
         error: () => document.getElementById('haiku-auth-error').textContent,
         bloqueado: () => !document.querySelector('.haiku-auth-overlay').hidden,
+        credenciales: () => ['email', 'password'].map(campo => document.getElementById('haiku-auth-' + campo).value ?? ''),
         botonEntrar: document.getElementById('haiku-auth-submit'),
         async ingresar() {
             document.getElementById('haiku-auth-email').value = sesion.user.email;
@@ -74,6 +78,16 @@ test('el formulario y el evento de acceso comparten una comprobación fuera del 
     assert.equal(e.bloqueado(), false);
     assert.equal(e.window.haikuTienePermiso('reservas.ver'), true);
     assert.equal(e.botonEntrar.disabled, false);
+});
+
+test('el acceso se abre con los campos vacíos aunque el navegador conserve el correo antiguo', async () => {
+    const e = await entorno(() => autorizado);
+    assert.deepEqual(e.credenciales(), ['', '']);
+    await e.ingresar();
+    assert.equal(e.bloqueado(), false);
+    await e.notificar('SIGNED_OUT', null);
+    assert.equal(e.bloqueado(), true);
+    assert.deepEqual(e.credenciales(), ['', '']);
 });
 
 test('la demora al validar no cierra la sesión y permite recuperarla al comprobar otra vez', async () => {

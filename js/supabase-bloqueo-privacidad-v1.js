@@ -25,57 +25,58 @@
     let modoActual = "oculto";
     const elementosInertizados = new Set();
 
-    const overlay = document.createElement("div");
-    overlay.className = "haiku-privacidad-overlay";
+    const overlay = document.createElement("dialog");
+    overlay.className = "haiku-privacidad-overlay haiku-acceso-lienzo";
     overlay.hidden = true;
     overlay.dataset.modo = "cortina";
-    overlay.setAttribute("aria-live", "polite");
+    overlay.setAttribute("aria-labelledby", "haiku-privacidad-titulo");
+    overlay.addEventListener("cancel", evento => evento.preventDefault());
     overlay.innerHTML = `
-        <section class="haiku-privacidad-card" role="dialog" aria-modal="true" aria-labelledby="haiku-privacidad-titulo">
-            <span class="haiku-privacidad-marca">ACCESO RESTRINGIDO</span>
-            <h2 id="haiku-privacidad-titulo">Protección visual</h2>
-            <p id="haiku-privacidad-descripcion"></p>
+        <section class="haiku-acceso-card haiku-privacidad-card">
+            <span class="haiku-acceso-icono" aria-hidden="true"></span>
+            <h2 class="haiku-acceso-titulo" id="haiku-privacidad-titulo">Protección visual</h2>
+            <p class="haiku-acceso-descripcion" id="haiku-privacidad-descripcion"></p>
 
             <div id="haiku-privacidad-alerta" class="haiku-privacidad-alerta" hidden></div>
 
             <form id="haiku-privacidad-form-setup" class="haiku-privacidad-form" hidden>
-                <label class="haiku-privacidad-campo">
+                <label class="haiku-acceso-campo">
                     <span>PIN de desbloqueo · 4 números</span>
-                    <input class="haiku-privacidad-input" data-solo-numeros="4" id="haiku-privacidad-pin-nuevo" type="password" inputmode="numeric" maxlength="4" autocomplete="new-password" placeholder="••••" required>
+                    <input class="haiku-acceso-input haiku-privacidad-input" data-solo-numeros="4" id="haiku-privacidad-pin-nuevo" type="password" inputmode="numeric" maxlength="4" autocomplete="new-password" placeholder="••••" required>
                 </label>
-                <label class="haiku-privacidad-campo">
+                <label class="haiku-acceso-campo">
                     <span>Repite el PIN</span>
-                    <input class="haiku-privacidad-input" data-solo-numeros="4" id="haiku-privacidad-pin-confirmar" type="password" inputmode="numeric" maxlength="4" autocomplete="new-password" placeholder="••••" required>
+                    <input class="haiku-acceso-input haiku-privacidad-input" data-solo-numeros="4" id="haiku-privacidad-pin-confirmar" type="password" inputmode="numeric" maxlength="4" autocomplete="new-password" placeholder="••••" required>
                 </label>
-                <label class="haiku-privacidad-campo">
+                <label class="haiku-acceso-campo">
                     <span>Clave de rescate · 6 números</span>
-                    <input class="haiku-privacidad-input" data-solo-numeros="6" id="haiku-privacidad-rescate-nuevo" type="password" inputmode="numeric" maxlength="6" autocomplete="new-password" placeholder="••••••" required>
+                    <input class="haiku-acceso-input haiku-privacidad-input" data-solo-numeros="6" id="haiku-privacidad-rescate-nuevo" type="password" inputmode="numeric" maxlength="6" autocomplete="new-password" placeholder="••••••" required>
                 </label>
-                <label class="haiku-privacidad-campo">
+                <label class="haiku-acceso-campo">
                     <span>Repite la clave de rescate</span>
-                    <input class="haiku-privacidad-input" data-solo-numeros="6" id="haiku-privacidad-rescate-confirmar" type="password" inputmode="numeric" maxlength="6" autocomplete="new-password" placeholder="••••••" required>
+                    <input class="haiku-acceso-input haiku-privacidad-input" data-solo-numeros="6" id="haiku-privacidad-rescate-confirmar" type="password" inputmode="numeric" maxlength="6" autocomplete="new-password" placeholder="••••••" required>
                 </label>
-                <button class="haiku-privacidad-submit" type="submit">Activar protección</button>
+                <button class="haiku-acceso-submit" type="submit">Activar protección</button>
             </form>
 
             <form id="haiku-privacidad-form-pin" class="haiku-privacidad-form" hidden>
-                <label class="haiku-privacidad-campo">
-                    <span>PIN de 4 números</span>
-                    <input class="haiku-privacidad-input" data-solo-numeros="4" id="haiku-privacidad-pin" type="password" inputmode="numeric" maxlength="4" autocomplete="off" placeholder="••••" required>
+                <label class="haiku-acceso-campo">
+                    <span>PIN de 4 dígitos</span>
+                    <input class="haiku-acceso-input haiku-privacidad-input" data-solo-numeros="4" id="haiku-privacidad-pin" type="password" inputmode="numeric" maxlength="4" autocomplete="off" placeholder="••••" required>
                 </label>
-                <button class="haiku-privacidad-submit" type="submit">Desbloquear</button>
+                <button class="haiku-acceso-submit" type="submit">Desbloquear</button>
             </form>
 
             <form id="haiku-privacidad-form-rescate" class="haiku-privacidad-form" hidden>
-                <label class="haiku-privacidad-campo">
+                <label class="haiku-acceso-campo">
                     <span>Clave de rescate · 6 números</span>
-                    <input class="haiku-privacidad-input" data-solo-numeros="6" id="haiku-privacidad-rescate" type="password" inputmode="numeric" maxlength="6" autocomplete="off" placeholder="••••••" required>
+                    <input class="haiku-acceso-input haiku-privacidad-input" data-solo-numeros="6" id="haiku-privacidad-rescate" type="password" inputmode="numeric" maxlength="6" autocomplete="off" placeholder="••••••" required>
                 </label>
-                <button class="haiku-privacidad-submit" type="submit">Desbloquear con rescate</button>
+                <button class="haiku-acceso-submit" type="submit">Desbloquear con rescate</button>
             </form>
 
-            <div id="haiku-privacidad-error" class="haiku-privacidad-error"></div>
-            <div id="haiku-privacidad-info" class="haiku-privacidad-info"></div>
+            <div id="haiku-privacidad-error" class="haiku-acceso-error" aria-live="polite"></div>
+            <div id="haiku-privacidad-info" class="haiku-acceso-info haiku-privacidad-info" aria-live="polite"></div>
 
             <div id="haiku-privacidad-intentos" class="haiku-privacidad-intentos" hidden>
                 <strong>INTENTOS EN ESTA PESTAÑA</strong>
@@ -274,6 +275,11 @@
         ocultarFormularios();
         renderizarHistorial();
 
+        // El acceso del asistente integrado conserva la opción de cambiar de cuenta.
+        if (!overlay.open && document.documentElement.dataset.hakuMobileAssistant !== "1") {
+            overlay.showModal?.();
+        }
+
         if (modo === "cortina") {
             return;
         }
@@ -298,7 +304,7 @@
             const fallos = Math.min(leerNumeroLocal("fallos"), MAX_INTENTOS);
             const restantes = Math.max(0, MAX_INTENTOS - fallos);
             titulo.textContent = "Acceso bloqueado";
-            descripcion.textContent = "La página estuvo fuera de foco 1 minuto. Ingresa tu PIN para volver a operar.";
+            descripcion.textContent = "La ventana estuvo fuera de foco 1 minuto.";
             formPin.hidden = false;
             info.textContent = restantes === MAX_INTENTOS
                 ? "Tienes 3 intentos antes del bloqueo reforzado."
@@ -320,7 +326,8 @@
     }
 
     function ocultarOverlay() {
-        if (!overlay.hidden) overlay.hidden = true;
+        overlay.hidden = true;
+        if (overlay.open) overlay.close();
         overlay.dataset.modo = "oculto";
         modoActual = "oculto";
         liberarFondo();

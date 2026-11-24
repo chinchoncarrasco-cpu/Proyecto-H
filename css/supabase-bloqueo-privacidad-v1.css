@@ -1,170 +1,263 @@
-/* ========================================
-   HAIKU · BLOQUEO VISUAL DE PRIVACIDAD V1
-   Capa independiente del login de Supabase.
-   ======================================== */
+/* Superficie compartida por el inicio de sesión y el bloqueo por PIN. */
+.haiku-acceso-lienzo {
+    --acceso-fondo: url("../assets/acceso/arco-1-escritorio-claro.svg"),
+        url("../assets/acceso/arco-2-escritorio-claro.svg"),
+        url("../assets/acceso/arco-3-escritorio-claro.svg"),
+        url("../assets/acceso/arco-superior-escritorio-claro.svg"),
+        url("../assets/acceso/luz-escritorio-claro.svg");
+    --acceso-campo: var(--cereza-relieve);
+    --acceso-entrada: url("../assets/acceso/entrada-claro.svg");
+    --acceso-candado: url("../assets/acceso/candado-claro.svg");
+    --acceso-estado-login: url("../assets/acceso/estado-acceso-claro.svg");
+    --acceso-estado-pin: url("../assets/acceso/estado-bloqueo-claro.svg");
+    --acceso-punto-pin: url("../assets/acceso/pin-claro.svg");
 
-.haiku-privacidad-overlay {
     position: fixed;
     inset: 0;
     z-index: 999998;
-    display: grid;
-    place-items: center;
-    padding: 22px;
+    display: flex;
+    flex-direction: column;
+    width: auto;
+    height: auto;
+    max-width: none;
+    max-height: none;
+    margin: 0;
+    padding: max(20px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right))
+        max(20px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left));
+    border: 0;
     box-sizing: border-box;
     overflow: auto;
-    background:
-        radial-gradient(circle at 50% 18%, rgba(52, 101, 74, .18), transparent 32%),
-        #0c100e;
-    color: #f4f6f4;
+    overscroll-behavior: contain;
     isolation: isolate;
+    color-scheme: light;
+    color: var(--cereza-texto);
+    font: 14px/20px Inter, "Segoe UI", system-ui, sans-serif;
+    background-color: var(--cereza-lienzo, #f5f1ed);
+    background-image: var(--acceso-fondo);
+    background-repeat: no-repeat;
+    background-position: right -145.5px bottom -282.5px, right -111.5px bottom -248.5px,
+        right -77.5px bottom -214.5px, left -378.2px top -390.4px, calc(50% + 14.4px) -466px;
 }
 
-.haiku-privacidad-overlay[hidden] {
-    display: none !important;
+html[data-haiku-tema="oscuro"] .haiku-acceso-lienzo {
+    --acceso-fondo: url("../assets/acceso/arco-1-escritorio-oscuro.svg"),
+        url("../assets/acceso/arco-2-escritorio-oscuro.svg"),
+        url("../assets/acceso/arco-3-escritorio-oscuro.svg"),
+        url("../assets/acceso/arco-superior-escritorio-oscuro.svg"),
+        url("../assets/acceso/luz-escritorio-oscuro.svg");
+    --acceso-campo: var(--cereza-lienzo);
+    --acceso-entrada: url("../assets/acceso/entrada-oscuro.svg");
+    --acceso-candado: url("../assets/acceso/candado-oscuro.svg");
+    --acceso-estado-login: url("../assets/acceso/estado-acceso-oscuro.svg");
+    --acceso-estado-pin: url("../assets/acceso/estado-bloqueo-oscuro.svg");
+    --acceso-punto-pin: url("../assets/acceso/pin-oscuro.svg");
+    color-scheme: dark;
 }
 
-/* Durante los primeros 5 s sólo se ve el fondo oscuro. */
-.haiku-privacidad-overlay[data-modo="cortina"] .haiku-privacidad-card {
-    display: none;
+.haiku-auth-overlay.haiku-acceso-lienzo {
+    z-index: 999999;
 }
 
-.haiku-privacidad-card {
-    width: min(430px, 100%);
-    padding: 28px;
-    box-sizing: border-box;
-    border: 1px solid rgba(255, 255, 255, .11);
-    border-radius: 22px;
-    background: rgba(26, 31, 28, .98);
-    box-shadow: 0 28px 90px rgba(0, 0, 0, .52);
-}
-
-.haiku-privacidad-marca {
-    display: block;
-    margin-bottom: 8px;
-    color: #9ebba7;
-    font-size: .69rem;
-    font-weight: 800;
-    letter-spacing: .17em;
-}
-
-.haiku-privacidad-card h2 {
-    margin: 0;
-    color: #f6f8f6;
-    font-size: 1.55rem;
-    line-height: 1.12;
-}
-
-.haiku-privacidad-card > p {
-    margin: 9px 0 20px;
-    color: #b8c0bb;
-    font-size: .86rem;
-    line-height: 1.5;
-}
-
-.haiku-privacidad-form {
-    display: grid;
-    gap: 13px;
-}
-
-.haiku-privacidad-form[hidden] {
-    display: none !important;
-}
-
-.haiku-privacidad-campo {
-    display: grid;
-    gap: 6px;
-}
-
-.haiku-privacidad-campo > span {
-    color: #d5dbd7;
-    font-size: .76rem;
-    font-weight: 700;
-}
-
-.haiku-privacidad-input {
-    width: 100%;
-    min-height: 52px;
-    padding: 9px 14px;
-    box-sizing: border-box;
-    border: 1px solid #465048;
-    border-radius: 12px;
-    outline: 0;
-    background: #111512;
-    color: #fff;
-    font: inherit;
-    font-size: 1.35rem;
-    font-weight: 750;
-    letter-spacing: .28em;
-    text-align: center;
-    caret-color: #8db79a;
-}
-
-.haiku-privacidad-input:focus {
-    border-color: #69917a;
-    box-shadow: 0 0 0 3px rgba(105, 145, 122, .18);
-}
-
-.haiku-privacidad-input::placeholder {
-    color: #566159;
-    letter-spacing: .16em;
-}
-
-.haiku-privacidad-submit {
-    min-height: 44px;
-    margin-top: 3px;
-    padding: 10px 14px;
-    border: 0;
-    border-radius: 11px;
-    background: #357c59;
-    color: #fff;
-    font: inherit;
-    font-size: .84rem;
-    font-weight: 800;
-    cursor: pointer;
-}
-
-.haiku-privacidad-submit:disabled {
-    opacity: .56;
-    cursor: wait;
-}
-
-.haiku-privacidad-error,
-.haiku-privacidad-info {
-    min-height: 18px;
-    margin-top: 10px;
-    font-size: .76rem;
-    line-height: 1.4;
-}
-
-.haiku-privacidad-error {
-    color: #ffaaa4;
-}
-
-.haiku-privacidad-info {
-    color: #a7c5af;
-}
-
-.haiku-privacidad-intentos {
-    margin-top: 18px;
-    padding-top: 14px;
-    border-top: 1px solid rgba(255, 255, 255, .09);
-}
-
+.haiku-acceso-lienzo[hidden],
+.haiku-privacidad-overlay[data-modo="cortina"] .haiku-acceso-card,
+.haiku-privacidad-form[hidden],
+.haiku-privacidad-alerta[hidden],
 .haiku-privacidad-intentos[hidden] {
     display: none !important;
 }
 
+.haiku-acceso-lienzo::backdrop {
+    background-color: var(--cereza-lienzo, #f5f1ed);
+}
+
+.haiku-acceso-card {
+    position: relative;
+    flex: none;
+    width: min(416px, 100%);
+    box-sizing: border-box;
+    margin: auto;
+    padding: 24px 26px 17px;
+    border: 1px solid var(--cereza-linea-fuerte);
+    border-radius: 20px;
+    background: var(--cereza-superficie);
+    color: var(--cereza-texto);
+    box-shadow: 0 17px 20px rgb(17 13 20 / 20%);
+}
+
+.haiku-acceso-card::before {
+    content: "";
+    position: absolute;
+    top: -1px;
+    left: 26px;
+    width: 36px;
+    height: 2px;
+    border-radius: 2px;
+    background: var(--cereza-primario);
+}
+
+.haiku-acceso-icono {
+    display: block;
+    width: 40px;
+    height: 40px;
+    margin-bottom: 12px;
+    background: var(--acceso-entrada) center no-repeat;
+}
+
+.haiku-privacidad-card .haiku-acceso-icono {
+    background-image: var(--acceso-candado);
+}
+
+.haiku-acceso-card .haiku-acceso-titulo {
+    margin: 0;
+    color: var(--cereza-texto);
+    font-size: 30px;
+    font-weight: 700;
+    line-height: 38px;
+    letter-spacing: -.95px;
+}
+
+.haiku-acceso-card .haiku-acceso-descripcion {
+    margin: 4px 0 16px;
+    color: var(--cereza-secundario);
+    font-size: 14px;
+    line-height: 20px;
+}
+
+.haiku-acceso-campo {
+    display: grid;
+    gap: 5px;
+    margin: 0;
+    color: var(--cereza-texto);
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 18px;
+}
+
+.haiku-acceso-campo + .haiku-acceso-campo {
+    margin-top: 11px;
+}
+
+.haiku-acceso-card .haiku-acceso-input {
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 46px;
+    margin: 0;
+    padding: 10px 12px;
+    border: 1px solid var(--cereza-linea-fuerte);
+    border-radius: 9px;
+    outline: none;
+    background-color: var(--acceso-campo);
+    color: var(--cereza-texto);
+    caret-color: var(--cereza-acento);
+    font: 400 16px/24px Inter, "Segoe UI", system-ui, sans-serif;
+}
+
+.haiku-acceso-card .haiku-acceso-input:focus {
+    --acceso-halo: 0 0 0 3px color-mix(in srgb, var(--cereza-acento) 12%, transparent);
+    box-shadow: var(--acceso-halo);
+    border-color: var(--cereza-acento);
+}
+
+.haiku-acceso-card .haiku-acceso-input:autofill {
+    box-shadow: inset 0 0 0 1000px var(--acceso-campo), var(--acceso-halo, 0 0 transparent);
+    -webkit-text-fill-color: var(--cereza-texto);
+}
+
+.haiku-acceso-card .haiku-privacidad-input {
+    font-weight: 600;
+    letter-spacing: .28em;
+    text-align: center;
+}
+
+.haiku-privacidad-input::placeholder {
+    color: var(--cereza-secundario);
+}
+
+#haiku-privacidad-pin:placeholder-shown {
+    background-image: var(--acceso-punto-pin), var(--acceso-punto-pin), var(--acceso-punto-pin), var(--acceso-punto-pin);
+    background-position: calc(50% - 24px) center, calc(50% - 8px) center, calc(50% + 8px) center, calc(50% + 24px) center;
+    background-repeat: no-repeat;
+}
+
+#haiku-privacidad-pin::placeholder {
+    color: transparent;
+}
+
+.haiku-acceso-card .haiku-acceso-submit {
+    width: 100%;
+    min-height: 45px;
+    margin: 14px 0 0;
+    padding: 11px 14px;
+    border: 0;
+    border-radius: 9px;
+    background: var(--cereza-primario);
+    color: var(--cereza-sobre-primario);
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.haiku-acceso-submit:focus-visible {
+    outline: 2px solid var(--cereza-acento);
+    outline-offset: 3px;
+}
+
+.haiku-acceso-submit:disabled {
+    opacity: .65;
+    cursor: wait;
+}
+
+.haiku-acceso-info:not(:empty) {
+    margin-top: 18px;
+    padding: 13px 0 0 15px;
+    border-top: 1px solid var(--cereza-linea);
+    background: var(--acceso-estado-login) 0 19px no-repeat;
+    color: var(--cereza-secundario);
+    font-size: 12px;
+    line-height: 18px;
+}
+
+.haiku-privacidad-info:not(:empty) {
+    background-image: var(--acceso-estado-pin);
+}
+
+.haiku-acceso-error:not(:empty) {
+    margin-top: 12px;
+    color: var(--cereza-rojo);
+    font-size: 13px;
+    line-height: 18px;
+}
+
+.haiku-privacidad-alerta {
+    margin-bottom: 14px;
+    padding: 9px 11px;
+    border: 1px solid var(--cereza-linea);
+    border-radius: 9px;
+    background: var(--cereza-rojo-fondo);
+    color: var(--cereza-rojo);
+    font-size: 13px;
+    line-height: 18px;
+}
+
+.haiku-privacidad-intentos {
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid var(--cereza-linea);
+    color: var(--cereza-secundario);
+    font-size: 12px;
+    line-height: 18px;
+}
+
 .haiku-privacidad-intentos strong {
     display: block;
-    margin-bottom: 8px;
-    color: #cbd4ce;
-    font-size: .7rem;
-    letter-spacing: .06em;
+    margin-bottom: 6px;
+    font-size: 11px;
+    letter-spacing: .04em;
 }
 
 .haiku-privacidad-intentos-lista {
     display: grid;
-    gap: 5px;
+    gap: 4px;
     margin: 0;
     padding: 0;
     list-style: none;
@@ -174,43 +267,46 @@
     display: flex;
     justify-content: space-between;
     gap: 10px;
-    color: #9fa9a2;
-    font-size: .7rem;
 }
 
 .haiku-privacidad-intentos-lista time {
-    color: #758078;
     white-space: nowrap;
 }
 
-.haiku-privacidad-alerta {
-    margin: 0 0 14px;
-    padding: 10px 11px;
-    border: 1px solid rgba(205, 83, 72, .34);
-    border-radius: 11px;
-    background: rgba(133, 45, 38, .15);
-    color: #ffc2bc;
-    font-size: .76rem;
-    line-height: 1.45;
-}
-
-/* Evita scroll e interacción accidental del documento tras el overlay. */
 html.haiku-privacidad-bloqueada,
 html.haiku-privacidad-bloqueada body {
     overflow: hidden !important;
 }
 
 @media (max-width: 600px) {
-    .haiku-privacidad-overlay {
-        padding: 14px;
+    .haiku-acceso-lienzo {
+        --acceso-fondo: url("../assets/acceso/arco-1-movil-claro.svg"),
+            url("../assets/acceso/arco-2-movil-claro.svg"),
+            url("../assets/acceso/arco-3-movil-claro.svg"),
+            url("../assets/acceso/arco-superior-movil-claro.svg"),
+            url("../assets/acceso/luz-movil-claro.svg");
+        background-position: right -252px bottom -224px, right -226.5px bottom -198.5px,
+            right -201px bottom -173px, left -198.4px top -204.8px, calc(50% + 3.9px) -379px;
     }
 
-    .haiku-privacidad-card {
-        padding: 23px 18px;
-        border-radius: 18px;
+    html[data-haiku-tema="oscuro"] .haiku-acceso-lienzo {
+        --acceso-fondo: url("../assets/acceso/arco-1-movil-oscuro.svg"),
+            url("../assets/acceso/arco-2-movil-oscuro.svg"),
+            url("../assets/acceso/arco-3-movil-oscuro.svg"),
+            url("../assets/acceso/arco-superior-movil-oscuro.svg"),
+            url("../assets/acceso/luz-movil-oscuro.svg");
     }
 
-    .haiku-privacidad-card h2 {
-        font-size: 1.35rem;
+    .haiku-acceso-card {
+        width: min(350px, 100%);
+        padding: 20px 20px 17px;
+    }
+
+    .haiku-acceso-card::before {
+        left: 20px;
+    }
+
+    .haiku-acceso-card .haiku-acceso-titulo {
+        font-size: 28px;
     }
 }

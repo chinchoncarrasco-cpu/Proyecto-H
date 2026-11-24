@@ -16,110 +16,6 @@
 
     const estilo = document.createElement("style");
     estilo.textContent = `
-        .haiku-auth-overlay {
-            position: fixed;
-            inset: 0;
-            z-index: 999999;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 20px;
-            background:
-                radial-gradient(circle at top, rgba(87, 118, 92, .22), transparent 38%),
-                rgba(18, 18, 18, .97);
-            backdrop-filter: blur(12px);
-        }
-
-        .haiku-auth-overlay[hidden] {
-            display: none !important;
-        }
-
-        .haiku-auth-card {
-            width: min(430px, 100%);
-            border: 1px solid rgba(255, 255, 255, .10);
-            border-radius: 22px;
-            padding: 30px;
-            background: rgba(31, 31, 31, .97);
-            box-shadow: 0 24px 70px rgba(0, 0, 0, .42);
-            color: #f2f2f2;
-        }
-
-        .haiku-auth-marca {
-            display: block;
-            margin-bottom: 8px;
-            font-size: .76rem;
-            letter-spacing: .16em;
-            color: #9db6a1;
-        }
-
-        .haiku-auth-card h1 {
-            margin: 0;
-            font-size: 1.7rem;
-            font-weight: 700;
-        }
-
-        .haiku-auth-card p {
-            margin: 8px 0 22px;
-            color: #bdbdbd;
-            line-height: 1.45;
-        }
-
-        .haiku-auth-card label {
-            display: block;
-            margin-top: 14px;
-            font-size: .86rem;
-            color: #d8d8d8;
-        }
-
-        .haiku-auth-card input {
-            width: 100%;
-            margin-top: 6px;
-            padding: 12px 13px;
-            border: 1px solid #444;
-            border-radius: 11px;
-            background: #171717;
-            color: #fff;
-            font: inherit;
-            outline: none;
-        }
-
-        .haiku-auth-card input:focus {
-            border-color: #718c76;
-            box-shadow: 0 0 0 3px rgba(113, 140, 118, .18);
-        }
-
-        .haiku-auth-submit {
-            width: 100%;
-            margin-top: 20px;
-            padding: 12px 16px;
-            border: 0;
-            border-radius: 11px;
-            background: #738e78;
-            color: #fff;
-            font: inherit;
-            font-weight: 700;
-            cursor: pointer;
-        }
-
-        .haiku-auth-submit:disabled {
-            opacity: .55;
-            cursor: wait;
-        }
-
-        .haiku-auth-error {
-            min-height: 20px;
-            margin-top: 12px;
-            color: #f3a5a5;
-            font-size: .86rem;
-        }
-
-        .haiku-auth-estado {
-            min-height: 20px;
-            margin-top: 12px;
-            color: #b6cdb9;
-            font-size: .86rem;
-        }
-
         .haiku-usuario-chip {
             position: fixed;
             z-index: 99990;
@@ -165,10 +61,6 @@
         }
 
         @media (max-width: 700px) {
-            .haiku-auth-card {
-                padding: 24px 20px;
-            }
-
             .haiku-usuario-chip {
                 top: 6px;
                 right: 8px;
@@ -179,19 +71,22 @@
     `;
     document.head.appendChild(estilo);
 
-    const overlay = document.createElement("div");
-    overlay.className = "haiku-auth-overlay";
+    const overlay = document.createElement("dialog");
+    overlay.className = "haiku-auth-overlay haiku-acceso-lienzo";
+    overlay.setAttribute("aria-labelledby", "haiku-auth-titulo");
+    overlay.addEventListener("cancel", evento => evento.preventDefault());
     overlay.innerHTML = `
-        <form class="haiku-auth-card" id="haiku-auth-form">
-            <span class="haiku-auth-marca">ACCESO INTERNO</span>
-            <h1>Iniciar sesión</h1>
-            <p>
+        <form class="haiku-acceso-card" id="haiku-auth-form">
+            <span class="haiku-acceso-icono" aria-hidden="true"></span>
+            <h1 class="haiku-acceso-titulo" id="haiku-auth-titulo">Iniciar sesión</h1>
+            <p class="haiku-acceso-descripcion">
                 Ingresa con tu usuario autorizado.
             </p>
 
-            <label>
+            <label class="haiku-acceso-campo">
                 Correo
                 <input
+                    class="haiku-acceso-input"
                     id="haiku-auth-email"
                     type="email"
                     autocomplete="username"
@@ -199,9 +94,10 @@
                 >
             </label>
 
-            <label>
+            <label class="haiku-acceso-campo">
                 Contraseña
                 <input
+                    class="haiku-acceso-input"
                     id="haiku-auth-password"
                     type="password"
                     autocomplete="current-password"
@@ -211,7 +107,7 @@
 
             <button
                 id="haiku-auth-submit"
-                class="haiku-auth-submit"
+                class="haiku-acceso-submit"
                 type="submit"
             >
                 Entrar
@@ -219,13 +115,13 @@
 
             <div
                 id="haiku-auth-error"
-                class="haiku-auth-error"
+                class="haiku-acceso-error"
                 aria-live="polite"
             ></div>
 
             <div
                 id="haiku-auth-estado"
-                class="haiku-auth-estado"
+                class="haiku-acceso-info"
                 aria-live="polite"
             >
                 Comprobando sesión…
@@ -233,6 +129,7 @@
         </form>
     `;
     document.body.appendChild(overlay);
+    overlay.showModal?.();
 
     const chip = document.createElement("div");
     chip.className = "haiku-usuario-chip";
@@ -267,13 +164,6 @@
     let turnoSesion = 0;
     let validacionSesion = null;
 
-    const emailRecordado =
-        localStorage.getItem("haikuLoginEmail") || "";
-
-    if (emailRecordado) {
-        campoEmail.value = emailRecordado;
-    }
-
     function mensajeError(texto = "") {
         errorElemento.textContent = texto;
     }
@@ -290,6 +180,7 @@
 
     function mostrarLogin(mensaje = "") {
         overlay.hidden = false;
+        if (!overlay.open) overlay.showModal?.();
         chip.hidden = true;
         mensajeEstado(mensaje);
 
@@ -322,6 +213,8 @@
         turnoSesion++;
         validacionSesion = null;
         retirarAcceso();
+        campoEmail.value = "";
+        campoPassword.value = "";
         mostrarLogin(estado);
     }
 
@@ -406,6 +299,7 @@
 
         chip.hidden = false;
         overlay.hidden = true;
+        if (overlay.open) overlay.close();
         mensajeError("");
         mensajeEstado("");
 
@@ -461,11 +355,6 @@
                 if (error) {
                     throw error;
                 }
-
-                localStorage.setItem(
-                    "haikuLoginEmail",
-                    email
-                );
 
                 campoPassword.value = "";
 
