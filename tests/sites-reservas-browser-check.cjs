@@ -10,7 +10,7 @@ const html = read('index.html');
 const start = html.indexOf('<section id="seccion-reservas"');
 const end = html.indexOf('<section id="seccion-libro-reserva"', start);
 const section = html.slice(start, end).replace(/(<section id="seccion-reservas"[^>]*class=")([^"]+)/, '$1$2 activa');
-const staticStyles = [...html.matchAll(/<link rel="stylesheet" href="(css\/[^"?]+\.css)">/g)]
+const staticStyles = [...html.matchAll(/<link rel="stylesheet" href="(css\/[^"?]+\.css)(?:\?[^"]*)?">/g)]
     .map(match => match[1]);
 const style = [...staticStyles, 'css/supabase-reservas-v1.css',
     'css/supabase-reservas-compact-v1.css', 'css/sites-reservas-v1.css']
@@ -48,8 +48,8 @@ async function installFakeClient(page) {
                 ninos: index === 0 ? 1 : index === 1 ? 2 : 0,
                 precio_total: index === 0 ? 100000 : 200000 + index,
                 abono: index === 0 ? 120000 : 50000 + index,
-                saldo_pendiente: index === 0 ? 73000 : 150000 + index,
-                estado: index === 0 ? 'hospedada' : index % 2 ? 'pendiente' : 'confirmada',
+                saldo_pendiente: index === 0 ? 73000 : index === 4 ? 0 : 150000 + index,
+                estado: index === 0 ? 'hospedada' : index === 2 || index === 4 ? 'checked_out' : index % 2 ? 'pendiente' : 'confirmada',
                 correo: `guest${number}@example.invalid`,
                 telefono: `+569000${String(number).padStart(4, '0')}`,
                 documento: `DOC-${number}`,
@@ -243,6 +243,25 @@ async function waitForCalls(page, count) {
             await page.setViewportSize({ width, height: 900 });
             assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true, `scroll horizontal ${width}`);
             assert.equal(await page.locator('#seccion-reservas').isVisible(), true);
+            if (width === 1600 || width === 390) {
+                for (const [theme, gold] of [['claro', 'rgb(125, 88, 30)'], ['oscuro', 'rgb(218, 187, 128)']]) {
+                    await page.evaluate(theme => { document.documentElement.dataset.haikuTema = theme; }, theme);
+                    const rows = page.locator(width === 390 ? '.rv-mobile-row' : '.rv-table tbody tr');
+                    const marked = rows.and(page.locator('[data-reserva-id$="000000000003"]'));
+                    const settled = rows.and(page.locator('[data-reserva-id$="000000000005"]'));
+                    const marker = row => width === 390 ? row : row.locator('td').first();
+                    assert.equal(await marked.evaluate(n => getComputedStyle(n).backgroundImage), 'none', `${width}/${theme}: sin degradado`);
+                    assert.ok((await marker(marked).evaluate(n => getComputedStyle(n).boxShadow)).includes(gold), 'aviso dorado de saldo');
+                    assert.equal(await marker(settled).evaluate(n => getComputedStyle(n).boxShadow), 'none', 'check-out sin saldo no se marca');
+                    assert.equal(await marked.locator('.owing').evaluate(n => getComputedStyle(n).color), gold);
+                    if (width === 1600) {
+                        await marker(marked).hover();
+                        const relief = theme === 'claro' ? 'rgb(250, 246, 243)' : 'rgb(43, 38, 45)';
+                        assert.equal(await marker(marked).evaluate(n => getComputedStyle(n).backgroundColor), relief, 'hover sin fondo blanco especial');
+                    }
+                }
+                await page.evaluate(() => { document.documentElement.dataset.haikuTema = 'claro'; });
+            }
             if (width === 390) {
                 assert.equal(await page.locator('.sites-reservas-mobile').isVisible(), true);
                 await page.locator('.sites-reservas-mobile [data-abrir-reserva]').first().click();

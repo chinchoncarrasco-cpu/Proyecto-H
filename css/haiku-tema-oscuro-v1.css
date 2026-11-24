@@ -1196,38 +1196,36 @@ html[data-haiku-tema="oscuro"] #seccion-cabanas .cabins-heading h1{color:var(--c
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cabins-heading p{color:var(--cereza-secundario)}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cabins-heading-date{color:var(--cereza-secundario)}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cabins-tabs button{color:var(--cereza-secundario);background-color:initial;background-image:none;border-top-color:currentcolor;border-right-color:currentcolor;border-bottom-color:transparent;border-left-color:currentcolor}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cabins-tabs button:hover{color:#9fd2b3}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cabins-tabs button.active{color:#9fd2b3;border-color:#9fd2b3}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-summary{color:#baadb5;background-color:#2b262d;background-image:initial;border-left-color:#9fd2b3}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-summary span + span{border-left-color:#3a323c}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-summary strong{color:#9fd2b3}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-section-head h2, html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-detail-section-title h3{color:#f4ecef}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-section-head p{color:#baadb5}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-outline, html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-quiet{color:#9fd2b3;background-color:var(--cereza-superficie)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cabins-tabs button:hover{color:var(--cereza-acento)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cabins-tabs button.active{color:var(--cereza-acento)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-summary{color:var(--cereza-secundario);background-color:var(--cereza-relieve)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-summary strong{color:var(--cereza-acento)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-section-head h2, html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-detail-section-title h3{color:var(--cereza-texto)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-section-head p{color:var(--cereza-secundario)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-outline, html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-quiet{color:var(--cereza-acento);background-color:var(--cereza-superficie)}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-outline:hover, html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-quiet:hover{background-color:var(--cereza-relieve)}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-primary{color:rgb(255, 255, 255);background-color:var(--cereza-primario)}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-primary:hover{background-color:rgb(29, 77, 61);background-image:initial}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-filters button{color:#baadb5;background-color:initial;background-image:none;border-color:currentcolor}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-filters button[aria-pressed="true"]{color:#9fd2b3;box-shadow:rgb(34, 94, 67) 0px 1px}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-primary{color:var(--cereza-sobre-primario);background-color:var(--cereza-primario)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-filters button{color:var(--cereza-secundario);background-color:initial;background-image:none;border-color:currentcolor}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-filters button[aria-pressed="true"]{color:var(--cereza-acento);box-shadow:0 1px var(--cereza-acento)}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-request-form{background-color:var(--cereza-relieve)}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-request-form label, html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-inline-request label{color:#baadb5}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-request-form label, html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-inline-request label{color:var(--cereza-secundario)}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-request-form input, html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-request-form select, html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-inline-request input{color:var(--cereza-texto);background-color:var(--cereza-superficie)}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-operation-table, html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-review-list{background-color:var(--cereza-superficie);box-shadow:rgba(38, 60, 48, 0.027) 0px 2px 12px}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-operation-head{color:var(--cereza-secundario);background-color:var(--cereza-relieve)}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-operation-row{border-top-color:currentcolor;border-right-color:currentcolor;border-left-color:currentcolor;box-shadow:none}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-operation-row:last-child, html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-review-row:last-child{border-bottom-color:currentcolor}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-operation-row:hover, html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-review-row:hover{background-color:var(--cereza-relieve)}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-cabin strong, html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-review-ident strong{color:#f4ecef}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-cabin span, html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-review-ident span{color:#f4ecef}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-cabin small{color:#baadb5}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-cell select, html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-cell input, html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-review-mode select, html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-detail-fields input, html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-detail-fields select, html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-mode-select select, html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-review-close select{color:#f4ecef;background-color:var(--cereza-superficie)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-cabin strong, html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-review-ident strong{color:var(--cereza-texto)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-cabin span, html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-review-ident span{color:var(--cereza-secundario)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-cabin small{color:var(--cereza-secundario)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-cell select, html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-cell input, html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-review-mode select, html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-detail-fields input, html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-detail-fields select, html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-mode-select select, html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-review-close select{color:var(--cereza-texto);background-color:var(--cereza-superficie)}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-cell select.progress{color:#f2c58d}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-cell select.ready{color:#9fd2b3}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-cell select.pending{color:#f2c58d}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-pending{color:#baadb5}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-pending{color:var(--cereza-secundario)}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-requests > span{color:#9fd2b3;background-color:#2b262d;background-image:initial}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-requests button{color:#9fd2b3;background-color:initial;background-image:none;border-color:currentcolor}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-open{color:#9fd2b3;background-color:initial;background-image:none;border-color:currentcolor}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-open{color:var(--cereza-acento);background-color:initial;background-image:none;border-color:currentcolor}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-review-head{color:var(--cereza-secundario);background-color:var(--cereza-relieve)}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-review-progress{color:var(--cereza-secundario)}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-review-progress strong{color:#9fd2b3}
@@ -1236,7 +1234,7 @@ html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-badge.progress{color:#9fd2b3
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-badge.ready{color:#9fd2b3;background-color:#2b262d;background-image:initial}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-badge.issue{color:#f3b2a8;background-color:#2b262d;background-image:initial}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-revision-picker:focus-within{outline-color:currentcolor}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-empty{color:#baadb5}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-empty{color:var(--cereza-secundario)}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-backline{color:#baadb5}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-backline button{color:#9fd2b3;background-color:initial;background-image:none;border-color:currentcolor}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-detail-title{border-bottom-color:#3a323c}
@@ -1256,8 +1254,8 @@ html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-detail-fields label, html[da
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-detail-pending{color:#baadb5}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-detail-pending strong{color:#9fd2b3}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-pending-editor{color:#baadb5}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-pending-editor input{color:#f4ecef;background-color:var(--cereza-superficie)}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-text-action{color:#9fd2b3;background-color:initial;background-image:none;border-color:currentcolor}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-pending-editor input{color:var(--cereza-texto);background-color:var(--cereza-superficie)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-text-action{color:var(--cereza-acento);background-color:initial;background-image:none;border-color:currentcolor}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-review-count{color:#baadb5}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-review-count strong{color:#9fd2b3}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-sector-head{color:var(--cereza-texto);background-color:initial;background-image:none;border-color:currentcolor}
@@ -1265,18 +1263,17 @@ html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-sector-head small{color:var(
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-sector-head > span:last-child{color:#9fd2b3}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-group-name{color:#9fd2b3}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-check{color:#f4ecef}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-check input{accent-color:#9fd2b3}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-check input{accent-color:var(--cereza-primario)}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-check:has(input:checked) span{color:#baadb5}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-observations > label{color:#9fd2b3}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-observations textarea{color:#f4ecef;border-color:#3a323c}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-final-readonly{color:#baadb5}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-final-readonly output{color:#f4ecef;background-color:var(--cereza-relieve)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-final-readonly output{color:var(--cereza-texto);background-color:var(--cereza-relieve)}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-express-toggle{color:var(--cereza-texto);background-color:transparent;background-image:initial;border-color:currentcolor}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-express-heading small{color:var(--cereza-secundario)}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-express-icon{color:#9fd2b3}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-express-toggle:focus-visible{outline-color:#9fd2b3}
 @media (max-width: 1450px) {
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-cell > span{color:#baadb5}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-cell > span{color:var(--cereza-secundario)}
 @media (max-width: 1270px) {
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-review-row small{color:#baadb5}
 }
@@ -1284,7 +1281,7 @@ html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-review-row small{color:#baad
 @media (max-width: 1070px) {
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-summary span + span{border-color:currentcolor}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-operation-row > .cb-pending{border-top-color:#3a323c}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-cell > span, html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-mobile-label{color:#baadb5}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-cell > span, html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-mobile-label{color:var(--cereza-secundario)}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-review-row small{color:#baadb5}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-detail-ops{border-right-color:currentcolor;border-bottom-color:#3a323c}
 }
@@ -1293,17 +1290,17 @@ html[data-haiku-tema="oscuro"] #seccion-cabanas #revision-checklist .checklist-a
 html[data-haiku-tema="oscuro"] #seccion-cabanas #revision-checklist .checklist-area > h5{color:#9fd2b3}
 html[data-haiku-tema="oscuro"] #seccion-cabanas #revision-checklist .checklist-item, html[data-haiku-tema="oscuro"] #seccion-cabanas #aseo-express-checklist .revision-area label{color:#f4ecef;background-color:transparent;background-image:initial;border-color:currentcolor}
 html[data-haiku-tema="oscuro"] #seccion-cabanas #revision-checklist .checklist-item:is(:hover, :has(input:checked)), html[data-haiku-tema="oscuro"] #seccion-cabanas #aseo-express-checklist .revision-area label:is(:hover, :has(input:checked)){background-color:transparent;background-image:initial;border-color:currentcolor}
-html[data-haiku-tema="oscuro"] #seccion-cabanas #revision-checklist .checklist-item input[type="checkbox"], html[data-haiku-tema="oscuro"] #seccion-cabanas #aseo-express-checklist .revision-area input[type="checkbox"]{accent-color:#9fd2b3}
+html[data-haiku-tema="oscuro"] #seccion-cabanas #revision-checklist .checklist-item input[type="checkbox"], html[data-haiku-tema="oscuro"] #seccion-cabanas #aseo-express-checklist .revision-area input[type="checkbox"]{accent-color:var(--cereza-primario)}
 html[data-haiku-tema="oscuro"] #seccion-cabanas #revision-checklist .checklist-item:has(input:checked) span{color:#baadb5}
 html[data-haiku-tema="oscuro"] #seccion-cabanas :is(#revision-checklist, #repaso-checklist) .checklist-section-detail{border-top-color:#3a323c}
 html[data-haiku-tema="oscuro"] #seccion-cabanas :is(#revision-checklist, #repaso-checklist) .checklist-section-detail-label{color:#f4ecef}
-html[data-haiku-tema="oscuro"] #seccion-cabanas :is(#revision-checklist, #repaso-checklist) .checklist-section-detail-input{color:#f4ecef;background-color:var(--cereza-superficie);outline-color:initial}
+html[data-haiku-tema="oscuro"] #seccion-cabanas :is(#revision-checklist, #repaso-checklist) .checklist-section-detail-input{color:var(--cereza-texto);background-color:var(--cereza-superficie);outline-color:initial}
 html[data-haiku-tema="oscuro"] #seccion-cabanas :is(#revision-checklist, #repaso-checklist) .checklist-section-detail-input:focus{box-shadow:rgba(45, 115, 80, 0.1) 0px 0px 0px 3px;border-color:#9fd2b3}
 html[data-haiku-tema="oscuro"] #seccion-cabanas :is(#revision-checklist, #repaso-checklist) .checklist-section-detail-copy{color:#baadb5;background-color:rgba(35, 31, 37, 0.94);background-image:initial;box-shadow:rgba(31, 60, 44, 0.06) 0px 1px 2px;border-color:transparent}
 html[data-haiku-tema="oscuro"] #seccion-cabanas :is(#revision-checklist, #repaso-checklist) .checklist-section-detail-copy:hover{color:#9fd2b3;background-color:var(--cereza-relieve)}
 html[data-haiku-tema="oscuro"] #seccion-cabanas :is(#revision-checklist, #repaso-checklist) .checklist-section-detail-copy:focus-visible{outline-color:#9fd2b3}
 html[data-haiku-tema="oscuro"] #seccion-cabanas :is(#revision-checklist, #repaso-checklist) .checklist-section-detail-copy .copy-icon{fill:none;stroke:currentcolor}
-html[data-haiku-tema="oscuro"] #seccion-cabanas :is(#revision-checklist, #repaso-checklist) .checklist-section-detail-copy[data-estado-copia="copiado"]{color:#9fd2b3}
+html[data-haiku-tema="oscuro"] #seccion-cabanas :is(#revision-checklist, #repaso-checklist) .checklist-section-detail-copy[data-estado-copia="copiado"]{color:var(--cereza-primario)}
 html[data-haiku-tema="oscuro"] #seccion-cabanas :is(#revision-checklist, #repaso-checklist) .checklist-section-detail-copy[data-estado-copia="vacio"], html[data-haiku-tema="oscuro"] #seccion-cabanas :is(#revision-checklist, #repaso-checklist) .checklist-section-detail-copy[data-estado-copia="error"]{color:#f2c58d}
 html[data-haiku-tema="oscuro"] #seccion-cabanas :is(#revision-checklist, #repaso-checklist) .checklist-section-detail-copy[data-feedback]::after{color:rgb(255, 255, 255);background-color:rgb(49, 76, 61);background-image:initial}
 html[data-haiku-tema="oscuro"] #seccion-cabanas :is(#revision-checklist, #repaso-checklist) .checklist-section-detail-copy-status{border-color:currentcolor}
@@ -1314,284 +1311,261 @@ html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-request-drawer-panel h2{colo
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-request-drawer-panel > header button{color:#f4ecef;background-color:initial;background-image:none;border-color:currentcolor}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-request-drawer-body label{color:#f4ecef}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-request-drawer-body select, html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-request-drawer-body textarea{color:var(--cereza-texto);background-color:var(--cereza-superficie)}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .eyebrow{color:#9fd2b3}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-operation-row .cb-cell input{color:#f4ecef;background-color:var(--cereza-superficie)}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-review-mode > span{color:#baadb5}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-detail-ops #cabinsDetailRequests p{color:#baadb5}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-observations .revision-clipboard-acciones button, html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-observations .aseo-express-clipboard-acciones button{color:#9fd2b3;background-color:var(--cereza-superficie)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .eyebrow{color:var(--cereza-secundario)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-operation-row .cb-cell input{color:var(--cereza-texto);background-color:var(--cereza-superficie)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-review-mode > span{color:var(--cereza-secundario)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-detail-ops #cabinsDetailRequests p{color:var(--cereza-secundario)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-observations .revision-clipboard-acciones button, html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-observations .aseo-express-clipboard-acciones button{color:var(--cereza-acento);background-color:var(--cereza-superficie)}
 html[data-haiku-tema="oscuro"] #seccion-cabanas #revision-checklist .checklist-area > .cb-sector-head, html[data-haiku-tema="oscuro"] #seccion-cabanas #aseo-express-checklist .revision-area > .cb-sector-head{color:var(--cereza-texto);background-color:initial;background-image:none;border-color:currentcolor}
 html[data-haiku-tema="oscuro"] #seccion-cabanas #revision-checklist .checklist-area > .cb-sector-head small, html[data-haiku-tema="oscuro"] #seccion-cabanas #aseo-express-checklist .revision-area > .cb-sector-head small{color:var(--cereza-secundario)}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-status > small{color:#baadb5}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-revision-status > small{color:#f4ecef}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-status > small{color:var(--cereza-secundario)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-revision-status > small{color:var(--cereza-texto)}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-revision-status .cb-badge{border-color:currentcolor}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-status > .cb-aseo-conflict{color:#f2c58d}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .aseo-hora-input:disabled{color:#baadb5;background-color:var(--cereza-relieve)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .aseo-hora-input:disabled{color:var(--cereza-secundario);background-color:var(--cereza-relieve)}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-supplies-summary{color:var(--cereza-secundario)}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-supplies-summary b{color:#9fd2b3}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-supplies-feedback{color:#baadb5}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-supplies-summary b{color:var(--cereza-acento)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-supplies-feedback{color:var(--cereza-secundario)}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-supplies-feedback [data-insumos-error]{color:inherit}
-html[data-haiku-tema="oscuro"] #seccion-cabanas [data-cb-insumos]{color:#9fd2b3}
+html[data-haiku-tema="oscuro"] #seccion-cabanas [data-cb-insumos]{color:var(--cereza-acento)}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-replenishment{border-top-color:#3a323c}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-quantity button{color:#9fd2b3;background-color:var(--cereza-superficie)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-quantity button{color:var(--cereza-acento);background-color:var(--cereza-superficie)}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-sack-entry label{color:var(--cereza-secundario)}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-sack-edit{color:var(--cereza-secundario)}
 html[data-haiku-tema="oscuro"] #seccion-cabanas [data-insumos-error]{color:#f3b2a8}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-sack-entry select{color:#9fd2b3;background-color:var(--cereza-superficie)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-sack-entry select{color:var(--cereza-acento);background-color:var(--cereza-superficie)}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-sack-destination{color:var(--cereza-secundario)}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-carbon-destinations{border-left-color:#3a323c}
-html[data-haiku-tema="oscuro"] #seccion-cabanas [data-carbon-historico]{color:#baadb5}
-html[data-haiku-tema="oscuro"] #seccion-cabanas #cabinsSummary.cb-summary{background-color:rgb(27, 38, 33);background-image:initial;border-color:#3a323c}
-html[data-haiku-tema="oscuro"] #seccion-cabanas #cabinsSummary .cb-summary-group{color:rgb(232, 239, 234);background-color:transparent;background-image:initial;border-color:currentcolor}
-html[data-haiku-tema="oscuro"] #seccion-cabanas #cabinsSummary .cb-summary-group[aria-pressed="true"]{background-color:rgb(37, 71, 54);background-image:initial}
+html[data-haiku-tema="oscuro"] #seccion-cabanas [data-carbon-historico]{color:var(--cereza-secundario)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas #cabinsSummary.cb-summary{background-color:var(--cb-surface)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas #cabinsSummary .cb-summary-group{color:var(--cb-text);background-color:transparent;background-image:initial;border-color:currentcolor}
+html[data-haiku-tema="oscuro"] #seccion-cabanas #cabinsSummary .cb-summary-group[aria-pressed="true"]{background-color:var(--cb-selected)}
 html[data-haiku-tema="oscuro"] #seccion-cabanas #cabinsSummary .cb-summary-group span{border-color:currentcolor}
-html[data-haiku-tema="oscuro"] #seccion-cabanas #cabinsSummary .cb-summary-count{color:#9fd2b3}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-cabin-number, html[data-haiku-tema="oscuro"] #seccion-cabanas #cabinsSummary .cb-cabin-number{color:#9fd2b3;background-color:rgb(37, 71, 54);background-image:initial;border-color:currentcolor}
-html[data-haiku-tema="oscuro"] #seccion-cabanas #cabinsSummary [aria-pressed="true"] .cb-cabin-number{background-color:rgb(27, 38, 33);background-image:initial}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-filters button[aria-pressed="true"]{color:#9fd2b3;background-color:rgb(37, 71, 54);background-image:initial;box-shadow:none}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-tracking-head, html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-tracking-row{color:rgb(232, 239, 234)}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-tracking-head{color:#baadb5;border-bottom-color:#3a323c}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-tracking-row{border-bottom-color:#3a323c}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-tracking-avatar{color:#9fd2b3;background-color:rgb(37, 71, 54);background-image:initial}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-tracking-time{color:#9fd2b3}
+html[data-haiku-tema="oscuro"] #seccion-cabanas #cabinsSummary .cb-summary-count{color:var(--cb-accent)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-cabin-number, html[data-haiku-tema="oscuro"] #seccion-cabanas #cabinsSummary .cb-cabin-number{color:var(--cb-accent);background-color:var(--cb-selected);border-color:currentcolor}
+html[data-haiku-tema="oscuro"] #seccion-cabanas #cabinsSummary [aria-pressed="true"] .cb-cabin-number{background-color:var(--cb-surface)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-filters button[aria-pressed="true"]{color:var(--cb-accent);background-color:var(--cb-selected);box-shadow:none}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-tracking-head, html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-tracking-row{color:var(--cb-text)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-tracking-head{color:var(--cb-muted)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-tracking-avatar{color:var(--cb-accent);background-color:var(--cb-selected)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-tracking-time{color:var(--cb-accent)}
 html[data-haiku-tema="oscuro"] #seccion-cabanas #aseo-resumen .cb-tracking-row .cb-badge.progress{color:rgb(166, 204, 238);background-color:rgb(32, 58, 65);background-image:initial}
-html[data-haiku-tema="oscuro"] #seccion-cabanas #aseo-resumen .cb-tracking-row .cb-open{color:#9fd2b3;background-color:rgb(27, 38, 33);background-image:initial;border-color:#3a323c}
-html[data-haiku-tema="oscuro"] #seccion-cabanas #cabinsSuppliesSummary{color:rgb(232, 239, 234);background-color:rgb(27, 38, 33);background-image:initial;border-color:#3a323c}
-html[data-haiku-tema="oscuro"] #seccion-cabanas #cabinsSuppliesSummary > strong{color:rgb(232, 239, 234)}
-html[data-haiku-tema="oscuro"] #seccion-cabanas #cabinsSuppliesSummary b{color:#9fd2b3}
-html[data-haiku-tema="oscuro"] #seccion-cabanas #cabinsSuppliesSummary summary{color:#9fd2b3}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-chevron{background-color:rgb(159, 210, 179);background-image:initial}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-destinations-list{border-top-color:#3a323c}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-supply-destination strong{color:rgb(232, 239, 234)}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-supply-destination small{color:#baadb5}
+html[data-haiku-tema="oscuro"] #seccion-cabanas #aseo-resumen .cb-tracking-row .cb-open{color:var(--cb-accent);background-color:var(--cb-surface)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas #cabinsSuppliesSummary{color:var(--cb-text);background-color:var(--cb-surface)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas #cabinsSuppliesSummary > strong{color:var(--cb-text)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas #cabinsSuppliesSummary b{color:var(--cb-accent)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas #cabinsSuppliesSummary summary{color:var(--cb-accent)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-chevron{background-color:var(--cb-accent)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-supply-destination strong{color:var(--cb-text)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-supply-destination small{color:var(--cb-muted)}
 @media (max-width: 1100px) {
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-tracking-row{border-color:#3a323c}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-tracking-type{color:#baadb5}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-tracking-in, html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-tracking-out, html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-tracking-time{background-color:rgb(15, 25, 21);background-image:initial}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-tracking-row [data-label]::before{color:#baadb5}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-tracking-type{color:var(--cb-muted)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-tracking-in, html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-tracking-out, html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-tracking-time{background-color:var(--cb-canvas)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-tracking-row [data-label]::before{color:var(--cb-muted)}
 }
-html[data-haiku-tema="oscuro"] #seccion-cabanas #panel-agregar-solicita .cb-request-drawer-panel{color:rgb(232, 239, 234);background-color:rgb(27, 38, 33);background-image:initial;border-color:#3a323c}
+html[data-haiku-tema="oscuro"] #seccion-cabanas #panel-agregar-solicita .cb-request-drawer-panel{color:var(--cb-text);background-color:var(--cb-surface)}
 html[data-haiku-tema="oscuro"] #seccion-cabanas #solicita-tipos{border-color:currentcolor}
-html[data-haiku-tema="oscuro"] #seccion-cabanas #solicita-tipos legend{color:#baadb5}
-html[data-haiku-tema="oscuro"] #seccion-cabanas #solicita-tipos .cb-request-type{color:rgb(232, 239, 234);background-color:rgb(27, 38, 33);background-image:initial;border-color:#3a323c}
-html[data-haiku-tema="oscuro"] #seccion-cabanas #solicita-tipos .cb-request-type:has(input:checked){background-color:rgb(37, 71, 54);background-image:initial;border-color:#3a323c}
-html[data-haiku-tema="oscuro"] #seccion-cabanas #solicita-tipos input{accent-color:#9fd2b3}
-html[data-haiku-tema="oscuro"] #seccion-cabanas #solicita-error{color:rgb(232, 239, 234)}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-typed-request{color:rgb(232, 239, 234)}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-typed-request strong{color:rgb(232, 239, 234)}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-typed-request small{color:#baadb5}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-typed-request > button{color:#9fd2b3}
-html[data-haiku-tema="oscuro"] #seccion-cabanas #solicita-cabana-fija{color:#baadb5}
+html[data-haiku-tema="oscuro"] #seccion-cabanas #solicita-tipos legend{color:var(--cb-muted)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas #solicita-tipos .cb-request-type{color:var(--cb-text);background-color:var(--cb-surface)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas #solicita-tipos .cb-request-type:has(input:checked){background-color:var(--cb-selected)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas #solicita-tipos input{accent-color:var(--cb-accent)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas #solicita-error{color:var(--cb-text)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-typed-request{color:var(--cb-text)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-typed-request strong{color:var(--cb-text)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-typed-request small{color:var(--cb-muted)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-typed-request > button{color:var(--cb-accent)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas #solicita-cabana-fija{color:var(--cb-muted)}
 html[data-haiku-tema="oscuro"] #seccion-cabanas #repaso-checklist{border-top-color:currentcolor}
 html[data-haiku-tema="oscuro"] #seccion-cabanas #repaso-checklist .cb-sector-head{color:inherit}
 html[data-haiku-tema="oscuro"] #seccion-cabanas #repaso-checklist .cb-check{color:inherit}
 html[data-haiku-tema="oscuro"] #seccion-cabanas #repaso-individual [data-repaso-error]{color:var(--texto-secundario, var(--cereza-secundario))}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-operation-row .cb-cleaning-duration{color:rgb(166, 204, 238)}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-operation-row .cb-cleaning-duration.is-complete{color:#9fd2b3}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-operation-row .cb-cabin-holder{color:rgb(232, 239, 234)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-operation-row .cb-cabin-holder{color:var(--cb-text)}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-operation-row .cb-cabin-guest .cb-cabin-movement{color:rgb(166, 204, 238)}
 html[data-haiku-tema="oscuro"] #seccion-cabanas :is(.cb-operation-row, .cb-cabin-context) .cb-request-summary .cb-request-summary-item{color:rgb(242, 197, 141);background-color:initial;background-image:none;border-color:currentcolor}
 html[data-haiku-tema="oscuro"] #seccion-cabanas :is(.cb-cabin, .cb-cabin-context) .cb-note-summary .cb-note-summary-item{color:rgb(166, 204, 238)}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-occupancy-summary{color:#baadb5}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-occupancy-summary{color:var(--cb-muted)}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-service-summary-item{color:rgb(212, 180, 242)}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-context-notice{color:#baadb5}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-context-notice button{color:#9fd2b3;background-color:initial;background-image:none;border-color:currentcolor}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-request-actions .cb-outline{color:#9fd2b3;background-color:rgb(27, 38, 33);background-image:initial;border-color:#3a323c}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-request-actions .cb-outline:hover{background-color:rgb(37, 71, 54);background-image:initial}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-context-notice{color:var(--cb-muted)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-context-notice button{color:var(--cb-accent);background-color:initial;background-image:none;border-color:currentcolor}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-request-actions .cb-outline{color:var(--cb-accent);background-color:var(--cb-surface)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-request-actions .cb-outline:hover{background-color:var(--cb-selected)}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-requests-overlay{background-color:rgba(0, 0, 0, 0.467);background-image:initial}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-requests-dialog{color:rgb(232, 239, 234);background-color:rgb(27, 38, 33);background-image:initial;box-shadow:rgba(0, 0, 0, 0.2) 0px 12px 36px;border-color:#3a323c}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-requests-dialog > header{border-bottom-color:#3a323c}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-requests-dialog h2{color:rgb(232, 239, 234)}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-requests-dialog header p{color:#baadb5}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-requests-dialog header button{color:#baadb5;background-color:transparent;background-image:initial;border-color:currentcolor}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-request-list-item{color:rgb(232, 239, 234);background-color:rgb(27, 38, 33);background-image:initial;border-color:#3a323c}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-request-list-item:hover{background-color:rgb(37, 71, 54);background-image:initial}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-request-list-head strong{color:#9fd2b3}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-request-list-head small, html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-request-list-description{color:#baadb5}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-request-actions button:focus-visible, html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-requests-dialog button:focus-visible{outline-color:#3a323c}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-requests-dialog{color:var(--cb-text);background-color:var(--cb-surface);box-shadow:rgba(0, 0, 0, 0.2) 0px 12px 36px}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-requests-dialog h2{color:var(--cb-text)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-requests-dialog header p{color:var(--cb-muted)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-requests-dialog header button{color:var(--cb-muted);background-color:transparent;background-image:initial;border-color:currentcolor}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-request-list-item{color:var(--cb-text);background-color:var(--cb-surface)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-request-list-item:hover{background-color:var(--cb-selected)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-request-list-head strong{color:var(--cb-accent)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-request-list-head small, html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-request-list-description{color:var(--cb-muted)}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-cleaning-duration b{color:inherit}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-filter-category{border-color:currentcolor}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-filter-category > summary{color:#baadb5;background-color:rgb(27, 38, 33);background-image:initial;border-color:#3a323c}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-filter-menu{background-color:rgb(27, 38, 33);background-image:initial;box-shadow:rgba(0, 0, 0, 0.133) 0px 8px 24px;border-color:#3a323c}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-filter-menu > small{color:#baadb5}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-filter-menu > button{color:rgb(232, 239, 234);background-color:transparent;background-image:initial;border-color:currentcolor}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-filter-menu > button::before{border-color:#3a323c}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-filter-menu > button[aria-pressed="true"]{color:#9fd2b3;background-color:rgb(37, 71, 54);background-image:initial}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-filter-menu > button[aria-pressed="true"]::before{background-color:rgb(159, 210, 179);background-image:initial;box-shadow:rgb(27, 38, 33) 0px 0px 0px 2px inset;border-color:#3a323c}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-filter-category summary:focus-visible, html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-filter-menu button:focus-visible{outline-color:#3a323c}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-filter-bar .cb-filters button{color:#baadb5}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-filter-bar .cb-filters button[aria-pressed="true"]{color:#9fd2b3;background-color:rgb(37, 71, 54);background-image:initial}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-filter-count{color:#baadb5}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-supply-cabin{color:rgb(232, 239, 234);background-color:rgb(27, 38, 33);background-image:initial;border-color:#3a323c}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-supply-cabin strong{color:rgb(232, 239, 234)}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-supply-cabin p{color:#baadb5}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-supply-form label{color:#baadb5}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-supply-form :is(input, select){color:rgb(232, 239, 234);background-color:rgb(27, 38, 33);background-image:initial;border-color:#3a323c}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-filter-category > summary{color:var(--cb-muted);background-color:var(--cb-surface)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-filter-menu{background-color:var(--cb-surface);box-shadow:rgba(0, 0, 0, 0.133) 0px 8px 24px}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-filter-menu > small{color:var(--cb-muted)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-filter-menu > button{color:var(--cb-text);background-color:transparent;background-image:initial;border-color:currentcolor}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-filter-menu > button[aria-pressed="true"]{color:var(--cb-accent);background-color:var(--cb-selected)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-filter-menu > button[aria-pressed="true"]::before{background-color:var(--cb-accent);box-shadow:inset 0 0 0 2px var(--cb-surface)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-filter-bar .cb-filters button{color:var(--cb-muted)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-filter-bar .cb-filters button[aria-pressed="true"]{color:var(--cb-accent);background-color:var(--cb-selected)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-filter-count{color:var(--cb-muted)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-supply-cabin{color:var(--cb-text);background-color:var(--cb-surface)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-supply-cabin strong{color:var(--cb-text)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-supply-cabin p{color:var(--cb-muted)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-supply-form label{color:var(--cb-muted)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-supply-form :is(input, select){color:var(--cb-text);background-color:var(--cb-surface)}
 html[data-haiku-tema="oscuro"] #seccion-cabanas #cabinsCheckoutError{color:rgb(242, 197, 141)}
-html[data-haiku-tema="oscuro"] #seccion-cabanas #cabinsCheckoutList{border-color:#3a323c}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-checkout-card{color:rgb(232, 239, 234);background-color:rgb(27, 38, 33);background-image:initial;border-color:#3a323c}
-html[data-haiku-tema="oscuro"] #seccion-cabanas #cabinsCheckoutList > .cb-checkout-card{border-top-color:currentcolor;border-right-color:currentcolor;border-bottom-color:#3a323c;border-left-color:currentcolor}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-checkout-card{color:var(--cb-text);background-color:var(--cb-surface)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas #cabinsCheckoutList > .cb-checkout-card{border-top-color:currentcolor;border-right-color:currentcolor;border-left-color:currentcolor}
 html[data-haiku-tema="oscuro"] #seccion-cabanas #cabinsCheckoutList > .cb-checkout-card:last-child{border-bottom-color:currentcolor}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-checkout-fields label{color:#baadb5}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-checkout-fields input{color:rgb(232, 239, 234);background-color:rgb(27, 38, 33);background-image:initial;border-color:#3a323c}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-checkout-recover > small{color:#baadb5}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-checkout-grid button{color:rgb(232, 239, 234);background-color:initial;background-image:none;border-color:currentcolor}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-checkout-grid button > .cb-check-square{background-color:transparent;background-image:initial;border-color:#3a323c}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-checkout-grid button[aria-checked="true"] > .cb-check-square{color:#f4ecef;background-color:rgb(159, 210, 179);background-image:initial;border-color:#3a323c}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-checkout-review > strong{color:rgb(232, 239, 234)}
-html[data-haiku-tema="oscuro"] #seccion-cabanas #cabinsCheckoutDetail > .cb-cabin p{color:#baadb5}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-checkout-card > h3{color:rgb(232, 239, 234)}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-checkout-card .cb-cabin-holder{color:rgb(232, 239, 234)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-checkout-fields label{color:var(--cb-muted)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-checkout-fields input{color:var(--cb-text);background-color:var(--cb-surface)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-checkout-recover > small{color:var(--cb-muted)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-checkout-grid button{color:var(--cb-text);background-color:initial;background-image:none;border-color:currentcolor}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-checkout-grid button > .cb-check-square{background-color:transparent;background-image:initial}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-checkout-grid button[aria-checked="true"] > .cb-check-square{color:var(--cb-surface);background-color:var(--cb-accent)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-checkout-review > strong{color:var(--cb-text)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas #cabinsCheckoutDetail > .cb-cabin p{color:var(--cb-muted)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-checkout-card > h3{color:var(--cb-text)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-checkout-card .cb-cabin-holder{color:var(--cb-text)}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-checkout-card .cb-cabin-movement{color:rgb(166, 204, 238)}
 
 /* css/haiku-tareas-generales-v1.css */
-html[data-haiku-tema="oscuro"] #seccion-cabanas .tg-section{color:rgb(232, 239, 234)}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .tg-section .cb-section-head h2{color:rgb(232, 239, 234)}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .tg-section .cb-section-head p{color:#baadb5}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .tg-section .cb-outline{color:#9fd2b3;background-color:rgb(27, 38, 33);background-image:initial;border-color:#3a323c}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .tg-summary{color:#baadb5}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .tg-summary b{color:#9fd2b3}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .tg-section{color:var(--cb-text)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .tg-section .cb-section-head h2{color:var(--cb-text)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .tg-section .cb-section-head p{color:var(--cb-muted)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .tg-section .cb-outline{color:var(--cb-accent);background-color:var(--cb-surface)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .tg-summary{color:var(--cb-muted)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .tg-summary b{color:var(--cb-accent)}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .tg-summary span:first-child b{color:rgb(242, 197, 141)}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .tg-table{background-color:rgb(27, 38, 33);background-image:initial;border-color:#3a323c}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .tg-head{color:#baadb5;background-color:rgb(15, 25, 21);background-image:initial}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .tg-task + .tg-task{border-top-color:#3a323c}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .tg-title strong{color:rgb(232, 239, 234)}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .tg-title small, html[data-haiku-tema="oscuro"] #seccion-cabanas .tg-state small, html[data-haiku-tema="oscuro"] #seccion-cabanas .tg-review small{color:#baadb5}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .tg-person, html[data-haiku-tema="oscuro"] #seccion-cabanas .tg-completed, html[data-haiku-tema="oscuro"] #seccion-cabanas .tg-review{color:#baadb5}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .tg-table{background-color:var(--cb-surface)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .tg-head{color:var(--cb-muted);background-color:var(--cb-canvas)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .tg-title strong{color:var(--cb-text)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .tg-title small, html[data-haiku-tema="oscuro"] #seccion-cabanas .tg-state small, html[data-haiku-tema="oscuro"] #seccion-cabanas .tg-review small{color:var(--cb-muted)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .tg-person, html[data-haiku-tema="oscuro"] #seccion-cabanas .tg-completed, html[data-haiku-tema="oscuro"] #seccion-cabanas .tg-review{color:var(--cb-muted)}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .tg-pendiente, html[data-haiku-tema="oscuro"] #seccion-cabanas .tg-con_detalles{color:rgb(242, 197, 141);background-color:rgb(52, 39, 27);background-image:initial}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .tg-en_curso, html[data-haiku-tema="oscuro"] #seccion-cabanas .tg-realizada{color:rgb(166, 204, 238);background-color:rgb(32, 58, 65);background-image:initial}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .tg-verificada{color:#9fd2b3;background-color:rgb(37, 71, 54);background-image:initial}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .tg-row input, html[data-haiku-tema="oscuro"] #seccion-cabanas .tg-row textarea{color:rgb(232, 239, 234);background-color:rgb(27, 38, 33);background-image:initial;border-color:#3a323c}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .tg-verificada{color:var(--cereza-verde);background-color:var(--cereza-verde-fondo)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .tg-row input, html[data-haiku-tema="oscuro"] #seccion-cabanas .tg-row textarea{color:var(--cb-text);background-color:var(--cb-surface)}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .tg-row select{border-color:transparent}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .tg-row input:focus-visible, html[data-haiku-tema="oscuro"] #seccion-cabanas .tg-row textarea:focus-visible, html[data-haiku-tema="oscuro"] #seccion-cabanas .tg-row select:focus-visible{outline-color:#3a323c}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .tg-task-history{background-color:rgb(15, 25, 21);background-image:initial;border-top-color:#3a323c}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .tg-meta{color:#baadb5}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .tg-feedback, html[data-haiku-tema="oscuro"] #seccion-cabanas .tg-success{color:#9fd2b3}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .tg-task-history{background-color:var(--cb-canvas)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .tg-meta{color:var(--cb-muted)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .tg-feedback{color:var(--cb-accent)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .tg-success{color:var(--cereza-verde)}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .tg-error, html[data-haiku-tema="oscuro"] #seccion-cabanas .tg-previous-label{color:rgb(242, 197, 141)}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .tg-previous > summary{color:#9fd2b3}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .tg-global-history{border-top-color:#3a323c}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .tg-global-history h3{color:rgb(232, 239, 234)}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .tg-history li{border-bottom-color:#3a323c}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .tg-history small{color:#baadb5}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .tg-previous > summary{color:var(--cb-accent)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .tg-global-history h3{color:var(--cb-text)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .tg-history small{color:var(--cb-muted)}
 @media (max-width: 1100px) {
-html[data-haiku-tema="oscuro"] #seccion-cabanas .tg-mobile-label{color:#baadb5}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .tg-mobile-label{color:var(--cb-muted)}
 }
 
 /* css/revision-plantilla-v1.css */
-html[data-haiku-tema="oscuro"] #seccion-cabanas .pr-button, html[data-haiku-tema="oscuro"] #seccion-cabanas .pr-footer button, html[data-haiku-tema="oscuro"] #seccion-cabanas .pr-confirm button, html[data-haiku-tema="oscuro"] #seccion-cabanas .pr-name-form button{color:rgb(232, 239, 234);background-color:rgb(27, 38, 33);background-image:initial;border-color:#3a323c}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .pr-button{color:#9fd2b3;background-color:rgb(37, 71, 54);background-image:initial}
-html[data-haiku-tema="oscuro"] #seccion-cabanas #cabinsReviewEditor{color:rgb(232, 239, 234)}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .pr-heading h3, html[data-haiku-tema="oscuro"] #seccion-cabanas .pr-confirm h3{color:rgb(232, 239, 234)}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .pr-heading p{color:#baadb5}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .pr-toolbar{color:#9fd2b3;background-color:rgb(37, 71, 54);background-image:initial;border-color:#3a323c}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .pr-preview, html[data-haiku-tema="oscuro"] #seccion-cabanas .pr-mode small, html[data-haiku-tema="oscuro"] #seccion-cabanas .pr-archived-row small{color:#baadb5}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .pr-area, html[data-haiku-tema="oscuro"] #seccion-cabanas .pr-archive{background-color:rgb(27, 38, 33);background-image:initial;border-color:#3a323c}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .pr-area > summary, html[data-haiku-tema="oscuro"] #seccion-cabanas .pr-group > summary{background-color:rgb(15, 25, 21);background-image:initial}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .pr-area > summary small, html[data-haiku-tema="oscuro"] #seccion-cabanas .pr-group > summary small{color:#baadb5}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .pr-item{border-bottom-color:#3a323c}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .pr-preview-check{background-color:rgb(15, 25, 21);background-image:initial;border-color:#3a323c}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .pr-new{color:#9fd2b3;background-color:rgb(37, 71, 54);background-image:initial}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .pr-row-tools button, html[data-haiku-tema="oscuro"] #seccion-cabanas .pr-options > summary, html[data-haiku-tema="oscuro"] #seccion-cabanas .pr-rename-group, html[data-haiku-tema="oscuro"] #seccion-cabanas .pr-add{color:#9fd2b3;background-color:transparent;background-image:initial;border-color:currentcolor}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .pr-options > div{background-color:rgb(27, 38, 33);background-image:initial;box-shadow:rgba(0, 0, 0, 0.133) 0px 4px 14px;border-color:#3a323c}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .pr-options > div button{color:rgb(232, 239, 234)}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .pr-options > div button:hover, html[data-haiku-tema="oscuro"] #seccion-cabanas .pr-row-tools button:hover{background-color:rgb(15, 25, 21);background-image:initial}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .pr-archived-row{border-top-color:#3a323c}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .pr-primary{color:#f4ecef!important;background-color:rgb(159, 210, 179)!important;background-image:initial!important;border-color:transparent!important}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .pr-name-form input{color:rgb(232, 239, 234);background-color:rgb(15, 25, 21);background-image:initial;border-color:#3a323c}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .pr-confirm{color:rgb(232, 239, 234);background-color:rgb(27, 38, 33);background-image:initial;border-color:#3a323c}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .pr-button, html[data-haiku-tema="oscuro"] #seccion-cabanas .pr-footer button, html[data-haiku-tema="oscuro"] #seccion-cabanas .pr-confirm button, html[data-haiku-tema="oscuro"] #seccion-cabanas .pr-name-form button{color:var(--cb-text);background-color:var(--cb-surface)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .pr-button{color:var(--cb-accent);background-color:var(--cb-selected)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas #cabinsReviewEditor{color:var(--cb-text)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .pr-heading h3, html[data-haiku-tema="oscuro"] #seccion-cabanas .pr-confirm h3{color:var(--cb-text)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .pr-heading p{color:var(--cb-muted)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .pr-toolbar{color:var(--cb-accent);background-color:var(--cb-selected)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .pr-preview, html[data-haiku-tema="oscuro"] #seccion-cabanas .pr-mode small, html[data-haiku-tema="oscuro"] #seccion-cabanas .pr-archived-row small{color:var(--cb-muted)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .pr-area, html[data-haiku-tema="oscuro"] #seccion-cabanas .pr-archive{background-color:var(--cb-surface)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .pr-area > summary, html[data-haiku-tema="oscuro"] #seccion-cabanas .pr-group > summary{background-color:var(--cb-canvas)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .pr-area > summary small, html[data-haiku-tema="oscuro"] #seccion-cabanas .pr-group > summary small{color:var(--cb-muted)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .pr-preview-check{background-color:var(--cb-canvas)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .pr-new{color:var(--cb-accent);background-color:var(--cb-selected)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .pr-row-tools button, html[data-haiku-tema="oscuro"] #seccion-cabanas .pr-options > summary, html[data-haiku-tema="oscuro"] #seccion-cabanas .pr-rename-group, html[data-haiku-tema="oscuro"] #seccion-cabanas .pr-add{color:var(--cb-accent);background-color:transparent;background-image:initial;border-color:currentcolor}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .pr-options > div{background-color:var(--cb-surface);box-shadow:rgba(0, 0, 0, 0.133) 0px 4px 14px}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .pr-options > div button{color:var(--cb-text)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .pr-options > div button:hover, html[data-haiku-tema="oscuro"] #seccion-cabanas .pr-row-tools button:hover{background-color:var(--cb-canvas)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .pr-primary{color:var(--cb-surface)!important;background-color:var(--cb-accent)!important;border-color:transparent!important}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .pr-name-form input{color:var(--cb-text);background-color:var(--cb-canvas)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .pr-confirm{color:var(--cb-text);background-color:var(--cb-surface)}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .pr-confirm::backdrop{background-color:rgba(16, 34, 28, 0.6);background-image:initial}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .pr-confirm-heading > .pr-icon{background-color:rgb(159, 210, 179)}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .pr-confirm-heading small{color:#baadb5}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .pr-changes{border-color:#3a323c}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .pr-changes li + li{border-top-color:#3a323c}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .pr-changes li strong{color:#9fd2b3}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .pr-confirm-info, html[data-haiku-tema="oscuro"] #seccion-cabanas #cabinsReviewTemplateSaved{color:rgb(232, 239, 234);background-color:rgb(37, 71, 54);background-image:initial}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .pr-error{color:rgb(232, 239, 234);border-left-color:#3a323c}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .pr-icon, html[data-haiku-tema="oscuro"] #seccion-cabanas .pr-fold{background-color:rgb(159, 210, 179)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .pr-confirm-heading > .pr-icon{background-color:var(--cb-accent)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .pr-confirm-heading small{color:var(--cb-muted)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .pr-changes li strong{color:var(--cb-accent)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .pr-confirm-info, html[data-haiku-tema="oscuro"] #seccion-cabanas #cabinsReviewTemplateSaved{color:var(--cb-text);background-color:var(--cb-selected)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .pr-error{color:var(--cb-text);border-left-color:#3a323c}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .pr-icon, html[data-haiku-tema="oscuro"] #seccion-cabanas .pr-fold{background-color:var(--cb-accent)}
 @media (max-width: 800px) {
-html[data-haiku-tema="oscuro"] #seccion-cabanas .pr-footer{background-color:rgb(27, 38, 33);background-image:initial;border-top-color:#3a323c}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .pr-footer{background-color:var(--cb-surface)}
 }
 
 /* css/checkout-recorrido-v2.css */
-html[data-haiku-tema="oscuro"] :is(#cabinsCheckout, .co-dialog, .co-stay-widget) .co-button:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:rgb(232, 239, 234);background-color:rgb(27, 38, 33);background-image:initial;box-shadow:none;border-color:#3a323c}
-html[data-haiku-tema="oscuro"] :is(#cabinsCheckout, .co-dialog) .co-primary:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:rgb(244, 250, 246);background-color:rgb(47, 118, 83);background-image:initial;border-color:#9fd2b3}
-html[data-haiku-tema="oscuro"] :is(#cabinsCheckout, .co-dialog, .co-stay-widget) :is(button, input, select, textarea):focus-visible:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){outline-color:#3a323c}
-html[data-haiku-tema="oscuro"] :is(#cabinsCheckout, .co-dialog) .co-link:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:#9fd2b3;background-color:initial;background-image:none;box-shadow:none;border-color:currentcolor}
-html[data-haiku-tema="oscuro"] :is(#cabinsCheckout, .co-dialog) .co-small:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:#baadb5}
-html[data-haiku-tema="oscuro"] #cabinsCheckout .co-list-head:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:#baadb5;background-color:rgb(27, 38, 33);background-image:initial;border-bottom-color:#3a323c}
-html[data-haiku-tema="oscuro"] #cabinsCheckout .co-list-row:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){background-color:rgb(27, 38, 33);background-image:initial;border-bottom-color:#3a323c}
-html[data-haiku-tema="oscuro"] #cabinsCheckout .co-list-row:last-child:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){border-bottom-color:currentcolor}
-html[data-haiku-tema="oscuro"] #cabinsCheckout .co-list-row :is(strong, span):not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:rgb(232, 239, 234)}
-html[data-haiku-tema="oscuro"] #cabinsCheckout .co-list-row small:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:#baadb5}
-html[data-haiku-tema="oscuro"] #cabinsCheckout .co-keys:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:#baadb5;background-color:transparent;background-image:initial;border-color:#3a323c}
+html[data-haiku-tema="oscuro"] :is(#cabinsCheckout, .co-dialog, .co-stay-widget) .co-button:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--cb-text);background-color:var(--cb-surface);box-shadow:none}
+html[data-haiku-tema="oscuro"] :is(#cabinsCheckout, .co-dialog) .co-primary:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--cereza-sobre-primario);background-color:var(--cereza-primario)}
+html[data-haiku-tema="oscuro"] :is(#cabinsCheckout, .co-dialog) .co-link:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--cb-accent);background-color:initial;background-image:none;box-shadow:none;border-color:currentcolor}
+html[data-haiku-tema="oscuro"] :is(#cabinsCheckout, .co-dialog) .co-small:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--cb-muted)}
+html[data-haiku-tema="oscuro"] #cabinsCheckout .co-list-head:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--cb-muted);background-color:var(--cb-surface)}
+html[data-haiku-tema="oscuro"] #cabinsCheckout .co-list-row:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){background-color:var(--cb-surface)}
+html[data-haiku-tema="oscuro"] #cabinsCheckout .co-list-row :is(strong, span):not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--cb-text)}
+html[data-haiku-tema="oscuro"] #cabinsCheckout .co-list-row small:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--cb-muted)}
+html[data-haiku-tema="oscuro"] #cabinsCheckout .co-keys:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--cb-muted);background-color:transparent;background-image:initial}
 html[data-haiku-tema="oscuro"] #cabinsCheckout .co-keys.is-selected:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:rgb(242, 197, 141);background-color:rgb(52, 39, 27);background-image:initial;border-color:#3a323c}
-html[data-haiku-tema="oscuro"] #cabinsCheckout .co-list-field input:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)), html[data-haiku-tema="oscuro"] #cabinsCheckout .co-exit-fields input:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:rgb(232, 239, 234);background-color:rgb(15, 25, 21);background-image:initial;border-color:#3a323c}
+html[data-haiku-tema="oscuro"] #cabinsCheckout .co-list-field input:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)), html[data-haiku-tema="oscuro"] #cabinsCheckout .co-exit-fields input:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--cb-text);background-color:var(--cb-canvas)}
 html[data-haiku-tema="oscuro"] #cabinsCheckout .co-list-row .co-amber:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:rgb(242, 197, 141)}
-html[data-haiku-tema="oscuro"] #cabinsCheckout .co-review-head h2:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:rgb(232, 239, 234)}
-html[data-haiku-tema="oscuro"] #cabinsCheckout .co-review-head p:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:#baadb5}
-html[data-haiku-tema="oscuro"] #cabinsCheckout .co-route-heading:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:rgb(232, 239, 234)}
-html[data-haiku-tema="oscuro"] #cabinsCheckout .co-route-heading small:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:#baadb5}
-html[data-haiku-tema="oscuro"] #cabinsCheckout .co-sector:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)), html[data-haiku-tema="oscuro"] #cabinsCheckout .co-panel:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:rgb(232, 239, 234);background-color:rgb(27, 38, 33);background-image:initial;border-color:#3a323c}
-html[data-haiku-tema="oscuro"] #cabinsCheckout :is(.co-sector, .co-panel) h3:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:rgb(232, 239, 234)}
-html[data-haiku-tema="oscuro"] #cabinsCheckout .co-sector > header > button:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:#9fd2b3;background-color:initial;background-image:none;border-color:currentcolor}
+html[data-haiku-tema="oscuro"] #cabinsCheckout .co-review-head h2:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--cb-text)}
+html[data-haiku-tema="oscuro"] #cabinsCheckout .co-review-head p:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--cb-muted)}
+html[data-haiku-tema="oscuro"] #cabinsCheckout .co-route-heading:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--cb-text)}
+html[data-haiku-tema="oscuro"] #cabinsCheckout .co-route-heading small:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--cb-muted)}
+html[data-haiku-tema="oscuro"] #cabinsCheckout .co-sector:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)), html[data-haiku-tema="oscuro"] #cabinsCheckout .co-panel:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--cb-text);background-color:var(--cb-surface)}
+html[data-haiku-tema="oscuro"] #cabinsCheckout :is(.co-sector, .co-panel) h3:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--cb-text)}
+html[data-haiku-tema="oscuro"] #cabinsCheckout .co-sector > header > button:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--cb-accent);background-color:initial;background-image:none;border-color:currentcolor}
 html[data-haiku-tema="oscuro"] #cabinsCheckout .co-sector [aria-checked="true"] .cb-check-square:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:rgb(244, 250, 246);background-color:rgb(47, 118, 83);background-image:initial;border-color:#9fd2b3}
 html[data-haiku-tema="oscuro"] #cabinsCheckout .co-reponer:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:rgb(242, 197, 141)}
-html[data-haiku-tema="oscuro"] :is(#cabinsCheckout, .co-dialog) .co-chip:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:#baadb5;background-color:rgb(15, 25, 21);background-image:initial;box-shadow:none;border-color:#3a323c}
+html[data-haiku-tema="oscuro"] :is(#cabinsCheckout, .co-dialog) .co-chip:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--cb-muted);background-color:var(--cb-canvas);box-shadow:none}
 html[data-haiku-tema="oscuro"] :is(#cabinsCheckout, .co-dialog) .co-chip.is-selected:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:rgb(242, 197, 141);background-color:rgb(52, 39, 27);background-image:initial;border-color:#3a323c}
-html[data-haiku-tema="oscuro"] #cabinsCheckout .co-sector-points p:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:#baadb5}
+html[data-haiku-tema="oscuro"] #cabinsCheckout .co-sector-points p:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--cb-muted)}
 html[data-haiku-tema="oscuro"] #cabinsCheckout .co-problem:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:rgb(242, 197, 141)}
-html[data-haiku-tema="oscuro"] #cabinsCheckout .co-loan:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:rgb(232, 239, 234);background-color:rgb(52, 39, 27);background-image:initial;border-color:currentcolor}
+html[data-haiku-tema="oscuro"] #cabinsCheckout .co-loan:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--cb-text);background-color:rgb(52, 39, 27);background-image:initial;border-color:currentcolor}
 html[data-haiku-tema="oscuro"] #cabinsCheckout .co-loan strong:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:rgb(242, 197, 141)}
-html[data-haiku-tema="oscuro"] #cabinsCheckout .co-loan.is-returned:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:#9fd2b3;background-color:rgb(32, 60, 44);background-image:initial}
-html[data-haiku-tema="oscuro"] #cabinsCheckout .co-loan.is-returned strong:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:#9fd2b3}
-html[data-haiku-tema="oscuro"] #cabinsCheckout .co-panel small:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:#baadb5}
+html[data-haiku-tema="oscuro"] #cabinsCheckout .co-loan.is-returned:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--cereza-verde);background-color:rgb(32, 60, 44);background-image:initial}
+html[data-haiku-tema="oscuro"] #cabinsCheckout .co-loan.is-returned strong:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--cb-accent)}
+html[data-haiku-tema="oscuro"] #cabinsCheckout .co-panel small:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--cb-muted)}
 html[data-haiku-tema="oscuro"] #cabinsCheckout .co-warning:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){background-color:rgb(52, 39, 27);background-image:initial;border-color:#3a323c}
 html[data-haiku-tema="oscuro"] #cabinsCheckout .co-warning > strong:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:rgb(242, 197, 141)}
-html[data-haiku-tema="oscuro"] #cabinsCheckout [data-co-message]:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:rgb(232, 239, 234);background-color:rgb(15, 25, 21);background-image:initial}
-html[data-haiku-tema="oscuro"] #cabinsCheckout .co-observation:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){border-top-color:#3a323c}
-html[data-haiku-tema="oscuro"] #cabinsCheckout .co-observation p:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:#baadb5}
-html[data-haiku-tema="oscuro"] #cabinsCheckout .co-observation-placeholder:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:#baadb5;background-color:rgb(15, 25, 21);background-image:initial;border-color:#3a323c}
-html[data-haiku-tema="oscuro"] #cabinsCheckout .co-source-notes:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:#baadb5;border-color:#3a323c}
-html[data-haiku-tema="oscuro"] #cabinsCheckout .co-exit-fields label:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:#baadb5}
-html[data-haiku-tema="oscuro"] #cabinsCheckout [data-co-progress]:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:#9fd2b3}
-html[data-haiku-tema="oscuro"] .co-dialog:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:rgb(232, 239, 234);background-color:rgb(27, 38, 33);background-image:initial;box-shadow:rgba(0, 0, 0, 0.267) 0px 12px 48px;border-color:#3a323c}
+html[data-haiku-tema="oscuro"] #cabinsCheckout [data-co-message]:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--cb-text);background-color:var(--cb-canvas)}
+html[data-haiku-tema="oscuro"] #cabinsCheckout .co-observation p:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--cb-muted)}
+html[data-haiku-tema="oscuro"] #cabinsCheckout .co-observation-placeholder:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--cb-muted);background-color:var(--cb-canvas)}
+html[data-haiku-tema="oscuro"] #cabinsCheckout .co-source-notes:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--cb-muted)}
+html[data-haiku-tema="oscuro"] #cabinsCheckout .co-exit-fields label:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--cb-muted)}
+html[data-haiku-tema="oscuro"] #cabinsCheckout [data-co-progress]:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--cb-accent)}
+html[data-haiku-tema="oscuro"] .co-dialog:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--cb-text);background-color:var(--cb-surface);box-shadow:rgba(0, 0, 0, 0.267) 0px 12px 48px}
 html[data-haiku-tema="oscuro"] .co-dialog:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *))::backdrop{background-color:rgba(0, 0, 0, 0.4);background-image:initial}
-html[data-haiku-tema="oscuro"] .co-dialog-head h3:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:rgb(232, 239, 234)}
-html[data-haiku-tema="oscuro"] .co-dialog .co-close:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:#baadb5;background-color:initial;background-image:none;border-color:currentcolor}
-html[data-haiku-tema="oscuro"] .co-dialog .co-form-label:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:#baadb5}
-html[data-haiku-tema="oscuro"] .co-dialog :is(input:not([type="hidden"]), select, textarea):not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:rgb(232, 239, 234);background-color:rgb(15, 25, 21);background-image:initial;border-color:#3a323c}
-html[data-haiku-tema="oscuro"] .co-dialog .co-counter:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){background-color:rgb(15, 25, 21);background-image:initial;border-color:#3a323c}
-html[data-haiku-tema="oscuro"] .co-dialog .co-counter button:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:#9fd2b3;background-color:initial;background-image:none;box-shadow:none;border-color:currentcolor}
+html[data-haiku-tema="oscuro"] .co-dialog-head h3:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--cb-text)}
+html[data-haiku-tema="oscuro"] .co-dialog .co-close:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--cb-muted);background-color:initial;background-image:none;border-color:currentcolor}
+html[data-haiku-tema="oscuro"] .co-dialog .co-form-label:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--cb-muted)}
+html[data-haiku-tema="oscuro"] .co-dialog :is(input:not([type="hidden"]), select, textarea):not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--cb-text);background-color:var(--cb-canvas)}
+html[data-haiku-tema="oscuro"] .co-dialog .co-counter:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){background-color:var(--cb-canvas)}
+html[data-haiku-tema="oscuro"] .co-dialog .co-counter button:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--cb-accent);background-color:initial;background-image:none;box-shadow:none;border-color:currentcolor}
 html[data-haiku-tema="oscuro"] .co-dialog .co-counter input:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){background-color:initial;background-image:none;border-color:currentcolor}
 html[data-haiku-tema="oscuro"] .co-dialog .co-error:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:rgb(242, 197, 141)}
-html[data-haiku-tema="oscuro"] .co-dialog .co-loan-manage:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){background-color:rgb(15, 25, 21);background-image:initial;border-color:#3a323c}
-html[data-haiku-tema="oscuro"] .co-dialog .co-loan-manage small:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:#baadb5}
-html[data-haiku-tema="oscuro"] .co-dialog .co-file-label:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:#baadb5}
-html[data-haiku-tema="oscuro"] .co-stay-widget:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:rgb(232, 239, 234)}
+html[data-haiku-tema="oscuro"] .co-dialog .co-loan-manage:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){background-color:var(--cb-canvas)}
+html[data-haiku-tema="oscuro"] .co-dialog .co-loan-manage small:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--cb-muted)}
+html[data-haiku-tema="oscuro"] .co-dialog .co-file-label:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--cb-muted)}
+html[data-haiku-tema="oscuro"] .co-stay-widget:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--cb-text)}
 html[data-haiku-tema="oscuro"] .co-stay-widget small:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:rgb(242, 197, 141)}
-html[data-haiku-tema="oscuro"] .co-stay-widget select:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:rgb(232, 239, 234);background-color:rgb(15, 25, 21);background-image:initial;border-color:#3a323c}
+html[data-haiku-tema="oscuro"] .co-stay-widget select:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--cb-text);background-color:var(--cb-canvas)}
 @media (max-width: 720px) {
-html[data-haiku-tema="oscuro"] #seccion-cabanas #cabinsCheckoutList{border-color:currentcolor}
-html[data-haiku-tema="oscuro"] #cabinsCheckout .co-list-row:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){border-color:#3a323c}
-html[data-haiku-tema="oscuro"] #cabinsCheckout .co-list-row:last-child:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){border-bottom-color:#3a323c}
 html[data-haiku-tema="oscuro"] .co-dialog:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){border-bottom-color:currentcolor}
 }
-html[data-haiku-tema="oscuro"] #cabinsCheckout .co-area-detail > summary:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:#9fd2b3}
-html[data-haiku-tema="oscuro"] :is(#cabinsCheckout, .co-dialog) .co-evidence-input > textarea:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:rgb(232, 239, 234);background-color:rgb(15, 25, 21);background-image:initial;border-color:#3a323c}
-html[data-haiku-tema="oscuro"] :is(#cabinsCheckout, .co-dialog) .co-camera:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:#9fd2b3;background-color:transparent;background-image:initial;box-shadow:none;border-color:currentcolor}
-html[data-haiku-tema="oscuro"] #cabinsCheckout .co-usage.is-selected:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:#9fd2b3;background-color:rgb(32, 60, 44);background-image:initial;border-color:#3a323c}
-html[data-haiku-tema="oscuro"] #cabinsCheckout .co-route-heading [data-co-loan-count]:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:#baadb5}
-html[data-haiku-tema="oscuro"] #cabinsCheckout .co-sector > summary:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)), html[data-haiku-tema="oscuro"] #cabinsCheckout .co-panel > summary:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)), html[data-haiku-tema="oscuro"] #cabinsCheckout .co-area-detail > summary:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)), html[data-haiku-tema="oscuro"] #cabinsCheckout .co-inventory > summary:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:rgb(232, 239, 234)}
-html[data-haiku-tema="oscuro"] #cabinsCheckout summary > small:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:#baadb5}
-html[data-haiku-tema="oscuro"] #cabinsCheckout summary > svg:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:#9fd2b3}
-html[data-haiku-tema="oscuro"] #cabinsCheckout .co-check:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:rgb(232, 239, 234);background-color:transparent;background-image:initial;border-color:currentcolor}
-html[data-haiku-tema="oscuro"] #cabinsCheckout .co-check input:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){accent-color:#9fd2b3}
-html[data-haiku-tema="oscuro"] #cabinsCheckout .co-area-detail:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)), html[data-haiku-tema="oscuro"] #cabinsCheckout .co-inventory:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){border-color:#3a323c}
-html[data-haiku-tema="oscuro"] #cabinsCheckout .co-area-detail > summary:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)), html[data-haiku-tema="oscuro"] #cabinsCheckout .co-inventory > summary:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:#baadb5}
-html[data-haiku-tema="oscuro"] #cabinsCheckout .co-count:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:#baadb5;background-color:initial;background-image:none;border-top-color:currentcolor;border-right-color:currentcolor;border-bottom-color:#3a323c;border-left-color:currentcolor;box-shadow:none}
+html[data-haiku-tema="oscuro"] #cabinsCheckout .co-area-detail > summary:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--cb-accent)}
+html[data-haiku-tema="oscuro"] :is(#cabinsCheckout, .co-dialog) .co-evidence-input > textarea:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--cb-text);background-color:var(--cb-canvas)}
+html[data-haiku-tema="oscuro"] :is(#cabinsCheckout, .co-dialog) .co-camera:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--cb-accent);background-color:transparent;background-image:initial;box-shadow:none;border-color:currentcolor}
+html[data-haiku-tema="oscuro"] #cabinsCheckout .co-usage.is-selected:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--cb-accent);background-color:var(--cereza-seleccion)}
+html[data-haiku-tema="oscuro"] #cabinsCheckout .co-route-heading [data-co-loan-count]:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--cb-muted)}
+html[data-haiku-tema="oscuro"] #cabinsCheckout .co-sector > summary:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)), html[data-haiku-tema="oscuro"] #cabinsCheckout .co-panel > summary:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)), html[data-haiku-tema="oscuro"] #cabinsCheckout .co-area-detail > summary:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)), html[data-haiku-tema="oscuro"] #cabinsCheckout .co-inventory > summary:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--cb-text)}
+html[data-haiku-tema="oscuro"] #cabinsCheckout summary > small:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--cb-muted)}
+html[data-haiku-tema="oscuro"] #cabinsCheckout summary > svg:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--cb-accent)}
+html[data-haiku-tema="oscuro"] #cabinsCheckout .co-check:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--cb-text);background-color:transparent;background-image:initial;border-color:currentcolor}
+html[data-haiku-tema="oscuro"] #cabinsCheckout .co-check input:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){accent-color:var(--cereza-primario)}
+html[data-haiku-tema="oscuro"] #cabinsCheckout .co-area-detail > summary:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)), html[data-haiku-tema="oscuro"] #cabinsCheckout .co-inventory > summary:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--cb-muted)}
+html[data-haiku-tema="oscuro"] #cabinsCheckout .co-count:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--cb-muted);background-color:initial;background-image:none;border-top-color:currentcolor;border-right-color:currentcolor;border-left-color:currentcolor;box-shadow:none}
 html[data-haiku-tema="oscuro"] #cabinsCheckout .co-amber:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)), html[data-haiku-tema="oscuro"] #cabinsCheckout .co-auto-note:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:rgb(242, 197, 141)}
 html[data-haiku-tema="oscuro"] #cabinsCheckout .co-message-panel > summary > small:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:rgb(242, 197, 141)}
-html[data-haiku-tema="oscuro"] #cabinsCheckout .co-review-footer:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:#baadb5}
-html[data-haiku-tema="oscuro"] #cabinsCheckout :is(summary, input):focus-visible:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){outline-color:#3a323c}
+html[data-haiku-tema="oscuro"] #cabinsCheckout .co-review-footer:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--cb-muted)}
 
 /* css/haiku-paleta-v1.css */
 html[data-haiku-tema="oscuro"] .haku-retiros-libro:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--haku-compacto-texto)}
@@ -1608,88 +1582,81 @@ html[data-haiku-tema="oscuro"] .haku-retiros-libro__confirmado:not(:where(.sideb
 
 /* css/haiku-huespedes-v1.css */
 html[data-haiku-tema="oscuro"] #seccion-huespedes{color:var(--guest-ink);background-color:var(--guest-bg)}
-html[data-haiku-tema="oscuro"] .hu-boton:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)), html[data-haiku-tema="oscuro"] .hu-chip:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)), html[data-haiku-tema="oscuro"] .hu-select:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)), html[data-haiku-tema="oscuro"] .hu-campo:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--guest-ink);background-color:var(--guest-surface);border-color:#3a323c}
-html[data-haiku-tema="oscuro"] .hu-boton:hover:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)), html[data-haiku-tema="oscuro"] .hu-chip:hover:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){background-color:rgb(32, 45, 38);background-image:initial}
-html[data-haiku-tema="oscuro"] .hu-boton[data-primario]:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)), html[data-haiku-tema="oscuro"] .hu-chip[aria-pressed="true"]:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:#9fd2b3;background-color:rgb(37, 71, 54);background-image:initial}
-html[data-haiku-tema="oscuro"] .hu-boton.hu-plano:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:#9fd2b3;background-color:transparent;background-image:initial;border-color:transparent}
-html[data-haiku-tema="oscuro"] .hu-boton.hu-link:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:rgb(172, 213, 239)}
+html[data-haiku-tema="oscuro"] .hu-boton:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)), html[data-haiku-tema="oscuro"] .hu-chip:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)), html[data-haiku-tema="oscuro"] .hu-select:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)), html[data-haiku-tema="oscuro"] .hu-campo:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--guest-ink);background-color:var(--guest-surface)}
+html[data-haiku-tema="oscuro"] .hu-boton:hover:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)), html[data-haiku-tema="oscuro"] .hu-chip:hover:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){background-color:var(--guest-soft)}
+html[data-haiku-tema="oscuro"] .hu-boton[data-primario]:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--cereza-sobre-primario);background-color:var(--cereza-primario)}
+html[data-haiku-tema="oscuro"] .hu-chip[aria-pressed="true"]:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--guest-accent);background-color:var(--guest-selected)}
+html[data-haiku-tema="oscuro"] .hu-boton.hu-plano:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--guest-accent);background-color:transparent;background-image:initial;border-color:transparent}
+html[data-haiku-tema="oscuro"] .hu-boton.hu-link:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--guest-link)}
 html[data-haiku-tema="oscuro"] .hu-resumen:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--guest-muted)}
-html[data-haiku-tema="oscuro"] .hu-lista:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)), html[data-haiku-tema="oscuro"] .hu-ficha:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){background-color:var(--guest-surface);border-color:#3a323c}
+html[data-haiku-tema="oscuro"] .hu-lista:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)), html[data-haiku-tema="oscuro"] .hu-ficha:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){background-color:var(--guest-surface)}
 html[data-haiku-tema="oscuro"] .hu-empty:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--guest-muted)}
 html[data-haiku-tema="oscuro"] .hu-muted:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--guest-muted)}
-html[data-haiku-tema="oscuro"] .hu-destacado:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:#9fd2b3}
-html[data-haiku-tema="oscuro"] .hu-avatar:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:#9fd2b3;background-color:rgb(37, 71, 54);background-image:initial}
-html[data-haiku-tema="oscuro"] .hu-separador:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){border-top-color:#3a323c}
-html[data-haiku-tema="oscuro"] .hu-contexto:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){background-color:rgb(32, 45, 38);background-image:initial;border-color:#3a323c}
-html[data-haiku-tema="oscuro"] .hu-integrante + .hu-integrante:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){border-top-color:#3a323c}
-html[data-haiku-tema="oscuro"] .hu-tipo-icono:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){background-color:rgb(32, 45, 38);background-image:initial}
-html[data-haiku-tema="oscuro"] .hu-mini:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:#9fd2b3;background-color:rgb(37, 71, 54);background-image:initial;border-color:#3a323c}
-html[data-haiku-tema="oscuro"] .hu-aviso:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:rgb(242, 197, 141);background-color:rgb(58, 48, 34);background-image:initial}
+html[data-haiku-tema="oscuro"] .hu-destacado:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--guest-accent)}
+html[data-haiku-tema="oscuro"] .hu-avatar:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--guest-accent);background-color:var(--guest-selected)}
+html[data-haiku-tema="oscuro"] .hu-contexto:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){background-color:var(--guest-soft)}
+html[data-haiku-tema="oscuro"] .hu-tipo-icono:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){background-color:var(--guest-soft)}
+html[data-haiku-tema="oscuro"] .hu-mini:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--guest-accent);background-color:var(--guest-selected)}
+html[data-haiku-tema="oscuro"] .hu-aviso:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--guest-warn-text);background-color:var(--guest-warn)}
 html[data-haiku-tema="oscuro"] .hu-base dt:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--guest-muted)}
-html[data-haiku-tema="oscuro"] .hu-dialogo:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--guest-ink);background-color:var(--guest-surface);border-color:#3a323c}
-html[data-haiku-tema="oscuro"] .hu-dialogo:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *))::backdrop{background-color:rgba(12, 25, 18, 0.55);background-image:initial}
+html[data-haiku-tema="oscuro"] .hu-dialogo:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--guest-ink);background-color:var(--guest-surface)}
+html[data-haiku-tema="oscuro"] .hu-dialogo:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *))::backdrop{background-color:rgba(25, 23, 27, 0.55);background-image:initial}
 html[data-haiku-tema="oscuro"] .hu-formulario label:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--guest-muted)}
-html[data-haiku-tema="oscuro"] .hu-formulario fieldset:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){border-color:#3a323c}
-html[data-haiku-tema="oscuro"] .hu-foto-previa:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){background-color:rgb(32, 45, 38);background-image:initial}
+html[data-haiku-tema="oscuro"] .hu-foto-previa:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){background-color:var(--guest-soft)}
 html[data-haiku-tema="oscuro"] .hu-resultado:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--guest-muted)}
 
 /* css/haiku-huespedes-figma-v1.css */
 html[data-haiku-tema="oscuro"] .hu-eyebrow:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--guest-muted)}
 html[data-haiku-tema="oscuro"] .hu-intro:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--guest-muted)}
-html[data-haiku-tema="oscuro"] .hu-boton:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:#9fd2b3}
-html[data-haiku-tema="oscuro"] .hu-filtros .hu-select:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:#9fd2b3}
-html[data-haiku-tema="oscuro"] .hu-estadia-columnas:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--guest-muted);background-color:rgb(32, 45, 38);background-image:initial;border-bottom-color:#3a323c}
-html[data-haiku-tema="oscuro"] .hu-estadia-grupo-cabecera:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){background-color:rgb(32, 45, 38);background-image:initial;border-bottom-color:#3a323c}
+html[data-haiku-tema="oscuro"] .hu-boton:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--guest-accent)}
+html[data-haiku-tema="oscuro"] .hu-filtros .hu-select:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--guest-accent)}
+html[data-haiku-tema="oscuro"] .hu-estadia-columnas:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--guest-muted);background-color:var(--guest-soft)}
+html[data-haiku-tema="oscuro"] .hu-estadia-grupo-cabecera:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){background-color:var(--guest-soft)}
 html[data-haiku-tema="oscuro"] .hu-estadia-grupo-cabecera h3:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *))::before{background-color:var(--guest-muted)}
-html[data-haiku-tema="oscuro"] [data-estadia-estado="hospedados"] > .hu-estadia-grupo-cabecera h3:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:#9fd2b3}
-html[data-haiku-tema="oscuro"] [data-estadia-estado="hospedados"] > .hu-estadia-grupo-cabecera h3:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *))::before{background-color:rgb(159, 210, 179);background-image:initial}
-html[data-haiku-tema="oscuro"] .hu-estadia-item:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){border-bottom-color:#3a323c}
+html[data-haiku-tema="oscuro"] [data-estadia-estado="hospedados"] > .hu-estadia-grupo-cabecera h3:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--cereza-verde)}
+html[data-haiku-tema="oscuro"] [data-estadia-estado="hospedados"] > .hu-estadia-grupo-cabecera h3:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *))::before{background-color:currentcolor;background-image:initial}
 html[data-haiku-tema="oscuro"] .hu-estadia-grupo .hu-estadia-item:last-child:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){border-bottom-color:currentcolor}
-html[data-haiku-tema="oscuro"] .hu-estadia-grupo + .hu-estadia-grupo:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)), html[data-haiku-tema="oscuro"] .hu-lista-pie:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){border-top-color:#3a323c}
-html[data-haiku-tema="oscuro"] .hu-estadia-fila:has(.hu-estadia-titular[aria-current="true"]):not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)), html[data-haiku-tema="oscuro"] .hu-estadia-fila[data-hue-abierto="true"]:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){background-color:rgb(37, 71, 54);background-image:initial}
-html[data-haiku-tema="oscuro"] .hu-estadia-fila:has(.hu-estadia-titular:hover):not([data-hue-abierto="true"], :has([aria-current="true"])):not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){background-color:rgb(32, 45, 38);background-image:initial}
+html[data-haiku-tema="oscuro"] .hu-estadia-fila:has(.hu-estadia-titular[aria-current="true"]):not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)), html[data-haiku-tema="oscuro"] .hu-estadia-fila[data-hue-abierto="true"]:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){background-color:var(--guest-selected)}
+html[data-haiku-tema="oscuro"] .hu-estadia-fila:has(.hu-estadia-titular:hover):not([data-hue-abierto="true"], :has([aria-current="true"])):not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){background-color:var(--guest-soft)}
 html[data-haiku-tema="oscuro"] .hu-estadia-titular.hu-boton:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--guest-ink);background-color:transparent;background-image:initial;border-color:currentcolor}
 html[data-haiku-tema="oscuro"] .hu-estadia-titular:focus-visible:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){outline-color:initial}
-html[data-haiku-tema="oscuro"] .hu-estadia-titular:focus-visible:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *))::after{outline-color:#3a323c}
 html[data-haiku-tema="oscuro"] .hu-estadia-cabana:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--guest-muted)}
 html[data-haiku-tema="oscuro"] .hu-estadia-cabana strong:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--guest-ink)}
-html[data-haiku-tema="oscuro"] .hu-estadia-toggle.hu-boton:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){background-color:rgb(32, 45, 38);background-image:initial}
-html[data-haiku-tema="oscuro"] .hu-estadia-toggle[aria-expanded="true"]:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){background-color:rgb(37, 71, 54);background-image:initial}
-html[data-haiku-tema="oscuro"] .hu-acompanantes:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){background-color:rgb(32, 45, 38);background-image:initial}
+html[data-haiku-tema="oscuro"] .hu-estadia-toggle.hu-boton:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){background-color:var(--guest-soft)}
+html[data-haiku-tema="oscuro"] .hu-estadia-toggle[aria-expanded="true"]:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){background-color:var(--guest-selected)}
+html[data-haiku-tema="oscuro"] .hu-acompanantes:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){background-color:var(--guest-soft)}
 html[data-haiku-tema="oscuro"] .hu-acompanante-fila .hu-boton:not(.hu-plano):not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){background-color:transparent;background-image:initial}
-html[data-haiku-tema="oscuro"] .hu-por-identificar:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:rgb(242, 197, 141)}
+html[data-haiku-tema="oscuro"] .hu-por-identificar:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--guest-warn-text)}
 @container hu-directorio (max-width: 490px) {
-html[data-haiku-tema="oscuro"] .hu-estadia-cabana:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:#9fd2b3}
+html[data-haiku-tema="oscuro"] .hu-estadia-cabana:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--guest-accent)}
 html[data-haiku-tema="oscuro"] .hu-estadia-cabana strong:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:inherit}
 }
-html[data-haiku-tema="oscuro"] .hu-rol:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:#9fd2b3}
-html[data-haiku-tema="oscuro"] .hu-estadia-info:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:rgb(172, 213, 239)}
+html[data-haiku-tema="oscuro"] .hu-rol:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--guest-accent)}
+html[data-haiku-tema="oscuro"] .hu-estadia-info:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--guest-link)}
 html[data-haiku-tema="oscuro"] .hu-separador.hu-sin-borde:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){border-top-color:currentcolor}
 html[data-haiku-tema="oscuro"] .hu-ficha > .hu-bloque:first-of-type:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)), html[data-haiku-tema="oscuro"] .hu-ficha > .hu-contexto + .hu-bloque:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){border-top-color:currentcolor}
-html[data-haiku-tema="oscuro"] .hu-integrante:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){border-bottom-color:#3a323c}
 html[data-haiku-tema="oscuro"] .hu-integrante + .hu-integrante:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){border-top-color:currentcolor}
-html[data-haiku-tema="oscuro"] .hu-integrante .hu-avatar:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){background-color:rgb(32, 45, 38);background-image:initial}
-html[data-haiku-tema="oscuro"] .hu-ficha details.hu-separador:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){border-top-color:currentcolor;border-bottom-color:#3a323c}
-html[data-haiku-tema="oscuro"] .hu-opciones summary:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:#9fd2b3}
-html[data-haiku-tema="oscuro"] .hu-opciones > div:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){background-color:var(--guest-surface);border-color:#3a323c}
+html[data-haiku-tema="oscuro"] .hu-integrante .hu-avatar:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){background-color:var(--guest-soft)}
+html[data-haiku-tema="oscuro"] .hu-ficha details.hu-separador:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){border-top-color:currentcolor}
+html[data-haiku-tema="oscuro"] .hu-opciones summary:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--guest-accent)}
+html[data-haiku-tema="oscuro"] .hu-opciones > div:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){background-color:var(--guest-surface)}
 html[data-haiku-tema="oscuro"] .hu-formulario > .hu-linea > .hu-boton:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){background-color:transparent;background-image:initial;border-color:currentcolor}
-html[data-haiku-tema="oscuro"] .hu-formulario .hu-campo:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)), html[data-haiku-tema="oscuro"] .hu-formulario .hu-select:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){background-color:rgb(32, 45, 38);background-image:initial}
+html[data-haiku-tema="oscuro"] .hu-formulario .hu-campo:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)), html[data-haiku-tema="oscuro"] .hu-formulario .hu-select:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){background-color:var(--guest-soft)}
 html[data-haiku-tema="oscuro"] .hu-formulario fieldset:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){border-color:currentcolor}
 html[data-haiku-tema="oscuro"] .hu-formulario legend:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--guest-ink)}
-html[data-haiku-tema="oscuro"] .hu-media-preview:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){background-color:rgb(32, 45, 38);background-image:initial;border-color:#3a323c}
+html[data-haiku-tema="oscuro"] .hu-media-preview:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){background-color:var(--guest-soft)}
 html[data-haiku-tema="oscuro"] .hu-avatar-trigger.hu-boton:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){background-color:initial;background-image:none;border-color:currentcolor}
 html[data-haiku-tema="oscuro"] .hu-dialogo.hu-photo-viewer:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){background-color:transparent;background-image:initial;box-shadow:none;border-color:currentcolor}
-html[data-haiku-tema="oscuro"] .hu-photo-viewer > img:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){background-color:rgb(32, 45, 38);background-image:initial;border-color:#3a323c}
+html[data-haiku-tema="oscuro"] .hu-photo-viewer > img:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){background-color:var(--guest-soft)}
 html[data-haiku-tema="oscuro"] .hu-photo-viewer button:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){background-color:var(--guest-surface)}
-html[data-haiku-tema="oscuro"] .hu-media-context:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:#9fd2b3}
+html[data-haiku-tema="oscuro"] .hu-media-context:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--guest-accent)}
 html[data-haiku-tema="oscuro"] .hu-form-subtitle:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--guest-muted)}
-html[data-haiku-tema="oscuro"] .hu-photo-adjustments:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){border-top-color:#3a323c}
-html[data-haiku-tema="oscuro"] .hu-photo-adjustments summary:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:#9fd2b3}
+html[data-haiku-tema="oscuro"] .hu-photo-adjustments summary:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--guest-accent)}
 html[data-haiku-tema="oscuro"] .hu-checkbox:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--guest-ink)!important}
-html[data-haiku-tema="oscuro"] .hu-formulario .hu-etiqueta:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){background-color:rgb(32, 45, 38);background-image:initial;border-color:#3a323c}
-html[data-haiku-tema="oscuro"] .hu-etiqueta:has(input:checked):not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:#9fd2b3;background-color:rgb(37, 71, 54);background-image:initial}
-html[data-haiku-tema="oscuro"] .hu-etiqueta input:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){accent-color:#9fd2b3}
-html[data-haiku-tema="oscuro"] .hu-choice[aria-checked="true"]:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:#9fd2b3;background-color:rgb(37, 71, 54);background-image:initial}
+html[data-haiku-tema="oscuro"] .hu-formulario .hu-etiqueta:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){background-color:var(--guest-soft)}
+html[data-haiku-tema="oscuro"] .hu-etiqueta:has(input:checked):not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--guest-accent);background-color:var(--guest-selected)}
+html[data-haiku-tema="oscuro"] .hu-etiqueta input:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){accent-color:var(--guest-accent)}
+html[data-haiku-tema="oscuro"] .hu-choice[aria-checked="true"]:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--guest-accent);background-color:var(--guest-selected)}
 html[data-haiku-tema="oscuro"] .hu-choice-stack .hu-choice:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){background-color:transparent;background-image:initial;border-color:currentcolor}
 
 /* css/haiku-libro-resoluciones-v1.css */
@@ -2906,38 +2873,36 @@ html[data-haiku-tema="oscuro"] #seccion-cabanas .cabins-heading h1{color:var(--c
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cabins-heading p{color:var(--cereza-secundario)}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cabins-heading-date{color:var(--cereza-secundario)}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cabins-tabs button{color:var(--cereza-secundario);background-color:initial;background-image:none;border-top-color:currentcolor;border-right-color:currentcolor;border-bottom-color:transparent;border-left-color:currentcolor}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cabins-tabs button:hover{color:#9fd2b3}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cabins-tabs button.active{color:#9fd2b3;border-color:#9fd2b3}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-summary{color:#baadb5;background-color:#2b262d;background-image:initial;border-left-color:#9fd2b3}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-summary span + span{border-left-color:#3a323c}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-summary strong{color:#9fd2b3}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-section-head h2, html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-detail-section-title h3{color:#f4ecef}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-section-head p{color:#baadb5}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-outline, html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-quiet{color:#9fd2b3;background-color:var(--cereza-superficie)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cabins-tabs button:hover{color:var(--cereza-acento)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cabins-tabs button.active{color:var(--cereza-acento)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-summary{color:var(--cereza-secundario);background-color:var(--cereza-relieve)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-summary strong{color:var(--cereza-acento)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-section-head h2, html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-detail-section-title h3{color:var(--cereza-texto)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-section-head p{color:var(--cereza-secundario)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-outline, html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-quiet{color:var(--cereza-acento);background-color:var(--cereza-superficie)}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-outline:hover, html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-quiet:hover{background-color:var(--cereza-relieve)}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-primary{color:rgb(255, 255, 255);background-color:var(--cereza-primario)}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-primary:hover{background-color:rgb(29, 77, 61);background-image:initial}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-filters button{color:#baadb5;background-color:initial;background-image:none;border-color:currentcolor}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-filters button[aria-pressed="true"]{color:#9fd2b3;box-shadow:rgb(34, 94, 67) 0px 1px}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-primary{color:var(--cereza-sobre-primario);background-color:var(--cereza-primario)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-filters button{color:var(--cereza-secundario);background-color:initial;background-image:none;border-color:currentcolor}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-filters button[aria-pressed="true"]{color:var(--cereza-acento);box-shadow:0 1px var(--cereza-acento)}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-request-form{background-color:var(--cereza-relieve)}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-request-form label, html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-inline-request label{color:#baadb5}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-request-form label, html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-inline-request label{color:var(--cereza-secundario)}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-request-form input, html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-request-form select, html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-inline-request input{color:var(--cereza-texto);background-color:var(--cereza-superficie)}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-operation-table, html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-review-list{background-color:var(--cereza-superficie);box-shadow:rgba(38, 60, 48, 0.027) 0px 2px 12px}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-operation-head{color:var(--cereza-secundario);background-color:var(--cereza-relieve)}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-operation-row{border-top-color:currentcolor;border-right-color:currentcolor;border-left-color:currentcolor;box-shadow:none}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-operation-row:last-child, html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-review-row:last-child{border-bottom-color:currentcolor}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-operation-row:hover, html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-review-row:hover{background-color:var(--cereza-relieve)}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-cabin strong, html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-review-ident strong{color:#f4ecef}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-cabin span, html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-review-ident span{color:#f4ecef}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-cabin small{color:#baadb5}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-cell select, html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-cell input, html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-review-mode select, html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-detail-fields input, html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-detail-fields select, html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-mode-select select, html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-review-close select{color:#f4ecef;background-color:var(--cereza-superficie)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-cabin strong, html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-review-ident strong{color:var(--cereza-texto)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-cabin span, html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-review-ident span{color:var(--cereza-secundario)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-cabin small{color:var(--cereza-secundario)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-cell select, html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-cell input, html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-review-mode select, html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-detail-fields input, html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-detail-fields select, html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-mode-select select, html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-review-close select{color:var(--cereza-texto);background-color:var(--cereza-superficie)}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-cell select.progress{color:#f2c58d}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-cell select.ready{color:#9fd2b3}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-cell select.pending{color:#f2c58d}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-pending{color:#baadb5}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-pending{color:var(--cereza-secundario)}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-requests > span{color:#9fd2b3;background-color:#2b262d;background-image:initial}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-requests button{color:#9fd2b3;background-color:initial;background-image:none;border-color:currentcolor}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-open{color:#9fd2b3;background-color:initial;background-image:none;border-color:currentcolor}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-open{color:var(--cereza-acento);background-color:initial;background-image:none;border-color:currentcolor}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-review-head{color:var(--cereza-secundario);background-color:var(--cereza-relieve)}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-review-progress{color:var(--cereza-secundario)}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-review-progress strong{color:#9fd2b3}
@@ -2946,7 +2911,7 @@ html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-badge.progress{color:#9fd2b3
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-badge.ready{color:#9fd2b3;background-color:#2b262d;background-image:initial}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-badge.issue{color:#f3b2a8;background-color:#2b262d;background-image:initial}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-revision-picker:focus-within{outline-color:currentcolor}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-empty{color:#baadb5}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-empty{color:var(--cereza-secundario)}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-backline{color:#baadb5}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-backline button{color:#9fd2b3;background-color:initial;background-image:none;border-color:currentcolor}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-detail-title{border-bottom-color:#3a323c}
@@ -2966,8 +2931,8 @@ html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-detail-fields label, html[da
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-detail-pending{color:#baadb5}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-detail-pending strong{color:#9fd2b3}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-pending-editor{color:#baadb5}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-pending-editor input{color:#f4ecef;background-color:var(--cereza-superficie)}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-text-action{color:#9fd2b3;background-color:initial;background-image:none;border-color:currentcolor}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-pending-editor input{color:var(--cereza-texto);background-color:var(--cereza-superficie)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-text-action{color:var(--cereza-acento);background-color:initial;background-image:none;border-color:currentcolor}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-review-count{color:#baadb5}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-review-count strong{color:#9fd2b3}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-sector-head{color:var(--cereza-texto);background-color:initial;background-image:none;border-color:currentcolor}
@@ -2975,18 +2940,17 @@ html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-sector-head small{color:var(
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-sector-head > span:last-child{color:#9fd2b3}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-group-name{color:#9fd2b3}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-check{color:#f4ecef}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-check input{accent-color:#9fd2b3}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-check input{accent-color:var(--cereza-primario)}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-check:has(input:checked) span{color:#baadb5}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-observations > label{color:#9fd2b3}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-observations textarea{color:#f4ecef;border-color:#3a323c}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-final-readonly{color:#baadb5}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-final-readonly output{color:#f4ecef;background-color:var(--cereza-relieve)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-final-readonly output{color:var(--cereza-texto);background-color:var(--cereza-relieve)}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-express-toggle{color:var(--cereza-texto);background-color:transparent;background-image:initial;border-color:currentcolor}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-express-heading small{color:var(--cereza-secundario)}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-express-icon{color:#9fd2b3}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-express-toggle:focus-visible{outline-color:#9fd2b3}
 @media (max-width: 1450px) {
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-cell > span{color:#baadb5}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-cell > span{color:var(--cereza-secundario)}
 @media (max-width: 1270px) {
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-review-row small{color:#baadb5}
 }
@@ -2994,7 +2958,7 @@ html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-review-row small{color:#baad
 @media (max-width: 1070px) {
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-summary span + span{border-color:currentcolor}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-operation-row > .cb-pending{border-top-color:#3a323c}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-cell > span, html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-mobile-label{color:#baadb5}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-cell > span, html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-mobile-label{color:var(--cereza-secundario)}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-review-row small{color:#baadb5}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-detail-ops{border-right-color:currentcolor;border-bottom-color:#3a323c}
 }
@@ -3003,17 +2967,17 @@ html[data-haiku-tema="oscuro"] #seccion-cabanas #revision-checklist .checklist-a
 html[data-haiku-tema="oscuro"] #seccion-cabanas #revision-checklist .checklist-area > h5{color:#9fd2b3}
 html[data-haiku-tema="oscuro"] #seccion-cabanas #revision-checklist .checklist-item, html[data-haiku-tema="oscuro"] #seccion-cabanas #aseo-express-checklist .revision-area label{color:#f4ecef;background-color:transparent;background-image:initial;border-color:currentcolor}
 html[data-haiku-tema="oscuro"] #seccion-cabanas #revision-checklist .checklist-item:is(:hover, :has(input:checked)), html[data-haiku-tema="oscuro"] #seccion-cabanas #aseo-express-checklist .revision-area label:is(:hover, :has(input:checked)){background-color:transparent;background-image:initial;border-color:currentcolor}
-html[data-haiku-tema="oscuro"] #seccion-cabanas #revision-checklist .checklist-item input[type="checkbox"], html[data-haiku-tema="oscuro"] #seccion-cabanas #aseo-express-checklist .revision-area input[type="checkbox"]{accent-color:#9fd2b3}
+html[data-haiku-tema="oscuro"] #seccion-cabanas #revision-checklist .checklist-item input[type="checkbox"], html[data-haiku-tema="oscuro"] #seccion-cabanas #aseo-express-checklist .revision-area input[type="checkbox"]{accent-color:var(--cereza-primario)}
 html[data-haiku-tema="oscuro"] #seccion-cabanas #revision-checklist .checklist-item:has(input:checked) span{color:#baadb5}
 html[data-haiku-tema="oscuro"] #seccion-cabanas :is(#revision-checklist, #repaso-checklist) .checklist-section-detail{border-top-color:#3a323c}
 html[data-haiku-tema="oscuro"] #seccion-cabanas :is(#revision-checklist, #repaso-checklist) .checklist-section-detail-label{color:#f4ecef}
-html[data-haiku-tema="oscuro"] #seccion-cabanas :is(#revision-checklist, #repaso-checklist) .checklist-section-detail-input{color:#f4ecef;background-color:var(--cereza-superficie);outline-color:initial}
+html[data-haiku-tema="oscuro"] #seccion-cabanas :is(#revision-checklist, #repaso-checklist) .checklist-section-detail-input{color:var(--cereza-texto);background-color:var(--cereza-superficie);outline-color:initial}
 html[data-haiku-tema="oscuro"] #seccion-cabanas :is(#revision-checklist, #repaso-checklist) .checklist-section-detail-input:focus{box-shadow:rgba(45, 115, 80, 0.1) 0px 0px 0px 3px;border-color:#9fd2b3}
 html[data-haiku-tema="oscuro"] #seccion-cabanas :is(#revision-checklist, #repaso-checklist) .checklist-section-detail-copy{color:#baadb5;background-color:rgba(35, 31, 37, 0.94);background-image:initial;box-shadow:rgba(31, 60, 44, 0.06) 0px 1px 2px;border-color:transparent}
 html[data-haiku-tema="oscuro"] #seccion-cabanas :is(#revision-checklist, #repaso-checklist) .checklist-section-detail-copy:hover{color:#9fd2b3;background-color:var(--cereza-relieve)}
 html[data-haiku-tema="oscuro"] #seccion-cabanas :is(#revision-checklist, #repaso-checklist) .checklist-section-detail-copy:focus-visible{outline-color:#9fd2b3}
 html[data-haiku-tema="oscuro"] #seccion-cabanas :is(#revision-checklist, #repaso-checklist) .checklist-section-detail-copy .copy-icon{fill:none;stroke:currentcolor}
-html[data-haiku-tema="oscuro"] #seccion-cabanas :is(#revision-checklist, #repaso-checklist) .checklist-section-detail-copy[data-estado-copia="copiado"]{color:#9fd2b3}
+html[data-haiku-tema="oscuro"] #seccion-cabanas :is(#revision-checklist, #repaso-checklist) .checklist-section-detail-copy[data-estado-copia="copiado"]{color:var(--cereza-primario)}
 html[data-haiku-tema="oscuro"] #seccion-cabanas :is(#revision-checklist, #repaso-checklist) .checklist-section-detail-copy[data-estado-copia="vacio"], html[data-haiku-tema="oscuro"] #seccion-cabanas :is(#revision-checklist, #repaso-checklist) .checklist-section-detail-copy[data-estado-copia="error"]{color:#f2c58d}
 html[data-haiku-tema="oscuro"] #seccion-cabanas :is(#revision-checklist, #repaso-checklist) .checklist-section-detail-copy[data-feedback]::after{color:rgb(255, 255, 255);background-color:rgb(49, 76, 61);background-image:initial}
 html[data-haiku-tema="oscuro"] #seccion-cabanas :is(#revision-checklist, #repaso-checklist) .checklist-section-detail-copy-status{border-color:currentcolor}
@@ -3024,133 +2988,125 @@ html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-request-drawer-panel h2{colo
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-request-drawer-panel > header button{color:#f4ecef;background-color:initial;background-image:none;border-color:currentcolor}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-request-drawer-body label{color:#f4ecef}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-request-drawer-body select, html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-request-drawer-body textarea{color:var(--cereza-texto);background-color:var(--cereza-superficie)}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .eyebrow{color:#9fd2b3}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-operation-row .cb-cell input{color:#f4ecef;background-color:var(--cereza-superficie)}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-review-mode > span{color:#baadb5}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-detail-ops #cabinsDetailRequests p{color:#baadb5}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-observations .revision-clipboard-acciones button, html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-observations .aseo-express-clipboard-acciones button{color:#9fd2b3;background-color:var(--cereza-superficie)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .eyebrow{color:var(--cereza-secundario)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-operation-row .cb-cell input{color:var(--cereza-texto);background-color:var(--cereza-superficie)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-review-mode > span{color:var(--cereza-secundario)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-detail-ops #cabinsDetailRequests p{color:var(--cereza-secundario)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-observations .revision-clipboard-acciones button, html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-observations .aseo-express-clipboard-acciones button{color:var(--cereza-acento);background-color:var(--cereza-superficie)}
 html[data-haiku-tema="oscuro"] #seccion-cabanas #revision-checklist .checklist-area > .cb-sector-head, html[data-haiku-tema="oscuro"] #seccion-cabanas #aseo-express-checklist .revision-area > .cb-sector-head{color:var(--cereza-texto);background-color:initial;background-image:none;border-color:currentcolor}
 html[data-haiku-tema="oscuro"] #seccion-cabanas #revision-checklist .checklist-area > .cb-sector-head small, html[data-haiku-tema="oscuro"] #seccion-cabanas #aseo-express-checklist .revision-area > .cb-sector-head small{color:var(--cereza-secundario)}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-status > small{color:#baadb5}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-revision-status > small{color:#f4ecef}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-status > small{color:var(--cereza-secundario)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-revision-status > small{color:var(--cereza-texto)}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-revision-status .cb-badge{border-color:currentcolor}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-status > .cb-aseo-conflict{color:#f2c58d}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .aseo-hora-input:disabled{color:#baadb5;background-color:var(--cereza-relieve)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .aseo-hora-input:disabled{color:var(--cereza-secundario);background-color:var(--cereza-relieve)}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-supplies-summary{color:var(--cereza-secundario)}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-supplies-summary b{color:#9fd2b3}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-supplies-feedback{color:#baadb5}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-supplies-summary b{color:var(--cereza-acento)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-supplies-feedback{color:var(--cereza-secundario)}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-supplies-feedback [data-insumos-error]{color:inherit}
-html[data-haiku-tema="oscuro"] #seccion-cabanas [data-cb-insumos]{color:#9fd2b3}
+html[data-haiku-tema="oscuro"] #seccion-cabanas [data-cb-insumos]{color:var(--cereza-acento)}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-replenishment{border-top-color:#3a323c}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-quantity button{color:#9fd2b3;background-color:var(--cereza-superficie)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-quantity button{color:var(--cereza-acento);background-color:var(--cereza-superficie)}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-sack-entry label{color:var(--cereza-secundario)}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-sack-edit{color:var(--cereza-secundario)}
 html[data-haiku-tema="oscuro"] #seccion-cabanas [data-insumos-error]{color:#f3b2a8}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-sack-entry select{color:#9fd2b3;background-color:var(--cereza-superficie)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-sack-entry select{color:var(--cereza-acento);background-color:var(--cereza-superficie)}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-sack-destination{color:var(--cereza-secundario)}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-carbon-destinations{border-left-color:#3a323c}
-html[data-haiku-tema="oscuro"] #seccion-cabanas [data-carbon-historico]{color:#baadb5}
-html[data-haiku-tema="oscuro"] #seccion-cabanas #cabinsSummary.cb-summary{background-color:rgb(27, 38, 33);background-image:initial;border-color:#3a323c}
-html[data-haiku-tema="oscuro"] #seccion-cabanas #cabinsSummary .cb-summary-group{color:rgb(232, 239, 234);background-color:transparent;background-image:initial;border-color:currentcolor}
-html[data-haiku-tema="oscuro"] #seccion-cabanas #cabinsSummary .cb-summary-group[aria-pressed="true"]{background-color:rgb(37, 71, 54);background-image:initial}
+html[data-haiku-tema="oscuro"] #seccion-cabanas [data-carbon-historico]{color:var(--cereza-secundario)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas #cabinsSummary.cb-summary{background-color:var(--cb-surface)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas #cabinsSummary .cb-summary-group{color:var(--cb-text);background-color:transparent;background-image:initial;border-color:currentcolor}
+html[data-haiku-tema="oscuro"] #seccion-cabanas #cabinsSummary .cb-summary-group[aria-pressed="true"]{background-color:var(--cb-selected)}
 html[data-haiku-tema="oscuro"] #seccion-cabanas #cabinsSummary .cb-summary-group span{border-color:currentcolor}
-html[data-haiku-tema="oscuro"] #seccion-cabanas #cabinsSummary .cb-summary-count{color:#9fd2b3}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-cabin-number, html[data-haiku-tema="oscuro"] #seccion-cabanas #cabinsSummary .cb-cabin-number{color:#9fd2b3;background-color:rgb(37, 71, 54);background-image:initial;border-color:currentcolor}
-html[data-haiku-tema="oscuro"] #seccion-cabanas #cabinsSummary [aria-pressed="true"] .cb-cabin-number{background-color:rgb(27, 38, 33);background-image:initial}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-filters button[aria-pressed="true"]{color:#9fd2b3;background-color:rgb(37, 71, 54);background-image:initial;box-shadow:none}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-tracking-head, html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-tracking-row{color:rgb(232, 239, 234)}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-tracking-head{color:#baadb5;border-bottom-color:#3a323c}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-tracking-row{border-bottom-color:#3a323c}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-tracking-avatar{color:#9fd2b3;background-color:rgb(37, 71, 54);background-image:initial}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-tracking-time{color:#9fd2b3}
+html[data-haiku-tema="oscuro"] #seccion-cabanas #cabinsSummary .cb-summary-count{color:var(--cb-accent)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-cabin-number, html[data-haiku-tema="oscuro"] #seccion-cabanas #cabinsSummary .cb-cabin-number{color:var(--cb-accent);background-color:var(--cb-selected);border-color:currentcolor}
+html[data-haiku-tema="oscuro"] #seccion-cabanas #cabinsSummary [aria-pressed="true"] .cb-cabin-number{background-color:var(--cb-surface)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-filters button[aria-pressed="true"]{color:var(--cb-accent);background-color:var(--cb-selected);box-shadow:none}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-tracking-head, html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-tracking-row{color:var(--cb-text)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-tracking-head{color:var(--cb-muted)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-tracking-avatar{color:var(--cb-accent);background-color:var(--cb-selected)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-tracking-time{color:var(--cb-accent)}
 html[data-haiku-tema="oscuro"] #seccion-cabanas #aseo-resumen .cb-tracking-row .cb-badge.progress{color:rgb(166, 204, 238);background-color:rgb(32, 58, 65);background-image:initial}
-html[data-haiku-tema="oscuro"] #seccion-cabanas #aseo-resumen .cb-tracking-row .cb-open{color:#9fd2b3;background-color:rgb(27, 38, 33);background-image:initial;border-color:#3a323c}
-html[data-haiku-tema="oscuro"] #seccion-cabanas #cabinsSuppliesSummary{color:rgb(232, 239, 234);background-color:rgb(27, 38, 33);background-image:initial;border-color:#3a323c}
-html[data-haiku-tema="oscuro"] #seccion-cabanas #cabinsSuppliesSummary > strong{color:rgb(232, 239, 234)}
-html[data-haiku-tema="oscuro"] #seccion-cabanas #cabinsSuppliesSummary b{color:#9fd2b3}
-html[data-haiku-tema="oscuro"] #seccion-cabanas #cabinsSuppliesSummary summary{color:#9fd2b3}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-chevron{background-color:rgb(159, 210, 179);background-image:initial}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-destinations-list{border-top-color:#3a323c}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-supply-destination strong{color:rgb(232, 239, 234)}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-supply-destination small{color:#baadb5}
+html[data-haiku-tema="oscuro"] #seccion-cabanas #aseo-resumen .cb-tracking-row .cb-open{color:var(--cb-accent);background-color:var(--cb-surface)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas #cabinsSuppliesSummary{color:var(--cb-text);background-color:var(--cb-surface)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas #cabinsSuppliesSummary > strong{color:var(--cb-text)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas #cabinsSuppliesSummary b{color:var(--cb-accent)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas #cabinsSuppliesSummary summary{color:var(--cb-accent)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-chevron{background-color:var(--cb-accent)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-supply-destination strong{color:var(--cb-text)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-supply-destination small{color:var(--cb-muted)}
 @media (max-width: 1100px) {
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-tracking-row{border-color:#3a323c}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-tracking-type{color:#baadb5}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-tracking-in, html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-tracking-out, html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-tracking-time{background-color:rgb(15, 25, 21);background-image:initial}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-tracking-row [data-label]::before{color:#baadb5}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-tracking-type{color:var(--cb-muted)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-tracking-in, html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-tracking-out, html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-tracking-time{background-color:var(--cb-canvas)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-tracking-row [data-label]::before{color:var(--cb-muted)}
 }
-html[data-haiku-tema="oscuro"] #seccion-cabanas #panel-agregar-solicita .cb-request-drawer-panel{color:rgb(232, 239, 234);background-color:rgb(27, 38, 33);background-image:initial;border-color:#3a323c}
+html[data-haiku-tema="oscuro"] #seccion-cabanas #panel-agregar-solicita .cb-request-drawer-panel{color:var(--cb-text);background-color:var(--cb-surface)}
 html[data-haiku-tema="oscuro"] #seccion-cabanas #solicita-tipos{border-color:currentcolor}
-html[data-haiku-tema="oscuro"] #seccion-cabanas #solicita-tipos legend{color:#baadb5}
-html[data-haiku-tema="oscuro"] #seccion-cabanas #solicita-tipos .cb-request-type{color:rgb(232, 239, 234);background-color:rgb(27, 38, 33);background-image:initial;border-color:#3a323c}
-html[data-haiku-tema="oscuro"] #seccion-cabanas #solicita-tipos .cb-request-type:has(input:checked){background-color:rgb(37, 71, 54);background-image:initial;border-color:#3a323c}
-html[data-haiku-tema="oscuro"] #seccion-cabanas #solicita-tipos input{accent-color:#9fd2b3}
-html[data-haiku-tema="oscuro"] #seccion-cabanas #solicita-error{color:rgb(232, 239, 234)}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-typed-request{color:rgb(232, 239, 234)}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-typed-request strong{color:rgb(232, 239, 234)}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-typed-request small{color:#baadb5}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-typed-request > button{color:#9fd2b3}
-html[data-haiku-tema="oscuro"] #seccion-cabanas #solicita-cabana-fija{color:#baadb5}
+html[data-haiku-tema="oscuro"] #seccion-cabanas #solicita-tipos legend{color:var(--cb-muted)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas #solicita-tipos .cb-request-type{color:var(--cb-text);background-color:var(--cb-surface)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas #solicita-tipos .cb-request-type:has(input:checked){background-color:var(--cb-selected)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas #solicita-tipos input{accent-color:var(--cb-accent)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas #solicita-error{color:var(--cb-text)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-typed-request{color:var(--cb-text)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-typed-request strong{color:var(--cb-text)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-typed-request small{color:var(--cb-muted)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-typed-request > button{color:var(--cb-accent)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas #solicita-cabana-fija{color:var(--cb-muted)}
 html[data-haiku-tema="oscuro"] #seccion-cabanas #repaso-checklist{border-top-color:currentcolor}
 html[data-haiku-tema="oscuro"] #seccion-cabanas #repaso-checklist .cb-sector-head{color:inherit}
 html[data-haiku-tema="oscuro"] #seccion-cabanas #repaso-checklist .cb-check{color:inherit}
 html[data-haiku-tema="oscuro"] #seccion-cabanas #repaso-individual [data-repaso-error]{color:var(--texto-secundario, var(--cereza-secundario))}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-operation-row .cb-cleaning-duration{color:rgb(166, 204, 238)}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-operation-row .cb-cleaning-duration.is-complete{color:#9fd2b3}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-operation-row .cb-cabin-holder{color:rgb(232, 239, 234)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-operation-row .cb-cabin-holder{color:var(--cb-text)}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-operation-row .cb-cabin-guest .cb-cabin-movement{color:rgb(166, 204, 238)}
 html[data-haiku-tema="oscuro"] #seccion-cabanas :is(.cb-operation-row, .cb-cabin-context) .cb-request-summary .cb-request-summary-item{color:rgb(242, 197, 141);background-color:initial;background-image:none;border-color:currentcolor}
 html[data-haiku-tema="oscuro"] #seccion-cabanas :is(.cb-cabin, .cb-cabin-context) .cb-note-summary .cb-note-summary-item{color:rgb(166, 204, 238)}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-occupancy-summary{color:#baadb5}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-occupancy-summary{color:var(--cb-muted)}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-service-summary-item{color:rgb(212, 180, 242)}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-context-notice{color:#baadb5}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-context-notice button{color:#9fd2b3;background-color:initial;background-image:none;border-color:currentcolor}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-request-actions .cb-outline{color:#9fd2b3;background-color:rgb(27, 38, 33);background-image:initial;border-color:#3a323c}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-request-actions .cb-outline:hover{background-color:rgb(37, 71, 54);background-image:initial}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-context-notice{color:var(--cb-muted)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-context-notice button{color:var(--cb-accent);background-color:initial;background-image:none;border-color:currentcolor}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-request-actions .cb-outline{color:var(--cb-accent);background-color:var(--cb-surface)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-request-actions .cb-outline:hover{background-color:var(--cb-selected)}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-requests-overlay{background-color:rgba(0, 0, 0, 0.467);background-image:initial}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-requests-dialog{color:rgb(232, 239, 234);background-color:rgb(27, 38, 33);background-image:initial;box-shadow:rgba(0, 0, 0, 0.2) 0px 12px 36px;border-color:#3a323c}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-requests-dialog > header{border-bottom-color:#3a323c}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-requests-dialog h2{color:rgb(232, 239, 234)}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-requests-dialog header p{color:#baadb5}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-requests-dialog header button{color:#baadb5;background-color:transparent;background-image:initial;border-color:currentcolor}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-request-list-item{color:rgb(232, 239, 234);background-color:rgb(27, 38, 33);background-image:initial;border-color:#3a323c}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-request-list-item:hover{background-color:rgb(37, 71, 54);background-image:initial}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-request-list-head strong{color:#9fd2b3}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-request-list-head small, html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-request-list-description{color:#baadb5}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-request-actions button:focus-visible, html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-requests-dialog button:focus-visible{outline-color:#3a323c}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-requests-dialog{color:var(--cb-text);background-color:var(--cb-surface);box-shadow:rgba(0, 0, 0, 0.2) 0px 12px 36px}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-requests-dialog h2{color:var(--cb-text)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-requests-dialog header p{color:var(--cb-muted)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-requests-dialog header button{color:var(--cb-muted);background-color:transparent;background-image:initial;border-color:currentcolor}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-request-list-item{color:var(--cb-text);background-color:var(--cb-surface)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-request-list-item:hover{background-color:var(--cb-selected)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-request-list-head strong{color:var(--cb-accent)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-request-list-head small, html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-request-list-description{color:var(--cb-muted)}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-cleaning-duration b{color:inherit}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-filter-category{border-color:currentcolor}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-filter-category > summary{color:#baadb5;background-color:rgb(27, 38, 33);background-image:initial;border-color:#3a323c}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-filter-menu{background-color:rgb(27, 38, 33);background-image:initial;box-shadow:rgba(0, 0, 0, 0.133) 0px 8px 24px;border-color:#3a323c}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-filter-menu > small{color:#baadb5}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-filter-menu > button{color:rgb(232, 239, 234);background-color:transparent;background-image:initial;border-color:currentcolor}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-filter-menu > button::before{border-color:#3a323c}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-filter-menu > button[aria-pressed="true"]{color:#9fd2b3;background-color:rgb(37, 71, 54);background-image:initial}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-filter-menu > button[aria-pressed="true"]::before{background-color:rgb(159, 210, 179);background-image:initial;box-shadow:rgb(27, 38, 33) 0px 0px 0px 2px inset;border-color:#3a323c}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-filter-category summary:focus-visible, html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-filter-menu button:focus-visible{outline-color:#3a323c}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-filter-bar .cb-filters button{color:#baadb5}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-filter-bar .cb-filters button[aria-pressed="true"]{color:#9fd2b3;background-color:rgb(37, 71, 54);background-image:initial}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-filter-count{color:#baadb5}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-supply-cabin{color:rgb(232, 239, 234);background-color:rgb(27, 38, 33);background-image:initial;border-color:#3a323c}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-supply-cabin strong{color:rgb(232, 239, 234)}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-supply-cabin p{color:#baadb5}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-supply-form label{color:#baadb5}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-supply-form :is(input, select){color:rgb(232, 239, 234);background-color:rgb(27, 38, 33);background-image:initial;border-color:#3a323c}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-filter-category > summary{color:var(--cb-muted);background-color:var(--cb-surface)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-filter-menu{background-color:var(--cb-surface);box-shadow:rgba(0, 0, 0, 0.133) 0px 8px 24px}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-filter-menu > small{color:var(--cb-muted)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-filter-menu > button{color:var(--cb-text);background-color:transparent;background-image:initial;border-color:currentcolor}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-filter-menu > button[aria-pressed="true"]{color:var(--cb-accent);background-color:var(--cb-selected)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-filter-menu > button[aria-pressed="true"]::before{background-color:var(--cb-accent);box-shadow:inset 0 0 0 2px var(--cb-surface)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-filter-bar .cb-filters button{color:var(--cb-muted)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-filter-bar .cb-filters button[aria-pressed="true"]{color:var(--cb-accent);background-color:var(--cb-selected)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-filter-count{color:var(--cb-muted)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-supply-cabin{color:var(--cb-text);background-color:var(--cb-surface)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-supply-cabin strong{color:var(--cb-text)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-supply-cabin p{color:var(--cb-muted)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-supply-form label{color:var(--cb-muted)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-supply-form :is(input, select){color:var(--cb-text);background-color:var(--cb-surface)}
 html[data-haiku-tema="oscuro"] #seccion-cabanas #cabinsCheckoutError{color:rgb(242, 197, 141)}
-html[data-haiku-tema="oscuro"] #seccion-cabanas #cabinsCheckoutList{border-color:#3a323c}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-checkout-card{color:rgb(232, 239, 234);background-color:rgb(27, 38, 33);background-image:initial;border-color:#3a323c}
-html[data-haiku-tema="oscuro"] #seccion-cabanas #cabinsCheckoutList > .cb-checkout-card{border-top-color:currentcolor;border-right-color:currentcolor;border-bottom-color:#3a323c;border-left-color:currentcolor}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-checkout-card{color:var(--cb-text);background-color:var(--cb-surface)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas #cabinsCheckoutList > .cb-checkout-card{border-top-color:currentcolor;border-right-color:currentcolor;border-left-color:currentcolor}
 html[data-haiku-tema="oscuro"] #seccion-cabanas #cabinsCheckoutList > .cb-checkout-card:last-child{border-bottom-color:currentcolor}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-checkout-fields label{color:#baadb5}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-checkout-fields input{color:rgb(232, 239, 234);background-color:rgb(27, 38, 33);background-image:initial;border-color:#3a323c}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-checkout-recover > small{color:#baadb5}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-checkout-grid button{color:rgb(232, 239, 234);background-color:initial;background-image:none;border-color:currentcolor}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-checkout-grid button > .cb-check-square{background-color:transparent;background-image:initial;border-color:#3a323c}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-checkout-grid button[aria-checked="true"] > .cb-check-square{color:#f4ecef;background-color:rgb(159, 210, 179);background-image:initial;border-color:#3a323c}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-checkout-review > strong{color:rgb(232, 239, 234)}
-html[data-haiku-tema="oscuro"] #seccion-cabanas #cabinsCheckoutDetail > .cb-cabin p{color:#baadb5}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-checkout-card > h3{color:rgb(232, 239, 234)}
-html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-checkout-card .cb-cabin-holder{color:rgb(232, 239, 234)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-checkout-fields label{color:var(--cb-muted)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-checkout-fields input{color:var(--cb-text);background-color:var(--cb-surface)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-checkout-recover > small{color:var(--cb-muted)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-checkout-grid button{color:var(--cb-text);background-color:initial;background-image:none;border-color:currentcolor}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-checkout-grid button > .cb-check-square{background-color:transparent;background-image:initial}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-checkout-grid button[aria-checked="true"] > .cb-check-square{color:var(--cb-surface);background-color:var(--cb-accent)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-checkout-review > strong{color:var(--cb-text)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas #cabinsCheckoutDetail > .cb-cabin p{color:var(--cb-muted)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-checkout-card > h3{color:var(--cb-text)}
+html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-checkout-card .cb-cabin-holder{color:var(--cb-text)}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-checkout-card .cb-cabin-movement{color:rgb(166, 204, 238)}
 
 /* css/sites-cierre-v1.css */
@@ -3505,89 +3461,86 @@ html[data-haiku-tema="oscuro"] #seccion-pagos .sites-pagos-metrics .pago-indicad
 }
 
 /* css/sites-reservas-v1.css */
-html[data-haiku-tema="oscuro"] #seccion-reservas{color:#f4ecef;background-color:var(--cereza-relieve)}
-html[data-haiku-tema="oscuro"] #seccion-reservas :is(button, input, select):focus-visible{outline-color:#9fd2b3}
+html[data-haiku-tema="oscuro"] #seccion-reservas{color:var(--cereza-texto);background-color:var(--cereza-relieve)}
 html[data-haiku-tema="oscuro"] #seccion-reservas .reservations-heading :is(.eyebrow, .sites-reservas-kicker, .subtitulo){color:var(--cereza-secundario)}
 html[data-haiku-tema="oscuro"] #seccion-reservas .reservations-heading :is(h1, h2){color:var(--cereza-texto)}
 html[data-haiku-tema="oscuro"] #seccion-reservas .reservations-heading p:not(.eyebrow):not(.subtitulo):not(.sites-reservas-kicker){color:var(--cereza-secundario)}
-html[data-haiku-tema="oscuro"] #seccion-reservas .rv-refresh, html[data-haiku-tema="oscuro"] #seccion-reservas .reservas-boton-secundario{color:#9fd2b3;background-color:var(--cereza-superficie);box-shadow:none;border-color:#3a323c}
+html[data-haiku-tema="oscuro"] #seccion-reservas .rv-refresh, html[data-haiku-tema="oscuro"] #seccion-reservas .reservas-boton-secundario{color:var(--cereza-acento);background-color:var(--cereza-superficie);box-shadow:none}
 html[data-haiku-tema="oscuro"] #seccion-reservas .rv-refresh:hover, html[data-haiku-tema="oscuro"] #seccion-reservas .reservas-boton-secundario:hover{background-color:var(--cereza-relieve)}
-html[data-haiku-tema="oscuro"] #seccion-reservas .rv-surface{background-color:var(--cereza-superficie);box-shadow:rgba(31, 61, 43, 0.027) 0px 3px 13px;border-color:#3a323c}
+html[data-haiku-tema="oscuro"] #seccion-reservas .rv-surface{background-color:var(--cereza-superficie);box-shadow:rgba(25, 23, 27, 0.027) 0px 3px 13px}
 html[data-haiku-tema="oscuro"] #seccion-reservas .rv-toolbar, html[data-haiku-tema="oscuro"] #seccion-reservas .reservas-barra-superior.rv-toolbar{background-color:transparent;background-image:initial;border-color:currentcolor}
-html[data-haiku-tema="oscuro"] #seccion-reservas .rv-search{color:#baadb5}
-html[data-haiku-tema="oscuro"] #seccion-reservas .rv-search input{color:#f4ecef;background-color:var(--cereza-superficie)}
-html[data-haiku-tema="oscuro"] #seccion-reservas .rv-search input::placeholder{color:#baadb5}
-html[data-haiku-tema="oscuro"] #seccion-reservas .rv-tool, html[data-haiku-tema="oscuro"] #seccion-reservas .reservas-boton-icono.rv-tool, html[data-haiku-tema="oscuro"] #seccion-reservas .reservas-accion-masiva.rv-tool, html[data-haiku-tema="oscuro"] #seccion-reservas .reservas-copiar-tabla.rv-tool{color:#9fd2b3;background-color:var(--cereza-superficie);border-color:#3a323c}
+html[data-haiku-tema="oscuro"] #seccion-reservas .rv-search{color:var(--cereza-secundario)}
+html[data-haiku-tema="oscuro"] #seccion-reservas .rv-search input{color:var(--cereza-texto);background-color:var(--cereza-superficie)}
+html[data-haiku-tema="oscuro"] #seccion-reservas .rv-search input::placeholder{color:var(--cereza-secundario)}
+html[data-haiku-tema="oscuro"] #seccion-reservas .rv-tool, html[data-haiku-tema="oscuro"] #seccion-reservas .reservas-boton-icono.rv-tool, html[data-haiku-tema="oscuro"] #seccion-reservas .reservas-accion-masiva.rv-tool, html[data-haiku-tema="oscuro"] #seccion-reservas .reservas-copiar-tabla.rv-tool{color:var(--cereza-acento);background-color:var(--cereza-superficie)}
 html[data-haiku-tema="oscuro"] #seccion-reservas .rv-tool:hover:not(:disabled){background-color:var(--cereza-relieve)}
-html[data-haiku-tema="oscuro"] #seccion-reservas .rv-tool:disabled, html[data-haiku-tema="oscuro"] #seccion-reservas .reservas-accion-masiva.rv-tool:disabled{color:#baadb5;background-color:var(--cereza-relieve)}
-html[data-haiku-tema="oscuro"] #seccion-reservas .rv-count, html[data-haiku-tema="oscuro"] #seccion-reservas .reservas-contador.rv-count{color:#9fd2b3}
-html[data-haiku-tema="oscuro"] #seccion-reservas .rv-popover{background-color:var(--cereza-superficie);box-shadow:rgba(25, 58, 39, 0.145) 0px 14px 36px;border-color:#3a323c}
-html[data-haiku-tema="oscuro"] #seccion-reservas .rv-pop-title strong{color:#f4ecef}
-html[data-haiku-tema="oscuro"] #seccion-reservas .rv-pop-title button{color:#baadb5;background-color:transparent;background-image:initial;border-color:currentcolor}
-html[data-haiku-tema="oscuro"] #seccion-reservas .rv-popover p{color:#baadb5}
-html[data-haiku-tema="oscuro"] #seccion-reservas .rv-filter-grid label{color:#baadb5}
-html[data-haiku-tema="oscuro"] #seccion-reservas .rv-filter-grid :is(select, input){color:#f4ecef;background-color:var(--cereza-superficie)}
-html[data-haiku-tema="oscuro"] #seccion-reservas .rv-filter-error{color:#f2c58d!important}
-html[data-haiku-tema="oscuro"] #seccion-reservas .rv-pop-reset{color:#9fd2b3;background-color:initial;background-image:none;border-color:currentcolor}
-html[data-haiku-tema="oscuro"] #seccion-reservas .rv-column-options label{color:#f4ecef;border-bottom-color:#3a323c}
-html[data-haiku-tema="oscuro"] #seccion-reservas .rv-column-options input, html[data-haiku-tema="oscuro"] #seccion-reservas .rv-filter-grid input[type="checkbox"]{accent-color:#9fd2b3}
-html[data-haiku-tema="oscuro"] #seccion-reservas .rv-column-options small{color:#baadb5}
-html[data-haiku-tema="oscuro"] #seccion-reservas .rv-pop-foot button{color:#9fd2b3;background-color:var(--cereza-relieve);border-color:#3a323c}
-html[data-haiku-tema="oscuro"] #seccion-reservas .rv-pop-foot button:hover{background-color:var(--cereza-verde-fondo)}
-html[data-haiku-tema="oscuro"] #seccion-reservas .sites-reservas-pop-close{color:#9fd2b3;background-color:transparent;background-image:initial;border-color:currentcolor}
-html[data-haiku-tema="oscuro"] #seccion-reservas .rv-filter-tags button{color:#9fd2b3;background-color:var(--cereza-relieve);border-color:#3a323c}
-html[data-haiku-tema="oscuro"] #seccion-reservas .rv-filter-tags .reservas-chip{color:#9fd2b3;background-color:var(--cereza-relieve);border-color:#3a323c}
+html[data-haiku-tema="oscuro"] #seccion-reservas .rv-tool:disabled, html[data-haiku-tema="oscuro"] #seccion-reservas .reservas-accion-masiva.rv-tool:disabled{color:var(--cereza-secundario);background-color:var(--cereza-relieve)}
+html[data-haiku-tema="oscuro"] #seccion-reservas .rv-count, html[data-haiku-tema="oscuro"] #seccion-reservas .reservas-contador.rv-count{color:var(--cereza-acento)}
+html[data-haiku-tema="oscuro"] #seccion-reservas .rv-popover{background-color:var(--cereza-superficie);box-shadow:rgba(25, 23, 27, 0.145) 0px 14px 36px}
+html[data-haiku-tema="oscuro"] #seccion-reservas .rv-pop-title strong{color:var(--cereza-texto)}
+html[data-haiku-tema="oscuro"] #seccion-reservas .rv-pop-title button{color:var(--cereza-secundario);background-color:transparent;background-image:initial;border-color:currentcolor}
+html[data-haiku-tema="oscuro"] #seccion-reservas .rv-popover p{color:var(--cereza-secundario)}
+html[data-haiku-tema="oscuro"] #seccion-reservas .rv-filter-grid label{color:var(--cereza-secundario)}
+html[data-haiku-tema="oscuro"] #seccion-reservas .rv-filter-grid :is(select, input){color:var(--cereza-texto);background-color:var(--cereza-superficie)}
+html[data-haiku-tema="oscuro"] #seccion-reservas .rv-filter-error{color:var(--cereza-rojo)!important}
+html[data-haiku-tema="oscuro"] #seccion-reservas .rv-pop-reset{color:var(--cereza-acento);background-color:initial;background-image:none;border-color:currentcolor}
+html[data-haiku-tema="oscuro"] #seccion-reservas .rv-column-options label{color:var(--cereza-texto)}
+html[data-haiku-tema="oscuro"] #seccion-reservas .rv-column-options input, html[data-haiku-tema="oscuro"] #seccion-reservas .rv-filter-grid input[type="checkbox"]{accent-color:var(--cereza-primario)}
+html[data-haiku-tema="oscuro"] #seccion-reservas .rv-column-options small{color:var(--cereza-secundario)}
+html[data-haiku-tema="oscuro"] #seccion-reservas .rv-pop-foot button{color:var(--cereza-acento);background-color:var(--cereza-relieve)}
+html[data-haiku-tema="oscuro"] #seccion-reservas .rv-pop-foot button:hover{background-color:var(--cereza-seleccion)}
+html[data-haiku-tema="oscuro"] #seccion-reservas .sites-reservas-pop-close{color:var(--cereza-acento);background-color:transparent;background-image:initial;border-color:currentcolor}
+html[data-haiku-tema="oscuro"] #seccion-reservas .rv-filter-tags button{color:var(--cereza-acento);background-color:var(--cereza-relieve)}
+html[data-haiku-tema="oscuro"] #seccion-reservas .rv-filter-tags .reservas-chip{color:var(--cereza-acento);background-color:var(--cereza-relieve)}
 html[data-haiku-tema="oscuro"] #seccion-reservas .rv-filter-tags .reservas-chip button{background-color:transparent;background-image:initial;border-color:currentcolor}
-html[data-haiku-tema="oscuro"] #seccion-reservas .rv-table-scroll, html[data-haiku-tema="oscuro"] #seccion-reservas .reservas-tabla-scroll.rv-table-scroll{scrollbar-color:#baadb5 transparent}
-html[data-haiku-tema="oscuro"] #seccion-reservas .rv-table, html[data-haiku-tema="oscuro"] #seccion-reservas .reservas-tabla.rv-table{color:#f4ecef}
+html[data-haiku-tema="oscuro"] #seccion-reservas .rv-table-scroll, html[data-haiku-tema="oscuro"] #seccion-reservas .reservas-tabla-scroll.rv-table-scroll{scrollbar-color:var(--cereza-linea-fuerte) transparent}
+html[data-haiku-tema="oscuro"] #seccion-reservas .rv-table, html[data-haiku-tema="oscuro"] #seccion-reservas .reservas-tabla.rv-table{color:var(--cereza-texto)}
 html[data-haiku-tema="oscuro"] #seccion-reservas .rv-table thead{background-color:var(--cereza-relieve)}
-html[data-haiku-tema="oscuro"] #seccion-reservas .rv-table th{color:#baadb5;background-color:var(--cereza-relieve);border-bottom-color:#3a323c}
+html[data-haiku-tema="oscuro"] #seccion-reservas .rv-table th{color:var(--cereza-secundario);background-color:var(--cereza-relieve)}
 html[data-haiku-tema="oscuro"] #seccion-reservas .rv-table th button{color:inherit;background-color:initial;background-image:none;border-color:currentcolor}
-html[data-haiku-tema="oscuro"] #seccion-reservas .rv-table th button:hover{color:#9fd2b3}
-html[data-haiku-tema="oscuro"] #seccion-reservas .rv-table th button span{color:#baadb5}
-html[data-haiku-tema="oscuro"] #seccion-reservas .rv-table td{color:#f4ecef;background-color:transparent;background-image:initial}
-html[data-haiku-tema="oscuro"] #seccion-reservas .rv-table tbody tr:hover{background-color:var(--cereza-relieve)}
-html[data-haiku-tema="oscuro"] #seccion-reservas .rv-table tbody tr.rv-needs-attention{background-color:linear-gradient(90deg, #2b262d 0, var(--cereza-superficie) 85px)}
-html[data-haiku-tema="oscuro"] #seccion-reservas .rv-table tbody tr.rv-needs-attention:hover{background-color:#2b262d;background-image:initial}
-html[data-haiku-tema="oscuro"] #seccion-reservas .rv-select-col input, html[data-haiku-tema="oscuro"] #seccion-reservas .rv-mobile-row input{accent-color:#9fd2b3}
-html[data-haiku-tema="oscuro"] #seccion-reservas .rv-detail-col button, html[data-haiku-tema="oscuro"] #seccion-reservas .sites-reservas-detail-action{color:#9fd2b3;background-color:transparent;background-image:initial;border-color:currentcolor}
+html[data-haiku-tema="oscuro"] #seccion-reservas .rv-table th button:hover{color:var(--cereza-acento)}
+html[data-haiku-tema="oscuro"] #seccion-reservas .rv-table th button span{color:var(--cereza-secundario)}
+html[data-haiku-tema="oscuro"] #seccion-reservas .rv-table td{color:var(--cereza-texto);background-color:transparent;background-image:initial}
+html[data-haiku-tema="oscuro"] #seccion-reservas .rv-table tbody tr:hover > td{background-color:var(--cereza-relieve)}
+html[data-haiku-tema="oscuro"] #seccion-reservas :is(.rv-table tbody tr.rv-needs-attention > td:first-child, .rv-mobile-row.attention){box-shadow:inset 3px 0 var(--cereza-dorado)}
+html[data-haiku-tema="oscuro"] #seccion-reservas .rv-select-col input, html[data-haiku-tema="oscuro"] #seccion-reservas .rv-mobile-row input{accent-color:var(--cereza-primario)}
+html[data-haiku-tema="oscuro"] #seccion-reservas .rv-detail-col button, html[data-haiku-tema="oscuro"] #seccion-reservas .sites-reservas-detail-action{color:var(--cereza-acento);background-color:transparent;background-image:initial;border-color:currentcolor}
 html[data-haiku-tema="oscuro"] #seccion-reservas .rv-detail-col button:hover, html[data-haiku-tema="oscuro"] #seccion-reservas .sites-reservas-detail-action:hover{background-color:var(--cereza-relieve)}
-html[data-haiku-tema="oscuro"] #seccion-reservas .rv-name{color:#9fd2b3;background-color:transparent;background-image:initial;border-color:currentcolor}
-html[data-haiku-tema="oscuro"] #seccion-reservas .rv-subline, html[data-haiku-tema="oscuro"] #seccion-reservas .sites-reservas-cell-sub{color:#baadb5}
-html[data-haiku-tema="oscuro"] #seccion-reservas .rv-cabin{color:#9fd2b3}
-html[data-haiku-tema="oscuro"] #seccion-reservas .rv-stay{color:#f4ecef}
-html[data-haiku-tema="oscuro"] #seccion-reservas .rv-stay i{color:#baadb5}
-html[data-haiku-tema="oscuro"] #seccion-reservas .rv-money, html[data-haiku-tema="oscuro"] #seccion-reservas .sites-reservas-money{color:#f4ecef}
-html[data-haiku-tema="oscuro"] #seccion-reservas .rv-money.secondary{color:#baadb5}
-html[data-haiku-tema="oscuro"] #seccion-reservas .rv-money.owing{color:#f2c58d}
-html[data-haiku-tema="oscuro"] #seccion-reservas .rv-money.settled{color:#9fd2b3}
-html[data-haiku-tema="oscuro"] #seccion-reservas .rv-attention{color:#f2c58d}
-html[data-haiku-tema="oscuro"] #seccion-reservas .rv-muted{color:#baadb5}
+html[data-haiku-tema="oscuro"] #seccion-reservas .rv-name{color:var(--cereza-acento);background-color:transparent;background-image:initial;border-color:currentcolor}
+html[data-haiku-tema="oscuro"] #seccion-reservas .rv-subline, html[data-haiku-tema="oscuro"] #seccion-reservas .sites-reservas-cell-sub{color:var(--cereza-secundario)}
+html[data-haiku-tema="oscuro"] #seccion-reservas .rv-cabin{color:var(--cereza-texto)}
+html[data-haiku-tema="oscuro"] #seccion-reservas .rv-stay{color:var(--cereza-texto)}
+html[data-haiku-tema="oscuro"] #seccion-reservas .rv-stay i{color:var(--cereza-secundario)}
+html[data-haiku-tema="oscuro"] #seccion-reservas .rv-money, html[data-haiku-tema="oscuro"] #seccion-reservas .sites-reservas-money{color:var(--cereza-texto)}
+html[data-haiku-tema="oscuro"] #seccion-reservas .rv-money.secondary{color:var(--cereza-secundario)}
+html[data-haiku-tema="oscuro"] #seccion-reservas .rv-money.owing{color:var(--cereza-dorado)}
+html[data-haiku-tema="oscuro"] #seccion-reservas .rv-money.settled{color:var(--cereza-verde)}
+html[data-haiku-tema="oscuro"] #seccion-reservas .rv-attention{color:var(--cereza-dorado)}
+html[data-haiku-tema="oscuro"] #seccion-reservas .rv-muted{color:var(--cereza-secundario)}
 html[data-haiku-tema="oscuro"] #seccion-reservas .rv-badge::before, html[data-haiku-tema="oscuro"] #seccion-reservas .sites-reservas-badge::before{background-color:currentcolor;background-image:initial}
-html[data-haiku-tema="oscuro"] #seccion-reservas .rv-badge:is(.pending, .attention){color:#f2c58d;background-color:#34271b;background-image:initial}
-html[data-haiku-tema="oscuro"] #seccion-reservas .rv-badge.confirmed{color:#a6ccee;background-color:#2b262d;background-image:initial}
-html[data-haiku-tema="oscuro"] #seccion-reservas .rv-badge.occupied{color:#9fd2b3;background-color:#2b262d;background-image:initial}
-html[data-haiku-tema="oscuro"] #seccion-reservas .rv-badge.departed{color:#9fd2b3;background-color:#2b262d;background-image:initial}
-html[data-haiku-tema="oscuro"] #seccion-reservas .rv-badge.cancelled{color:#f3b2a8;background-color:#2b262d;background-image:initial}
-html[data-haiku-tema="oscuro"] #seccion-reservas .rv-table-empty{color:#baadb5!important}
-html[data-haiku-tema="oscuro"] #seccion-reservas .rv-loading{color:#baadb5}
-html[data-haiku-tema="oscuro"] #seccion-reservas .rv-error{color:#f3b2a8;background-color:#231f25;background-image:initial;border-top-color:#3a323c}
-html[data-haiku-tema="oscuro"] #seccion-reservas .rv-pagination, html[data-haiku-tema="oscuro"] #seccion-reservas .reservas-paginacion.rv-pagination{color:#baadb5}
-html[data-haiku-tema="oscuro"] #seccion-reservas .rv-pagination select{color:#9fd2b3;background-color:var(--cereza-superficie)}
-html[data-haiku-tema="oscuro"] #seccion-reservas .rv-page-buttons button, html[data-haiku-tema="oscuro"] #seccion-reservas .rv-pagination > button{color:#9fd2b3;background-color:var(--cereza-superficie)}
+html[data-haiku-tema="oscuro"] #seccion-reservas .rv-badge:is(.pending, .attention){color:var(--cereza-dorado);background-color:var(--cereza-dorado-fondo)}
+html[data-haiku-tema="oscuro"] #seccion-reservas .rv-badge.confirmed{color:var(--cereza-azul);background-color:var(--cereza-azul-fondo)}
+html[data-haiku-tema="oscuro"] #seccion-reservas .rv-badge.occupied{color:var(--cereza-verde);background-color:var(--cereza-verde-fondo)}
+html[data-haiku-tema="oscuro"] #seccion-reservas .rv-badge.departed{color:var(--cereza-neutro);background-color:var(--cereza-neutro-fondo)}
+html[data-haiku-tema="oscuro"] #seccion-reservas .rv-badge.cancelled{color:var(--cereza-rojo);background-color:var(--cereza-rojo-fondo)}
+html[data-haiku-tema="oscuro"] #seccion-reservas .rv-table-empty{color:var(--cereza-secundario)!important}
+html[data-haiku-tema="oscuro"] #seccion-reservas .rv-loading{color:var(--cereza-secundario)}
+html[data-haiku-tema="oscuro"] #seccion-reservas .rv-error{color:var(--cereza-rojo);background-color:var(--cereza-rojo-fondo)}
+html[data-haiku-tema="oscuro"] #seccion-reservas .rv-pagination, html[data-haiku-tema="oscuro"] #seccion-reservas .reservas-paginacion.rv-pagination{color:var(--cereza-secundario)}
+html[data-haiku-tema="oscuro"] #seccion-reservas .rv-pagination select{color:var(--cereza-texto);background-color:var(--cereza-superficie)}
+html[data-haiku-tema="oscuro"] #seccion-reservas .rv-page-buttons button, html[data-haiku-tema="oscuro"] #seccion-reservas .rv-pagination > button{color:var(--cereza-acento);background-color:var(--cereza-superficie)}
 html[data-haiku-tema="oscuro"] #seccion-reservas .rv-page-buttons button:hover:not(:disabled), html[data-haiku-tema="oscuro"] #seccion-reservas .rv-pagination > button:hover:not(:disabled){background-color:var(--cereza-relieve)}
-html[data-haiku-tema="oscuro"] #seccion-reservas .rv-page-buttons strong{color:#9fd2b3}
+html[data-haiku-tema="oscuro"] #seccion-reservas .rv-page-buttons strong{color:var(--cereza-secundario)}
 @media (max-width: 880px) {
-html[data-haiku-tema="oscuro"] #seccion-reservas .rv-mobile-row.attention{background-color:#231f25;background-image:initial}
 html[data-haiku-tema="oscuro"] #seccion-reservas .rv-mobile-main > button{background-color:initial;background-image:none;border-color:currentcolor}
-html[data-haiku-tema="oscuro"] #seccion-reservas .rv-mobile-main > button strong{color:#9fd2b3}
-html[data-haiku-tema="oscuro"] #seccion-reservas .rv-mobile-main > button small{color:#baadb5}
-html[data-haiku-tema="oscuro"] #seccion-reservas .rv-mobile-meta{color:#baadb5}
-html[data-haiku-tema="oscuro"] #seccion-reservas .rv-mobile-meta .owing{color:#f2c58d}
-html[data-haiku-tema="oscuro"] #seccion-reservas .rv-mobile-meta .settled{color:#9fd2b3}
-html[data-haiku-tema="oscuro"] #seccion-reservas .rv-mobile-finance{color:#baadb5}
-html[data-haiku-tema="oscuro"] #seccion-reservas .rv-mobile-finance button{color:#9fd2b3;background-color:initial;background-image:none;border-color:currentcolor}
-html[data-haiku-tema="oscuro"] #seccion-reservas .rv-empty-mobile{color:#baadb5}
+html[data-haiku-tema="oscuro"] #seccion-reservas .rv-mobile-main > button strong{color:var(--cereza-acento)}
+html[data-haiku-tema="oscuro"] #seccion-reservas .rv-mobile-main > button small{color:var(--cereza-secundario)}
+html[data-haiku-tema="oscuro"] #seccion-reservas .rv-mobile-meta{color:var(--cereza-secundario)}
+html[data-haiku-tema="oscuro"] #seccion-reservas .rv-mobile-meta .owing{color:var(--cereza-dorado)}
+html[data-haiku-tema="oscuro"] #seccion-reservas .rv-mobile-meta .settled{color:var(--cereza-verde)}
+html[data-haiku-tema="oscuro"] #seccion-reservas .rv-mobile-finance{color:var(--cereza-secundario)}
+html[data-haiku-tema="oscuro"] #seccion-reservas .rv-mobile-finance button{color:var(--cereza-acento);background-color:initial;background-image:none;border-color:currentcolor}
+html[data-haiku-tema="oscuro"] #seccion-reservas .rv-empty-mobile{color:var(--cereza-secundario)}
 }
 
 /* css/sites-libro-reserva-v1.css */
@@ -3693,12 +3646,12 @@ html[data-haiku-tema="oscuro"] .haku-guia-operativa .haku-guia__fin:not(:where(.
 html[data-haiku-tema="oscuro"] .haiku-asistente-root .haiku-asistente-panel .haku-guia-operativa .haku-guia__captura:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){background-color:initial;background-image:none;border-color:currentcolor}
 html[data-haiku-tema="oscuro"] .haku-guia-operativa .haku-guia__captura span:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)), html[data-haiku-tema="oscuro"] .haku-guia-operativa .haku-guia__capturas-ayuda:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:#baadb5}
 html[data-haiku-tema="oscuro"] .haku-guia-imagen:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *))::backdrop{background-color:rgba(5, 15, 10, 0.75);background-image:initial}
-html[data-haiku-tema="oscuro"] .haiku-asistente-root .haiku-asistente-boton:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:rgb(248, 251, 248);background-color:rgb(32, 61, 48);background-image:initial;box-shadow:rgba(24, 45, 34, 0.208) 0px 5px 18px;border-color:#3a323c}
-html[data-haiku-tema="oscuro"] .haiku-asistente-root .haiku-asistente-boton:hover:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){background-color:rgb(43, 100, 77);background-image:initial}
+html[data-haiku-tema="oscuro"] .haiku-asistente-root .haiku-asistente-boton:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--cereza-sobre-primario);background-color:var(--cereza-primario);box-shadow:rgba(24, 45, 34, 0.208) 0px 5px 18px}
+html[data-haiku-tema="oscuro"] .haiku-asistente-root .haiku-asistente-boton:hover:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){background-color:var(--cereza-primario)}
 html[data-haiku-tema="oscuro"] .haiku-asistente-root .haiku-asistente-overlay:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){background-color:rgba(20, 41, 30, 0.514);background-image:initial}
 html[data-haiku-tema="oscuro"] .haiku-asistente-root .haiku-asistente-panel:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--cereza-texto);background-color:var(--cereza-superficie);border-top-color:currentcolor;border-right-color:currentcolor;border-bottom-color:currentcolor;box-shadow:rgba(16, 34, 25, 0.19) -16px 0px 48px}
 html[data-haiku-tema="oscuro"] .haiku-asistente-root .haiku-asistente-panel .haiku-asistente-cabecera:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){background-color:var(--cereza-superficie)}
-html[data-haiku-tema="oscuro"] .haiku-asistente-root .haiku-asistente-marca:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:rgb(242, 248, 243);background-color:rgb(32, 63, 50);background-image:initial}
+html[data-haiku-tema="oscuro"] .haiku-asistente-root .haiku-asistente-marca:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--cereza-sobre-primario);background-color:var(--cereza-primario)}
 html[data-haiku-tema="oscuro"] .haiku-asistente-root .haiku-asistente-titulo strong:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--cereza-texto)}
 html[data-haiku-tema="oscuro"] .haiku-asistente-root .haiku-asistente-titulo span:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:#baadb5}
 html[data-haiku-tema="oscuro"] .haiku-asistente-root .haiku-asistente-panel .haiku-asistente-borrar-historial:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:#baadb5;background-color:initial;background-image:none;border-color:currentcolor}
@@ -3737,7 +3690,6 @@ html[data-haiku-tema="oscuro"] .haiku-asistente-root .haiku-asistente-panel .hai
 html[data-haiku-tema="oscuro"] .haiku-asistente-root .haiku-asistente-panel .haiku-asistente-adjunto:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:#9fd2b3;background-color:var(--cereza-relieve);border-color:currentcolor}
 html[data-haiku-tema="oscuro"] .haiku-asistente-root .haiku-asistente-panel .haiku-asistente-quitar:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:#baadb5;background-color:transparent;background-image:initial;box-shadow:none;border-color:currentcolor}
 html[data-haiku-tema="oscuro"] .haiku-asistente-root .haiku-asistente-panel .haiku-asistente-quitar:hover:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){background-color:var(--cereza-verde-fondo)}
-html[data-haiku-tema="oscuro"] .haiku-asistente-root .haiku-asistente-panel :is(button, textarea, summary):focus-visible:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)), html[data-haiku-tema="oscuro"] .haiku-asistente-root .haiku-asistente-boton:focus-visible:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){outline-color:#9fd2b3}
 @media (max-width: 600px) {
 html[data-haiku-tema="oscuro"] .haiku-asistente-root .haiku-asistente-panel:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){border-left-color:currentcolor}
 }
@@ -4116,9 +4068,8 @@ html[data-haiku-tema="oscuro"] .haku-orden__acciones .haku-orden__principal:not(
 html[data-haiku-tema="oscuro"] .haku-orden [data-guardado]:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--haku-compacto-acento, #9fd2b3)}
 
 /* css/supabase-asistente-v1.css */
-html[data-haiku-tema="oscuro"] .haiku-asistente-boton:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){background-color:rgb(18, 54, 39);background-image:initial;box-shadow:rgba(0, 0, 0, 0.24) 0px 10px 28px;border-color:rgba(58, 50, 60, 0.18)}
-html[data-haiku-tema="oscuro"] .haiku-asistente-boton:hover:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){background-color:rgb(23, 71, 50);background-image:initial;box-shadow:rgba(0, 0, 0, 0.29) 0px 13px 32px}
-html[data-haiku-tema="oscuro"] .haiku-asistente-boton:focus-visible:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)), html[data-haiku-tema="oscuro"] .haiku-asistente-cerrar:focus-visible:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)), html[data-haiku-tema="oscuro"] .haiku-asistente-adjuntar:focus-visible:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)), html[data-haiku-tema="oscuro"] .haiku-asistente-enviar:focus-visible:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)), html[data-haiku-tema="oscuro"] .haiku-asistente-quitar:focus-visible:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)), html[data-haiku-tema="oscuro"] .haiku-asistente-texto:focus-visible:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){outline-color:rgba(159, 210, 179, 0.28)}
+html[data-haiku-tema="oscuro"] .haiku-asistente-boton:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){background-color:var(--cereza-primario);box-shadow:rgba(0, 0, 0, 0.24) 0px 10px 28px;border-color:rgba(58, 50, 60, 0.18)}
+html[data-haiku-tema="oscuro"] .haiku-asistente-boton:hover:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){background-color:var(--cereza-primario);box-shadow:rgba(0, 0, 0, 0.29) 0px 13px 32px}
 html[data-haiku-tema="oscuro"] .haiku-asistente-panel:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:var(--cereza-texto);background-color:var(--cereza-lienzo);box-shadow:rgba(15, 37, 26, 0.18) 0px 14px 36px;border-color:#3a323c}
 html[data-haiku-tema="oscuro"] .haiku-asistente-cabecera:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){background-color:var(--cereza-superficie)}
 html[data-haiku-tema="oscuro"] .haiku-asistente-titulo strong:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:#f4ecef}

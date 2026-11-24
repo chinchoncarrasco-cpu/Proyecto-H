@@ -25,7 +25,7 @@ html[data-haiku-tema="oscuro"] #seccion-cabanas .tg-section { --tg-warning-bg:#3
 #seccion-cabanas .tg-badge { display:inline-flex; align-items:center; width:fit-content; padding:4px 8px; border-radius:5px; font-size:12px; line-height:17px; font-weight:600; white-space:nowrap; }
 #seccion-cabanas .tg-pendiente,#seccion-cabanas .tg-con_detalles { background:var(--tg-warning-bg); color:var(--cb-request-text,#8b6831); }
 #seccion-cabanas .tg-en_curso,#seccion-cabanas .tg-realizada { background:var(--cb-progress-bg); color:var(--cb-progress-text); }
-#seccion-cabanas .tg-verificada { background:var(--cb-selected); color:var(--cb-accent); }
+#seccion-cabanas .tg-verificada { background:var(--cereza-verde-fondo); color:var(--cereza-verde); }
 #seccion-cabanas .tg-row { margin:0; }
 #seccion-cabanas .tg-row > div { min-width:0; }
 #seccion-cabanas .tg-row label { display:grid; gap:3px; min-width:0; width:100%; }
@@ -47,7 +47,8 @@ html[data-haiku-tema="oscuro"] #seccion-cabanas .tg-section { --tg-warning-bg:#3
 #seccion-cabanas .tg-meta,#seccion-cabanas .tg-feedback,#seccion-cabanas .tg-error,#seccion-cabanas .tg-success { margin:8px 0; font-size:12px; line-height:18px; }
 #seccion-cabanas .tg-meta { color:var(--cb-muted); }
 #seccion-cabanas .tg-feedback:empty { display:none; }
-#seccion-cabanas .tg-feedback,#seccion-cabanas .tg-success { color:var(--cb-accent); }
+#seccion-cabanas .tg-feedback { color:var(--cb-accent); }
+#seccion-cabanas .tg-success { color:var(--cereza-verde); }
 #seccion-cabanas .tg-error,#seccion-cabanas .tg-previous-label { color:var(--cb-request-text,#8b6831); }
 #seccion-cabanas .tg-previous-label { font-size:12px; font-weight:600; }
 #seccion-cabanas .tg-previous > summary { cursor:pointer; padding:6px 0; color:var(--cb-accent); font-weight:600; }
