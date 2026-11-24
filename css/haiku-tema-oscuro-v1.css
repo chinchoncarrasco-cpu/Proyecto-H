@@ -243,16 +243,6 @@ html[data-haiku-tema="oscuro"] .haku-tinajas-vacio:not(:where(.sidebar, .sidebar
 html[data-haiku-tema="oscuro"] .haku-tinajas-pie:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:#baadb5;border-top-color:#3a323c}
 
 /* js/supabase-auth.js */
-html[data-haiku-tema="oscuro"] .haiku-auth-overlay:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){background-color:rgba(18, 18, 18, 0.97);background-image:radial-gradient(circle at center top, rgba(87, 118, 92, 0.22), transparent 38%), initial}
-html[data-haiku-tema="oscuro"] .haiku-auth-card:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:rgb(242, 242, 242);background-color:rgba(31, 31, 31, 0.97);background-image:initial;box-shadow:rgba(0, 0, 0, 0.42) 0px 24px 70px;border-color:rgba(58, 50, 60, 0.1)}
-html[data-haiku-tema="oscuro"] .haiku-auth-marca:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:#baadb5}
-html[data-haiku-tema="oscuro"] .haiku-auth-card p:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:#baadb5}
-html[data-haiku-tema="oscuro"] .haiku-auth-card label:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:#baadb5}
-html[data-haiku-tema="oscuro"] .haiku-auth-card input:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:rgb(255, 255, 255);background-color:rgb(23, 23, 23);background-image:initial;outline-color:initial;border-color:#3a323c}
-html[data-haiku-tema="oscuro"] .haiku-auth-card input:focus:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){box-shadow:rgba(113, 140, 118, 0.18) 0px 0px 0px 3px;border-color:#3a323c}
-html[data-haiku-tema="oscuro"] .haiku-auth-submit:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:rgb(255, 255, 255);background-color:rgb(115, 142, 120);background-image:initial;border-color:currentcolor}
-html[data-haiku-tema="oscuro"] .haiku-auth-error:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:rgb(243, 165, 165)}
-html[data-haiku-tema="oscuro"] .haiku-auth-estado:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:#baadb5}
 html[data-haiku-tema="oscuro"] .haiku-usuario-chip:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:rgb(242, 242, 242);background-color:rgba(30, 30, 30, 0.92);background-image:initial;box-shadow:rgba(0, 0, 0, 0.22) 0px 8px 24px;border-color:rgba(58, 50, 60, 0.12)}
 html[data-haiku-tema="oscuro"] .haiku-usuario-chip span:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:#baadb5}
 html[data-haiku-tema="oscuro"] .haiku-usuario-chip button:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:rgb(255, 255, 255);background-color:rgb(74, 74, 74);background-image:initial;border-color:currentcolor}
@@ -2594,23 +2584,6 @@ html[data-haiku-tema="oscuro"] .haiku-notif-servicio-etiqueta:not(:where(.sideba
 /* css/supabase-pagos-acciones-desktop-v1.css */
 
 /* css/supabase-bloqueo-privacidad-v1.css */
-html[data-haiku-tema="oscuro"] .haiku-privacidad-overlay:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:rgb(244, 246, 244);background-color:rgb(12, 16, 14);background-image:radial-gradient(circle at 50% 18%, rgba(52, 101, 74, 0.18), transparent 32%), initial}
-html[data-haiku-tema="oscuro"] .haiku-privacidad-card:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){background-color:rgba(26, 31, 28, 0.98);background-image:initial;box-shadow:rgba(0, 0, 0, 0.52) 0px 28px 90px;border-color:rgba(58, 50, 60, 0.11)}
-html[data-haiku-tema="oscuro"] .haiku-privacidad-marca:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:#baadb5}
-html[data-haiku-tema="oscuro"] .haiku-privacidad-card h2:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:rgb(246, 248, 246)}
-html[data-haiku-tema="oscuro"] .haiku-privacidad-card > p:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:#baadb5}
-html[data-haiku-tema="oscuro"] .haiku-privacidad-campo > span:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:#baadb5}
-html[data-haiku-tema="oscuro"] .haiku-privacidad-input:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:rgb(255, 255, 255);background-color:rgb(17, 21, 18);background-image:initial;outline-color:initial;border-color:#3a323c}
-html[data-haiku-tema="oscuro"] .haiku-privacidad-input:focus:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){box-shadow:rgba(105, 145, 122, 0.18) 0px 0px 0px 3px;border-color:#9fd2b3}
-html[data-haiku-tema="oscuro"] .haiku-privacidad-input:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *))::placeholder{color:#f4ecef}
-html[data-haiku-tema="oscuro"] .haiku-privacidad-submit:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:rgb(255, 255, 255);background-color:rgb(53, 124, 89);background-image:initial;border-color:currentcolor}
-html[data-haiku-tema="oscuro"] .haiku-privacidad-error:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:rgb(255, 170, 164)}
-html[data-haiku-tema="oscuro"] .haiku-privacidad-info:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:#baadb5}
-html[data-haiku-tema="oscuro"] .haiku-privacidad-intentos:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){border-top-color:rgba(58, 50, 60, 0.09)}
-html[data-haiku-tema="oscuro"] .haiku-privacidad-intentos strong:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:#baadb5}
-html[data-haiku-tema="oscuro"] .haiku-privacidad-intentos-lista li:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:#baadb5}
-html[data-haiku-tema="oscuro"] .haiku-privacidad-intentos-lista time:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:#baadb5}
-html[data-haiku-tema="oscuro"] .haiku-privacidad-alerta:not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){color:rgb(255, 194, 188);background-color:rgba(133, 45, 38, 0.15);background-image:initial;border-color:rgba(58, 50, 60, 0.34)}
 
 /* css/sites-resumen-v1.css */
 html[data-haiku-tema="oscuro"] body:has(> .sites-shell-topbar):has(#seccion-resumen.activa):not(:where(.sidebar, .sidebar *, #libro-reserva-visor table, #libro-reserva-visor table *)){background-color:var(--sites-shell-canvas);background-image:none}

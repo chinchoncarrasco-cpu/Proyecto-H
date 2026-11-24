@@ -1,0 +1,9 @@
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="Candado">
+<rect x="0.5" y="0.5" width="39" height="39" rx="11.5" fill="#402631"/>
+<rect x="0.5" y="0.5" width="39" height="39" rx="11.5" stroke="#DABB80"/>
+<path id="Arco del candado" d="M15 18V14C15 10.69 17.24 8 20 8C22.76 8 25 10.69 25 14V18" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" stroke="#DABB80"/>
+<rect id="Cuerpo del candado" x="12.15" y="18.5" width="15.7" height="11.6" rx="2.4" stroke-width="1.8" stroke="#DABB80"/>
+<circle id="Ojo del candado" cx="20" cy="24.1" r="1.1" fill="#DABB80"/>
+</g>
+</svg>
