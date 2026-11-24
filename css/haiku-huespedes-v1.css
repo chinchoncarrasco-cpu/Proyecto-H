@@ -29,7 +29,7 @@
 html[data-haiku-tema="oscuro"] .hu-icono-oscuro { display:inline-block; }
 .hu-toolbar { display:grid; gap:10px; margin-bottom:12px; font-size:12px; }
 .hu-tabs, .hu-filtros, .hu-chips { display:flex; align-items:center; gap:6px; }
-.hu-tabs { overflow-x:auto; }
+.hu-tabs { flex-wrap:wrap; }
 .hu-tabs > * { flex:none; white-space:nowrap; }
 .hu-filtros { flex-wrap:wrap; }
 .hu-busqueda { position:relative; flex:1 1 260px; }

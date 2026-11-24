@@ -18,6 +18,7 @@ test('directorio por estadía, asociaciones, filtros y permisos', async () => {
       'supabase/migrations/20261121003000_haku_huespedes_directorio_foto.sql',
       'supabase/migrations/20261122014301_huespedes_directorio_estadias.sql',
       'supabase/migrations/20261122042015_huespedes_vigencia_hospedados.sql',
+      'supabase/migrations/20261124010200_huespedes_completados_orden_checkin.sql',
     ]) await db.exec(read(file));
     await db.exec("set time zone 'America/Santiago'");
     await db.exec(read('tests/huespedes-v1-postgres.test.sql').split('set local role authenticated;')[0] + 'commit;');
@@ -30,11 +31,11 @@ test('directorio por estadía, asociaciones, filtros y permisos', async () => {
     await login(1);
     const all = await directory();
     assert.deepEqual(all.filas.map(row => row.estado), [
-      'hospedados', 'hospedados', 'por_ingresar', 'por_ingresar', 'por_ingresar', 'historial',
+      'hospedados', 'hospedados', 'por_ingresar', 'por_ingresar', 'por_ingresar', 'historial', 'historial',
     ]);
-    assert.deepEqual(all.filas.map(row => row.estadia_id), [stay(1), stay(6), stay(3), stay(2), stay(4), stay(5)]);
+    assert.deepEqual(all.filas.map(row => row.estadia_id), [stay(1), stay(6), stay(4), stay(3), stay(2), stay(8), stay(5)]);
     assert.deepEqual(all.grupos.hospedados,{titulares:2,estadias:2});
-    assert.deepEqual(all.grupos.historial,{titulares:1,estadias:1});
+    assert.deepEqual(all.grupos.historial,{titulares:2,estadias:2});
     assert.equal(all.titulares,3);
     assert.equal(all.filas.filter(row=>row.id===guest(1)).length,3);
     assert.equal(all.filas.some(row=>row.id===guest(4)),false);
@@ -54,8 +55,16 @@ test('directorio por estadía, asociaciones, filtros y permisos', async () => {
     assert.deepEqual(historical.filas.map(row=>row.estadia_id),[stay(5)]);
     assert.equal(historical.filas[0].abrir_acompanantes,true);
     assert.deepEqual((await directory('hospedados',null,null,'Uruguay')).filas.map(row=>row.estadia_id),[stay(1)]);
-    assert.ok((await directory('pendientes')).filas.some(row=>row.estadia_id===stay(6)));
-    assert.deepEqual((await directory('todos',null,null,null,4)).filas.map(row=>row.estadia_id),[stay(4),stay(5)]);
+    const pending = await directory('pendientes');
+    const completed = await directory('completados');
+    assert.deepEqual(pending.filas.map(row=>row.estadia_id),[stay(1),stay(6),stay(4),stay(3),stay(2)]);
+    assert.deepEqual(completed.filas.map(row=>row.estadia_id),[stay(8),stay(5)],'el check-in más reciente va primero aunque sea de otra cabaña');
+    assert.ok(completed.filas.every(row=>!row.pendiente));
+    assert.equal(completed.conteos.completados,2);
+    assert.equal(all.conteos.completados+all.conteos.pendientes,all.conteos.todos);
+    assert.deepEqual((await directory('completados','Ciro','Loft')).filas.map(row=>row.estadia_id),[stay(5)]);
+    assert.deepEqual((await directory('completados',null,null,null,1)).filas.map(row=>row.estadia_id),[stay(5)]);
+    assert.deepEqual((await directory('todos',null,null,null,4)).filas.map(row=>row.estadia_id),[stay(2),stay(8),stay(5)]);
     const legacy = (await db.query("select public.haiku_huesped_directorio_v1('todos','XY790') data")).rows[0].data;
     assert.equal(legacy.filas[0].id,guest(3),'el buscador de vinculación admite perfiles sin estadía');
 
@@ -76,7 +85,7 @@ test('directorio por estadía, asociaciones, filtros y permisos', async () => {
     assert.deepEqual((await directory('hospedados')).filas.map(row=>row.estadia_id),[stay(6)],
       'un Full Day de hoy sigue visible y el checkout confirmado prevalece');
     const historial = await directory('historial');
-    assert.deepEqual(new Set(historial.filas.map(row=>row.estadia_id)),new Set([stay(1),stay(3),stay(5)]));
+    assert.deepEqual(historial.filas.map(row=>row.estadia_id),[stay(3),stay(1),stay(8),stay(5)]);
     assert.equal((await directory()).filas.find(row=>row.estadia_id===stay(2)).estado,'por_ingresar');
     const perfil = (id,reserva) => db.query('select public.haiku_huesped_perfil_v1($1,$2) data',[id,reserva]);
     const anterior = await perfil(guest(1),'a2000000-0000-4000-8000-000000000001');
@@ -94,6 +103,7 @@ test('directorio por estadía, asociaciones, filtros y permisos', async () => {
     assert.equal((await directory()).puede_editar,false);
     await login(3);
     await assert.rejects(directory(), /No tienes permiso/);
+    await assert.rejects(directory('completados'), /No tienes permiso/);
   } finally {
     await db.close();
   }
