@@ -6,29 +6,32 @@
     const paso=(titulo,items,datos=[],nota='',recortes)=>({titulo,items,datos,nota,...(recortes&&{recortes})});
     const numeroTarjeta='Último dígito del año del cobro + código de autorización + mes (2 dígitos). Conserva los ceros del código; sustituye cada letra por 0.';
     const ejemploNumero='Ejemplo: cobro en diciembre de 2026, autorización 001234 → 600123412. No copies la fecha ni el código de los ejemplos del manual.';
-    const rutManager='Extranjero · 66.666.666-6\nChileno · RUT real del titular';
-    const rutBooking='Booking · Usa 55.555.555-5 para el cliente chileno si Booking no informa su RUT.';
-    // Cada recorte se ancla a un campo o índice de indicación. El primero queda visible.
+    const rutManager='Extranjero · 66666666-6\nChileno · RUT real del titular, sin puntos y con guion';
+    const rutBooking='Booking · Usa 55555555-5 para el cliente chileno si Booking no informa su RUT.';
+    const rutaComprobantes='En Manager, ve a Finanzas → Comprobantes.';
+    const cabeceraTraspaso=[rutaComprobantes,'Pulsa Ingresar, completa la cabecera y pulsa OK.'];
+    // Los recortes de acciones se muestran junto a la indicación; el primer campo muestra su recorte.
     const verificarManager=paso('Comprobar el registro',[
-        'Ve a Manager → Ventas → Menú de ventas → Impresión de caja.',
+        'Ve a Manager → Ventas → Menú de Ventas → Impresiones en Caja.',
         'Abre Detalle de pago y verifica que figure pagado antes de retirarlo del listado con un clic.'
-    ],[],'',[[1,'detalle-pago']]);
+    ],[],'',[[0,'ruta-caja'],[1,'detalle-pago']]);
     const conflictoEfectivo='Los manuales se contradicen: Ingresos Manager indica que el alojamiento en efectivo no se ingresa en Manager y lleva sólo boleta con el RUT de la Sra. Naifi; Proceso de reservas menciona Manager sin detallar el ingreso. Confirma esta regla con administración antes de hacer un asiento.';
     function transferencia(existente){return [
         paso(existente?'Abrir el comprobante del día':'Crear el comprobante',existente?[
-            'Ve a Manager → Finanzas → Comprobantes. Pulsa la flecha hacia abajo, elige tipo I y OK.',
+            rutaComprobantes,'Pulsa la flecha hacia abajo, elige tipo I y pulsa OK.',
             'Abre el comprobante de la fecha que necesitas cargar. Selecciona y abre ARE; pulsa Ingresar.'
-        ]:['Ve a Manager → Finanzas → Comprobantes → Ingresar.','Completa la cabecera y pulsa OK.'],existente?[]:[
+        ]:[rutaComprobantes,'Pulsa Ingresar, completa la cabecera y pulsa OK.'],existente?[]:[
             ['Glosa','Abono Clientes Reservas [fecha que indica el banco]'],['Tipo de comprobante','I']
-        ],'',existente?[[0,'filtro-i']]:[['Glosa','glosa-transferencia'],['Tipo de comprobante','tipo-i']]),
+        ],'',existente?[[0,'ruta-comprobantes'],[1,'filtro-i'],[2,'lista-comprobantes']]:
+            [[0,'ruta-comprobantes'],[1,'ingresar'],['Glosa','glosa-transferencia'],['Tipo de comprobante','tipo-i']]),
         paso('Ingresar el abono ARE',['Identifica al titular de la reserva, aunque haya transferido otra persona.','Completa los campos y pulsa OTRO.'],[
             ['Tipo de documento','ARE'],['N.º de documento',existente?'Fecha del banco DDMMAA + correlativo que corresponda (ej.: 0112252).':'Fecha del banco en formato DDMMAA (ej.: 011225).'],
             ['Haiku','1'],['RUT',rutManager],['Glosa','Copia y pega el detalle del movimiento bancario'],['Haber','Monto reflejado en el banco']
-        ],'',[['Glosa','glosa-documento'],['Tipo de documento','are'],['RUT','rut']]),
+        ],'',[[1,'otro-are'],['Glosa','glosa-are'],['Tipo de documento','are'],['RUT','rut']]),
         paso('Cuadrar con ABB$',['Completa la contrapartida y usa Cuadrar H=D.'],[
             ['Tipo de documento','ABB$'],['N.º de documento','Fecha del banco en formato DDMMAA']
         ],'Si el comprobante ya existía, mantén la correlación indicada por Manager; no reemplaces un movimiento anterior.',
-            [['Tipo de documento','abb']]),verificarManager
+            [[0,'cuadrar-abb'],['Tipo de documento','abb']]),verificarManager
     ];}
     function webpay(tipo,futuro=false){return [
         paso(futuro?'Identificar la venta directa':'Obtener la cartola Transbank',futuro?[
@@ -38,10 +41,10 @@
             'En Transbank entra a Mis ventas → Cartola de movimientos. Elige la fecha o semana.',
             'Selecciona todos los comercios excepto 32161154 y descarga el informe.',
             `Ubica la venta${tipo?' con tarjeta de '+tipo:''}. Revisa fecha de venta, tipo de tarjeta, terminación, autorización y monto.`
-        ]),
-        paso('Crear el comprobante T',['Ve a Manager → Finanzas → Comprobantes → Ingresar. Completa y pulsa OK.'],[
+        ],[],'',futuro?[[1,'txc']]:undefined),
+        paso('Crear el comprobante T',cabeceraTraspaso,[
             ['Glosa','Abono Clientes Reservas TBK [fecha de venta]'],['Tipo de comprobante','T']
-        ],'',[['Glosa','glosa-webpay'],['Tipo de comprobante','tipo-t']]),
+        ],'',[[0,'ruta-comprobantes'],[1,'ingresar-t'],['Glosa','glosa-webpay'],['Tipo de comprobante','tipo-t']]),
         paso('Ingresar TXC',['Completa la primera línea con los datos de la venta.'],[
             ['Tipo de documento','TXC'],['N.º de documento',numeroTarjeta],['Haiku','1'],
             ['Glosa','Folio << **** **** **** [últimos 4 dígitos] [marca de tarjeta]'],['Debe','Monto del informe']
@@ -49,30 +52,31 @@
             [['Glosa','glosa-documento'],['Tipo de documento','txc']]),
         paso('Completar AC+P',['Crea o selecciona al huésped en Manager.','Cuadra D=H y pulsa OK.'],[
             ['Tipo de documento','AC+P'],['N.º de documento','El mismo número usado en TXC'],['RUT',rutManager]
-        ],'',[['RUT','rut'],['Tipo de documento','acp']]),verificarManager
+        ],'',[[1,'cuadrar-acp'],['RUT','rut'],['Tipo de documento','acp']]),verificarManager
     ];}
     function booking(virtual=false){return [
-        paso('Crear el comprobante T',['En Manager → Finanzas → Comprobantes, pulsa Ingresar. Completa la cabecera y OK.'],[
+        paso('Crear el comprobante T',cabeceraTraspaso,[
             ['Glosa',virtual?'Abono Cliente Reserva Extranjero (cargo virtual)':'Abono Clientes Reserva Booking [fecha del cobro]'],
             ['Tipo de comprobante','T'],['Fecha','Fecha del cobro']
-        ],'',[['Glosa','glosa-cabecera'],['Tipo de comprobante','tipo-t']]),
+        ],'',[[0,'ruta-comprobantes'],[1,'ingresar-t'],['Glosa','glosa-cabecera'],['Tipo de comprobante','tipo-t']]),
         paso('Ingresar el cobro TCR',['Usa el monto efectivamente cobrado y pulsa OTRO.'],[
             ['Tipo de documento','TCR'],['N.º de documento',numeroTarjeta],['Haiku','1'],
             ['Glosa','Detalle de la reserva: CAB + noches + fecha de check-in'],['Debe','Monto cobrado']
-        ],ejemploNumero,[['Glosa','glosa-documento'],['Tipo de documento','tcr']]),
+        ],ejemploNumero,[[0,'otro-tcr'],['Glosa','glosa-tcr'],['Tipo de documento','tcr']]),
         paso(virtual?'Completar AC+P':'Completar AC+B',['Usa el mismo número de documento de la línea TCR.','Cuadra D=H y pulsa OK.'],[
             ['Tipo de documento',virtual?'AC+P':'AC+B'],['N.º de documento','El mismo número usado en TCR'],
             ['RUT',rutManager,virtual?'':rutBooking]
-        ],'',[['RUT','rut'],['Tipo de documento',virtual?'acp':'acb']]),verificarManager
+        ],'',[[1,virtual?'cuadrar-acp':'cuadrar-acb'],['RUT','rut'],['Tipo de documento',virtual?'acp':'acb']]),verificarManager
     ];}
     function checkin(tipo){return [
         paso('Abrir el pago del BOVE',['Genera el BOVE. En Detalles de pago, selecciona Cancelar Varios.',
             'Haz doble clic en el E-Bove y cierra esa ventana. En la ventana que queda, pulsa Ingresar.'],
-            [],'',[[0,'cancelar-varios'],[1,'ingresar']]),
+            [],'',[[0,'cancelar-varios'],[1,'ingresar-bove']]),
         paso('Registrar el saldo con '+tipo,['Completa el documento con los datos del cobro.','Cuadra D=H y pulsa OK.'],[
             ['Tipo de documento',tipo==='débito'?'RECO':'TCR'],['N.º de documento',numeroTarjeta],['Haiku','1'],
             ['Glosa','Detalle de la reserva: CAB + noches + fecha de check-in']
-        ],ejemploNumero,[['Glosa','glosa-documento'],['Tipo de documento',tipo==='débito'?'reco':'tcr']]),verificarManager
+        ],ejemploNumero,[[1,tipo==='débito'?'cuadrar-reco':'cuadrar-tcr'],
+            ['Glosa',tipo==='débito'?'glosa-reco':'glosa-tcr'],['Tipo de documento',tipo==='débito'?'reco':'tcr']]),verificarManager
     ];}
     const correoInicial=paso('Verificar el correo de reserva',[
         'Revisa nombre, correo, cantidad de personas, entrada, salida, noches y precio.',
@@ -192,26 +196,63 @@
     // Capturas recortadas y aplanadas: sólo controles; nunca los originales con datos de huéspedes.
     const raizImagenes=root.document?.currentScript?.src?new URL('../assets/guias/',root.document.currentScript.src).href:'assets/guias/';
     const captura=(archivo,titulo,alt,ancho,alto)=>({archivo,titulo,alt,ancho,alto});
-    const recorte=(id,titulo,ancho,alto)=>captura('manager/'+id+'.png',titulo,'Manager · '+titulo,ancho,alto);
+    const tamanosFotosManager={
+        'm1-30':[761,535],
+        'm1-38':[762,537],
+        'm1-39':[755,554],
+        'm1-27':[299,165],
+        'm1-31':[757,553],
+        'm1-32':[757,552],
+        'm1-42':[757,553],
+        'm1-35':[755,553],
+        'm1-41':[756,552],
+        'm1-45':[755,554],
+        'm1-15':[718,295],
+        'm3-02':[675,491],
+        'm1-17':[445,151],
+        'm1-03':[862,664],
+        'm3-01':[859,660],
+        'm1-29':[780,514],
+    };
+    function recorte(id,titulo,ancho,alto,foto){
+        const [anchoFoto,altoFoto]=tamanosFotosManager[foto];
+        return {clave:'recortes/'+id,titulo,alt:titulo,ancho,alto,
+            completa:{clave:'fotos/'+foto,alt:'Captura completa · '+titulo,ancho:anchoFoto,alto:altoFoto}};
+    }
     const recortesManager={
-        ingresar:recorte('ingresar','Botón Ingresar',69,24),
-        'glosa-transferencia':recorte('glosa-transferencia','Glosa de transferencia',252,26),
-        'glosa-webpay':recorte('glosa-webpay','Glosa de WebPay',275,26),
-        'glosa-cabecera':recorte('glosa-cabecera','Campo Glosa del comprobante',248,26),
-        'glosa-documento':recorte('glosa-documento','Campo Glosa del documento',253,27),
-        'tipo-i':recorte('tipo-i','Comprobante tipo I',243,27),
-        'tipo-t':recorte('tipo-t','Comprobante tipo T',243,27),
-        'filtro-i':recorte('filtro-i','Filtro de comprobantes tipo I',228,32),
-        are:recorte('are','Tipo de documento ARE',232,26),
-        abb:recorte('abb','Tipo de documento ABB$',232,26),
-        txc:recorte('txc','Tipo de documento TXC',232,26),
-        tcr:recorte('tcr','Tipo de documento TCR',232,26),
-        reco:recorte('reco','Tipo de documento RECO',232,26),
-        acb:recorte('acb','Tipo de documento AC+B',232,26),
-        acp:recorte('acp','Tipo de documento AC+P',232,26),
-        'cancelar-varios':recorte('cancelar-varios','Cancelar Varios en el BOVE',216,30),
-        'detalle-pago':recorte('detalle-pago','Botón Detalle de pago',264,31),
-        rut:recorte('rut','Campo RUT del cliente',196,28)
+        'ingresar':recorte('ingresar','Botón Ingresar',69,24,'m1-30'),
+        'glosa-transferencia':recorte('glosa-transferencia','Glosa de transferencia',480,26,'m1-30'),
+        'glosa-webpay':recorte('glosa-webpay','Glosa de WebPay',480,26,'m1-38'),
+        'glosa-cabecera':recorte('glosa-cabecera','Campo Glosa del comprobante · ejemplo WebPay',480,26,'m1-38'),
+        'glosa-documento':recorte('glosa-documento','Glosa del documento TXC',472,27,'m1-39'),
+        'tipo-i':recorte('tipo-i','Comprobante tipo I',243,27,'m1-30'),
+        'tipo-t':recorte('tipo-t','Comprobante tipo T',243,27,'m1-38'),
+        'filtro-i':recorte('filtro-i','Filtro de comprobantes tipo I',228,32,'m1-27'),
+        'are':recorte('are','Tipo de documento ARE',232,26,'m1-31'),
+        'abb':recorte('abb','Tipo de documento ABB$',232,26,'m1-32'),
+        'txc':recorte('txc','Tipo de documento TXC',232,26,'m1-39'),
+        'tcr':recorte('tcr','Tipo de documento TCR',232,26,'m1-42'),
+        'reco':recorte('reco','Tipo de documento RECO',232,26,'m1-35'),
+        'acb':recorte('acb','Tipo de documento AC+B',232,26,'m1-41'),
+        'acp':recorte('acp','Tipo de documento AC+P',232,26,'m1-45'),
+        'cancelar-varios':recorte('cancelar-varios','Cancelar varios en el BOVE',216,30,'m1-15'),
+        'detalle-pago':recorte('detalle-pago','Botón Detalle de Pago',264,31,'m3-02'),
+        'rut':recorte('rut','Campo RUT del cliente',196,28,'m1-17'),
+        'ruta-comprobantes':recorte('ruta-comprobantes','Finanzas → Comprobantes',390,28,'m1-03'),
+        'ruta-caja':recorte('ruta-caja','Menú de Ventas → Impresiones en Caja',161,30,'m3-01'),
+        'ingresar-t':recorte('ingresar-t','Botón Ingresar en comprobante T',69,24,'m1-38'),
+        'ingresar-bove':recorte('ingresar-bove','Botón Ingresar en Detalles de pago',68,26,'m1-15'),
+        'lista-comprobantes':recorte('lista-comprobantes','Lista de comprobantes de la fecha',264,29,'m1-29'),
+        'otro-are':recorte('otro-are','Botón Otro en el abono ARE',65,28,'m1-31'),
+        'otro-tcr':recorte('otro-tcr','Botón Otro en el cobro TCR',65,28,'m1-42'),
+        'cuadrar-abb':recorte('cuadrar-abb','Botón Cuadrar en ABB$',89,27,'m1-32'),
+        'cuadrar-acp':recorte('cuadrar-acp','Botón Cuadrar en AC+P',89,27,'m1-45'),
+        'cuadrar-acb':recorte('cuadrar-acb','Botón Cuadrar en AC+B',89,27,'m1-41'),
+        'cuadrar-reco':recorte('cuadrar-reco','Botón Cuadrar en RECO',89,27,'m1-35'),
+        'cuadrar-tcr':recorte('cuadrar-tcr','Botón Cuadrar en TCR',89,27,'m1-42'),
+        'glosa-are':recorte('glosa-are','Glosa del abono ARE',472,27,'m1-31'),
+        'glosa-tcr':recorte('glosa-tcr','Glosa del cobro TCR',472,27,'m1-42'),
+        'glosa-reco':recorte('glosa-reco','Glosa del saldo RECO',472,27,'m1-35'),
     };
     const fotosTerminal=[
         captura('terminal-tarjetas.jpg','1 · Tarjetas','Terminal Transbank: opción VISA-MC-AMEX-DINERS.',480,540),
@@ -266,19 +307,118 @@
         },{once:true});
         img.src=raizImagenes+ref.archivo;
     }
-    function ampliarImagen(imagenes,indice,origen,compacta=false){
+    const capturasPrivadas=new Map();
+    const panelHaku=()=>root.document?.getElementById('haiku-asistente-panel');
+    function cuentaCapturas(){
+        if(root.document?.documentElement.classList.contains('haiku-privacidad-bloqueada'))return null;
+        if(!root.haikuTienePermiso?.('huespedes.ver')||!root.haikuTienePermiso?.('pagos.ver'))return null;
+        return root.haikuSesion?.auth?.id;
+    }
+    function ocultarCaptura(entrada){
+        if(entrada.url)root.URL.revokeObjectURL(entrada.url);
+        entrada.url=null;
+        entrada.peticion=null;
+        entrada.img.hidden=true;
+        entrada.img.removeAttribute('src');
+        entrada.aviso.hidden=false;
+        entrada.aviso.textContent='Captura de recepción';
+    }
+    function retirarCapturas(contenedor){
+        for(const [img,entrada] of capturasPrivadas){
+            if(img.isConnected&&!contenedor?.contains(img))continue;
+            ocultarCaptura(entrada);
+            capturasPrivadas.delete(img);
+        }
+    }
+    function montarCapturaPrivada(destino,ref){
+        const d=root.document,img=d.createElement('img'),aviso=d.createElement('span');
+        img.alt=ref.alt;img.width=ref.ancho;img.height=ref.alto;img.decoding='async';img.hidden=true;
+        aviso.className='haku-guia__estado-captura';aviso.textContent='Captura de recepción';
+        const entrada={img,aviso,ref,url:null,peticion:null};
+        img.addEventListener('error',()=>{
+            if(!entrada.url)return;
+            ocultarCaptura(entrada);
+            aviso.textContent='No se pudo mostrar la captura.';
+        });
+        destino.append(img,aviso);
+        capturasPrivadas.set(img,entrada);
+    }
+    async function cargarCapturasPrivadas(contenedor=root.document){
+        const cuenta=cuentaCapturas();
+        if(!cuenta||panelHaku()?.hidden)return;
+        const entradas=[...capturasPrivadas.values()].filter(e=>e.img.isConnected&&contenedor.contains(e.img)&&!e.url&&!e.peticion);
+        if(!entradas.length)return;
+        const peticion=Symbol();
+        for(const entrada of entradas){
+            entrada.peticion=peticion;
+            entrada.aviso.textContent='Cargando captura…';
+        }
+        const claves=[...new Set(entradas.map(e=>e.ref.clave))];
+        const vigente=e=>e.peticion===peticion&&e.img.isConnected&&cuentaCapturas()===cuenta&&!panelHaku()?.hidden;
+        try{
+            const {data,error}=await root.haikuSupabase.from('haiku_manager_capturas_v1')
+                .select('clave,tipo,contenido').in('clave',claves);
+            if(error)throw error;
+            const filas=new Map((data||[]).map(fila=>[fila.clave,fila]));
+            for(const entrada of entradas){
+                if(!vigente(entrada))continue;
+                const fila=filas.get(entrada.ref.clave);
+                if(!fila||!['image/png','image/jpeg'].includes(fila.tipo)){
+                    entrada.aviso.textContent='Captura no disponible.';
+                    continue;
+                }
+                const bytes=Uint8Array.from(root.atob(fila.contenido),caracter=>caracter.charCodeAt(0));
+                entrada.url=root.URL.createObjectURL(new Blob([bytes],{type:fila.tipo}));
+                entrada.img.src=entrada.url;
+                entrada.img.hidden=false;
+                entrada.aviso.hidden=true;
+            }
+        }catch{
+            for(const entrada of entradas){
+                if(vigente(entrada)&&!entrada.url)entrada.aviso.textContent='No se pudo cargar la captura.';
+            }
+        }finally{
+            for(const entrada of entradas){
+                if(entrada.peticion===peticion)entrada.peticion=null;
+            }
+        }
+    }
+    function ocultarCapturasManager(){
+        for(const entrada of capturasPrivadas.values())ocultarCaptura(entrada);
+        root.document?.querySelector('dialog.haku-guia-imagen--manager[open]')?.close();
+    }
+    function ampliarImagen(imagenes,indice,origen){
         const d=root.document,dialog=d.createElement('dialog');dialog.className='haku-guia-imagen';
-        if(compacta)dialog.classList.add('haku-guia-imagen--recorte');
+        const esManager=Boolean(imagenes[indice].completa);
+        if(esManager)dialog.classList.add('haku-guia-imagen--manager');
         dialog.setAttribute('aria-label','Captura del manual');dialog.setAttribute('role','dialog');dialog.setAttribute('aria-modal','true');
         const head=d.createElement('header'),titulo=d.createElement('strong'),cerrar=d.createElement('button');
         cerrar.type='button';cerrar.textContent='Cerrar';cerrar.addEventListener('click',()=>dialog.close());
-        head.append(titulo,cerrar);const vista=d.createElement('div');vista.className='haku-guia-imagen__vista';
+        head.append(titulo);const vista=d.createElement('div');vista.className='haku-guia-imagen__vista';
+        if(esManager){
+            const tamano=d.createElement('button');
+            tamano.type='button';tamano.textContent='Tamaño real';tamano.setAttribute('aria-pressed','false');
+            tamano.addEventListener('click',()=>{
+                const real=vista.classList.toggle('haku-guia-imagen__vista--real');
+                tamano.setAttribute('aria-pressed',String(real));
+                tamano.textContent=real?'Ajustar':'Tamaño real';
+            });
+            vista.tabIndex=0;
+            vista.setAttribute('aria-label','Captura completa');
+            head.append(tamano);
+        }
+        head.append(cerrar);
         const nav=d.createElement('nav');nav.setAttribute('aria-label','Capturas del paso');
         const anterior=d.createElement('button'),siguiente=d.createElement('button'),contador=d.createElement('span');
         anterior.type=siguiente.type='button';anterior.textContent='Anterior';siguiente.textContent='Siguiente';
         const mostrar=()=>{
             const ref=imagenes[indice];titulo.textContent=ref.titulo;vista.replaceChildren();
-            const img=d.createElement('img');cargarImagen(img,ref);vista.append(img);
+            if(esManager){
+                montarCapturaPrivada(vista,ref.completa);
+                void cargarCapturasPrivadas(vista);
+            }else{
+                const img=d.createElement('img');cargarImagen(img,ref);vista.append(img);
+            }
             contador.textContent=`${indice+1} de ${imagenes.length}`;contador.setAttribute('aria-live','polite');
             anterior.disabled=indice===0;siguiente.disabled=indice===imagenes.length-1;
         };
@@ -291,7 +431,11 @@
         });
         nav.append(anterior,contador,siguiente);nav.hidden=imagenes.length<2;
         dialog.append(head,vista,nav);
-        dialog.addEventListener('close',()=>{dialog.remove();if(origen.isConnected)origen.focus({preventScroll:true});},{once:true});
+        dialog.addEventListener('close',()=>{
+            if(esManager)retirarCapturas(dialog);
+            dialog.remove();
+            if(origen.isConnected)origen.focus({preventScroll:true});
+        },{once:true});
         d.body.append(dialog);mostrar();dialog.showModal();cerrar.focus({preventScroll:true});
     }
     function pasosDe(id,medio){
@@ -312,6 +456,7 @@
     }
     function renderizar(card,estado,enfocar=false){
         const d=root.document,s=estadoValido(estado),g=grupos[s.grupo],guia=guias[s.id],pasos=pasosDe(s.id,s.medio);
+        retirarCapturas(card);
         card.className='haku-guia-operativa';card.dataset.hakuGuiaGrupo=s.grupo;card.dataset.hakuGuiaId=s.id;
         card.dataset.hakuGuiaPaso=String(s.indice);card.dataset.hakuGuiaMedio=s.medio;card.replaceChildren();
         const nodo=(padre,tag,clase,texto)=>{const el=d.createElement(tag);el.className=clase;if(texto)el.textContent=texto;padre.appendChild(el);return el;};
@@ -350,16 +495,16 @@
             }else{
                 const p=pasos[s.indice];
                 const recortes=new Map(p.recortes);
-                const principal=p.recortes?.[0]?.[0];
+                const principal=p.recortes?.find(([clave])=>typeof clave==='string')?.[0];
                 const agregarRecorte=(padre,clave)=>{
                     const ref=recortesManager[recortes.get(clave)];
-                    const miniatura=clave===principal;
-                    const b=boton(padre,miniatura?'':'Ver',()=>ampliarImagen([ref],0,b,true),
+                    const miniatura=typeof clave==='number'||clave===principal;
+                    const b=boton(padre,miniatura?'':'Ver',()=>ampliarImagen([ref],0,b),
                         miniatura?'haku-guia__recorte':'haku-guia__ver-recorte');
                     b.setAttribute('aria-label',(miniatura?'Ampliar captura: ':'Ver captura: ')+ref.titulo);
                     b.setAttribute('aria-haspopup','dialog');
                     if(miniatura){
-                        const img=nodo(b,'img','');img.loading='lazy';cargarImagen(img,ref);
+                        montarCapturaPrivada(b,ref);
                         const accion=nodo(b,'span','haku-guia__recorte-accion');
                         nodo(accion,'span','haku-guia__recorte-texto','Ampliar');
                     }
@@ -368,11 +513,8 @@
                 if(p.items?.length){
                     const lista=nodo(cuerpo,'ol','haku-guia__instrucciones');
                     p.items.forEach((texto,indice)=>{
-                        const li=nodo(lista,'li','');
-                        if(!recortes.has(indice)){li.textContent=texto;return;}
-                        const valor=nodo(li,'div','haku-guia__valor');
-                        nodo(valor,'span','',texto);
-                        agregarRecorte(indice===principal?li:valor,indice);
+                        const li=nodo(lista,'li','',texto);
+                        if(recortes.has(indice))agregarRecorte(li,indice);
                     });
                 }
                 if(p.datos?.length){
@@ -415,6 +557,7 @@
             }
         }
         nodo(card,'small','haku-guia__fuente','Manual · '+g.nombre).title=fuentes[s.grupo];
+        if(s.grupo==='manager')void cargarCapturasPrivadas(card);
         if(enfocar){titulo.focus({preventScroll:true});card.scrollIntoView({block:'start',behavior:'auto'});}
         return card;
     }
@@ -433,6 +576,23 @@
             renderizar(card,{grupo:card.dataset.hakuGuiaGrupo,id:card.dataset.hakuGuiaId,indice:card.dataset.hakuGuiaPaso,medio:card.dataset.hakuGuiaMedio});
         }
     }
+    root.addEventListener?.('haiku:panel-estado',e=>{
+        if(e.detail?.abierto)void cargarCapturasPrivadas();
+        else ocultarCapturasManager();
+    });
+    root.addEventListener?.('haiku:privacidad-cambio',e=>{
+        if(e.detail?.bloqueada)ocultarCapturasManager();
+        else void cargarCapturasPrivadas();
+    });
+    root.addEventListener?.('haiku:auth-ready',()=>{
+        ocultarCapturasManager();
+        void cargarCapturasPrivadas();
+    });
+    root.haikuSupabase?.auth?.onAuthStateChange?.((evento,sesion)=>{
+        if(evento==='SIGNED_OUT'||(evento==='SIGNED_IN'&&sesion?.user?.id!==root.haikuSesion?.auth?.id))ocultarCapturasManager();
+    });
+    const mensajesGuia=root.document?.getElementById('haiku-asistente-mensajes');
+    if(mensajesGuia&&root.MutationObserver)new root.MutationObserver(()=>retirarCapturas()).observe(mensajesGuia,{childList:true});
     const api=Object.freeze({guias,grupos,pasosDe,imagenesDe,estadoValido,mostrar,restaurar});
     root.HAIKU_GUIAS_OPERATIVAS_V1=api;if(typeof module!=='undefined')module.exports=api;
 })(typeof window!=='undefined'?window:globalThis);

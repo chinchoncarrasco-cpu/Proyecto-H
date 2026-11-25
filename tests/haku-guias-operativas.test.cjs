@@ -31,12 +31,12 @@ test('Manager distingue RUT extranjero y chileno; el genérico sin RUT sólo cor
         if(guia.grupo!=='manager')continue;
         for(const paso of guia.pasos){
             const rut=paso.datos.find(([campo])=>campo==='RUT');
-            if(rut)assert.equal(rut[1],'Extranjero · 66.666.666-6\nChileno · RUT real del titular');
+            if(rut)assert.equal(rut[1],'Extranjero · 66666666-6\nChileno · RUT real del titular, sin puntos y con guion');
         }
-        if(id!=='manager-booking')assert.doesNotMatch(texto(id),/55\.555\.555-5/);
+        if(id!=='manager-booking')assert.doesNotMatch(texto(id),/55555555-5/);
     }
     const booking=G.pasosDe('manager-booking').find(p=>p.titulo==='Completar AC+B');
-    assert.match(booking.datos.find(([campo])=>campo==='RUT')[2],/55\.555\.555-5 para el cliente chileno si Booking no informa su RUT/);
+    assert.match(booking.datos.find(([campo])=>campo==='RUT')[2],/55555555-5 para el cliente chileno si Booking no informa su RUT/);
 });
 test('efectivo conserva la contradicción y no fabrica un asiento EFE8',()=>{
     assert.match(texto('manager-efectivo'),/Los manuales se contradicen/);
@@ -72,21 +72,31 @@ test('estado restaurado valida catálogo y límites; una reserva completa necesi
     assert.equal(G.estadoValido({grupo:'__proto__',id:'constructor',medio:'toString',indice:'abc'}).id,'');
     assert.deepEqual(G.pasosDe('__proto__'),[]);assert.ok(Object.isFrozen(G.guias['manager-booking'].pasos[0]));
 });
-test('el módulo es una guía local sin acceso a datos, cobros, correos ni modelo externo',()=>{
+test('la guía sólo lee su catálogo de capturas y nunca registra pagos o reservas',()=>{
     const source=fs.readFileSync(require.resolve('../js/haiku-guias-operativas-v1.js'),'utf8');
     assert.doesNotMatch(source,/\.rpc\s*\(|\.invoke\s*\(|\bfetch\s*\(|\.insert\s*\(|\.update\s*\(|\.innerHTML\s*=|localStorage|indexedDB/);
+    assert.deepEqual([...source.matchAll(/haikuSupabase\.from\('([^']+)'\)/g)].map(m=>m[1]),['haiku_manager_capturas_v1']);
     assert.match(source,/No confirman que el pago o la reserva hayan sido registrados/);
 });
-test('cada captura corresponde al paso y existe localmente, sin depender de URLs temporales',()=>{
-    const path=require('node:path'),archivos=new Set();
+test('los recortes reales tienen una foto completa privada y las demás guías conservan sus archivos',()=>{
+    const path=require('node:path'),archivos=new Set(),recortes=new Set(),fotos=new Set();
     for(const g of Object.values(G.guias))for(const p of g.pasos)for(const ref of G.imagenesDe(p)){
-        assert.match(ref.archivo,/^(?:manager\/)?[a-z-]+\.(png|jpg)$/);
-        assert.ok(ref.alt.length>20&&ref.ancho>0&&ref.alto>0);
+        assert.ok(ref.alt&&ref.ancho>0&&ref.alto>0);
+        if(g.grupo==='manager'){
+            assert.equal(ref.archivo,undefined);
+            assert.match(ref.clave,/^recortes\/[a-z-]+$/);
+            assert.match(ref.completa.clave,/^fotos\/m[13]-\d{2}$/);
+            assert.ok(ref.completa.ancho>ref.ancho&&ref.completa.alto>ref.alto);
+            recortes.add(ref.clave);fotos.add(ref.completa.clave);
+            continue;
+        }
+        assert.match(ref.archivo,/^[a-z-]+\.(png|jpg)$/);
         assert.ok(fs.statSync(path.join(__dirname,'../assets/guias',ref.archivo)).size>1000);
         archivos.add(ref.archivo);
     }
-    assert.equal([...archivos].filter(archivo=>archivo.startsWith('manager/')).length,18);
-    assert.equal([...archivos].filter(archivo=>!archivo.startsWith('manager/')).length,8);
+    assert.equal(recortes.size,33);
+    assert.equal(fotos.size,16);
+    assert.equal(archivos.size,8);
     assert.equal(G.imagenesDe({titulo:'Realizar Check-in en el terminal'}).length,4);
     assert.equal(G.imagenesDe({titulo:'Completar Check-out y recoger vouchers'})[0].titulo,'3 · Check-out');
     assert.deepEqual(G.imagenesDe({titulo:'constructor'}),[]);
@@ -105,12 +115,20 @@ test('los recortes de Manager corresponden a los campos o indicaciones de cada p
             for(const [ancla] of recortes){
                 assert.ok(typeof ancla==='number'?paso.items[ancla]:campos.has(ancla),paso.titulo);
             }
-            if(campos.has('Glosa'))assert.equal(recortes[0][0],'Glosa',paso.titulo);
-            else if(campos.has('RUT'))assert.deepEqual(recortes[0],['RUT','rut'],paso.titulo);
+            const principal=recortes.find(([ancla])=>typeof ancla==='string');
+            if(campos.has('Glosa'))assert.equal(principal[0],'Glosa',paso.titulo);
+            else if(campos.has('RUT'))assert.deepEqual(principal,['RUT','rut'],paso.titulo);
+            const porAncla=new Map(recortes);
+            paso.items.forEach((indicacion,indice)=>{
+                if(indicacion.includes('Finanzas → Comprobantes'))assert.equal(porAncla.get(indice),'ruta-comprobantes');
+                if(indicacion.includes('Impresiones en Caja'))assert.equal(porAncla.get(indice),'ruta-caja');
+                if(/Cuadra[ r].*?[DH]=[HD]/.test(indicacion))assert.match(porAncla.get(indice),/^cuadrar-/);
+            });
+            if(!['Obtener la cartola Transbank','Aclarar el ingreso en efectivo'].includes(paso.titulo))assert.ok(recortes.length,paso.titulo);
             const documento=campos.get('Tipo de documento');
             if(documento){
                 const id=documento.toLowerCase().replace('$','').replace('+','');
-                assert.equal(new Map(recortes).get('Tipo de documento'),id,paso.titulo);
+                assert.equal(porAncla.get('Tipo de documento'),id,paso.titulo);
             }
         }
     }
