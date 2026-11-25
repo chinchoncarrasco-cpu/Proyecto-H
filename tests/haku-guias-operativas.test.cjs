@@ -26,10 +26,17 @@ test('autorización conserva ceros, reemplaza letras y usa año del cobro; seña
     assert.match(texto('manager-webpay-credito'),/excepto 32161154/);
     assert.match(texto('manager-webpay-credito'),/empieza con 5/);
 });
-test('Booking conserva RUT genéricos y cargo virtual explica el dato que no especifica su apartado',()=>{
-    assert.match(texto('manager-booking'),/66\.666\.666-6.*residente.*55\.555\.555-5.*extranjero/);
-    assert.match(texto('manager-virtual'),/no especifica qué RUT usar/);
-    assert.doesNotMatch(texto('manager-virtual'),/66\.666|55\.555/);
+test('Manager distingue RUT extranjero y chileno; el genérico sin RUT sólo corresponde a Booking',()=>{
+    for(const [id,guia] of Object.entries(G.guias)){
+        if(guia.grupo!=='manager')continue;
+        for(const paso of guia.pasos){
+            const rut=paso.datos.find(([campo])=>campo==='RUT');
+            if(rut)assert.equal(rut[1],'Extranjero · 66.666.666-6\nChileno · RUT real del titular');
+        }
+        if(id!=='manager-booking')assert.doesNotMatch(texto(id),/55\.555\.555-5/);
+    }
+    const booking=G.pasosDe('manager-booking').find(p=>p.titulo==='Completar AC+B');
+    assert.match(booking.datos.find(([campo])=>campo==='RUT')[2],/55\.555\.555-5 para el cliente chileno si Booking no informa su RUT/);
 });
 test('efectivo conserva la contradicción y no fabrica un asiento EFE8',()=>{
     assert.match(texto('manager-efectivo'),/Los manuales se contradicen/);
@@ -73,18 +80,38 @@ test('el módulo es una guía local sin acceso a datos, cobros, correos ni model
 test('cada captura corresponde al paso y existe localmente, sin depender de URLs temporales',()=>{
     const path=require('node:path'),archivos=new Set();
     for(const g of Object.values(G.guias))for(const p of g.pasos)for(const ref of G.imagenesDe(p)){
-        assert.match(ref.archivo,/^[a-z-]+\.(png|jpg)$/);
+        assert.match(ref.archivo,/^(?:manager\/)?[a-z-]+\.(png|jpg)$/);
         assert.ok(ref.alt.length>20&&ref.ancho>0&&ref.alto>0);
         assert.ok(fs.statSync(path.join(__dirname,'../assets/guias',ref.archivo)).size>1000);
         archivos.add(ref.archivo);
     }
-    assert.equal(archivos.size,8);
+    assert.equal([...archivos].filter(archivo=>archivo.startsWith('manager/')).length,18);
+    assert.equal([...archivos].filter(archivo=>!archivo.startsWith('manager/')).length,8);
     assert.equal(G.imagenesDe({titulo:'Realizar Check-in en el terminal'}).length,4);
     assert.equal(G.imagenesDe({titulo:'Completar Check-out y recoger vouchers'})[0].titulo,'3 · Check-out');
     assert.deepEqual(G.imagenesDe({titulo:'constructor'}),[]);
-    assert.deepEqual(G.imagenesDe({titulo:'Crear el comprobante'}),[],'el manual Manager no tiene capturas');
+    assert.deepEqual(G.imagenesDe(G.pasosDe('manager-efectivo')[0]),[]);
     for(const medio of ['webpay','transferencia','booking','airbnb','pos','efectivo']){
         const p=G.pasosDe('reserva-completa',medio).find(p=>p.titulo==='Abrir Añadir pago en Cloudbeds');
         assert.equal(G.imagenesDe(p)[0].archivo,'cloudbeds-anadir-pago.png');
+    }
+});
+test('los recortes de Manager corresponden a los campos o indicaciones de cada paso',()=>{
+    for(const guia of Object.values(G.guias).filter(g=>g.grupo==='manager')){
+        for(const paso of guia.pasos){
+            const recortes=paso.recortes||[];
+            const campos=new Map(paso.datos);
+            assert.equal(new Map(recortes).size,recortes.length);
+            for(const [ancla] of recortes){
+                assert.ok(typeof ancla==='number'?paso.items[ancla]:campos.has(ancla),paso.titulo);
+            }
+            if(campos.has('Glosa'))assert.equal(recortes[0][0],'Glosa',paso.titulo);
+            else if(campos.has('RUT'))assert.deepEqual(recortes[0],['RUT','rut'],paso.titulo);
+            const documento=campos.get('Tipo de documento');
+            if(documento){
+                const id=documento.toLowerCase().replace('$','').replace('+','');
+                assert.equal(new Map(recortes).get('Tipo de documento'),id,paso.titulo);
+            }
+        }
     }
 });

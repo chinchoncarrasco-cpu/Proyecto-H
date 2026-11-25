@@ -62,6 +62,113 @@ html[data-haiku-tema="oscuro"] .haku-guia-imagen {
     --guia-fondo: var(--cereza-superficie); --guia-texto: var(--cereza-texto); --guia-suave: #b1c2b7; --guia-linea: var(--cereza-linea);
     --guia-acento: var(--cereza-acento); --guia-seleccion: var(--cereza-relieve);
 }
+
+/* Ejemplos de Manager junto a la indicación o el campo al que pertenecen. */
+html .haiku-asistente-root .haiku-asistente-panel .haku-guia-operativa[data-haku-guia-grupo="manager"],
+.haku-guia-imagen.haku-guia-imagen--recorte {
+    --guia-acento: var(--cereza-acento);
+    --guia-suave: var(--cereza-secundario);
+}
+html .haiku-asistente-root .haiku-asistente-panel .haku-guia-operativa[data-haku-guia-grupo="manager"] .haku-guia__volver {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--guia-acento);
+}
+.haiku-asistente-root .haiku-asistente-panel .haku-guia-operativa[data-haku-guia-grupo="manager"] .haku-guia__navegacion > button {
+    flex: 0 1 108px;
+    min-height: 36px;
+    font-weight: 600;
+    text-align: center;
+}
+.haiku-asistente-root .haiku-asistente-panel .haku-guia-operativa[data-haku-guia-grupo="manager"] .haku-guia__navegacion > button:not(.haku-guia__principal) {
+    background: var(--cereza-relieve);
+    color: var(--guia-texto);
+}
+.haku-guia-operativa[data-haku-guia-grupo="manager"] .haku-guia__instrucciones {
+    padding-inline-start: 17px;
+    list-style-position: outside;
+}
+.haku-guia-operativa[data-haku-guia-grupo="manager"] .haku-guia__instrucciones > li::marker { color: var(--guia-acento); }
+.haku-guia-operativa[data-haku-guia-grupo="manager"] .haku-guia__datos { display: block; }
+.haku-guia-operativa .haku-guia__campo {
+    display: grid;
+    grid-template-columns: 76px minmax(0, 1fr);
+    align-items: start;
+    gap: 5px 8px;
+    padding: 6px 0;
+    border-top: 1px solid var(--guia-linea);
+}
+.haku-guia-operativa .haku-guia__campo > :is(dt, dd) { padding: 0; border: 0; }
+.haku-guia-operativa .haku-guia__apoyo { grid-column: 1 / -1; }
+.haku-guia-operativa .haku-guia__nota-campo { display: block; color: var(--guia-suave); font-size: 11px; line-height: 16px; }
+.haku-guia-operativa .haku-guia__valor {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 6px;
+    min-width: 0;
+}
+.haku-guia-operativa .haku-guia__valor > span { min-width: 0; white-space: pre-line; }
+.haiku-asistente-root .haiku-asistente-panel .haku-guia-operativa[data-haku-guia-grupo="manager"] .haku-guia__ver-recorte {
+    flex: none;
+    padding: 4px 9px;
+    font-size: 11px;
+    color: var(--cereza-acento);
+    background: var(--cereza-seleccion);
+}
+.haiku-asistente-root .haiku-asistente-panel .haku-guia-operativa[data-haku-guia-grupo="manager"] .haku-guia__recorte {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    width: 100%;
+    min-height: 40px;
+    padding: 5px 8px;
+    border-radius: 6px;
+    color: var(--cereza-acento);
+    background: var(--cereza-relieve);
+}
+.haiku-asistente-root .haiku-asistente-panel .haku-guia-operativa[data-haku-guia-grupo="manager"] :is(.haku-guia__ver-recorte, .haku-guia__recorte):hover {
+    border-color: var(--cereza-acento);
+}
+.haiku-asistente-root .haiku-asistente-panel .haku-guia-operativa .haku-guia__instrucciones > li > .haku-guia__recorte { margin-top: 5px; }
+.haku-guia-operativa .haku-guia__recorte img {
+    display: block;
+    min-width: 0;
+    width: auto;
+    height: auto;
+    max-width: 100%;
+    max-height: 32px;
+    object-fit: contain;
+    object-position: left;
+    border-radius: 2px;
+}
+.haku-guia-operativa .haku-guia__recorte img[hidden] { display: none; }
+.haku-guia-operativa .haku-guia__recorte-accion {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    gap: 8px;
+    font-size: 10px;
+}
+.haku-guia__recorte-accion::after {
+    content: "";
+    width: 16px;
+    height: 16px;
+    background: currentColor;
+    mask: url("../assets/guias/manager/ampliar.svg") center no-repeat;
+}
+.haku-guia-imagen.haku-guia-imagen--recorte {
+    width: min(304px, calc(100vw - 24px));
+    margin: auto;
+    border-color: var(--cereza-linea-fuerte);
+}
+html .haku-guia-imagen.haku-guia-imagen--recorte[open]::backdrop { background: rgb(25 23 27 / 72%); }
+.haku-guia-imagen--recorte .haku-guia-imagen__vista img { max-height: 104px; }
+@media (max-width: 360px) {
+    .haku-guia-operativa .haku-guia__recorte-texto { display: none; }
+}
+
 .haiku-asistente-root,
 .haiku-asistente-root * { box-sizing: border-box; }
 
