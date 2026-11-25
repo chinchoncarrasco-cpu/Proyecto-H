@@ -35,14 +35,26 @@ const server=http.createServer((req,res)=>{
             if(new URL(route.request().url()).hostname!=='127.0.0.1'){externas.push(route.request().url());return route.abort();}
             return route.continue();
         });
-        await page.addInitScript(()=>{
-            window.haikuSesion={usuario:{id:'usuario-prueba'}};
+        const leerPng=archivo=>fs.readFileSync(path.join(root,'assets/guias',archivo)).toString('base64');
+        await page.addInitScript(({miniatura,foto})=>{
+            window.haikuSesion={auth:{id:'usuario-prueba'},usuario:{id:'usuario-prueba'}};
+            window.haikuTienePermiso=()=>true;
             window.__calls=[];window.__writes=[];window.__pending=[];
+            window.__capturas=[];
             window.haikuSupabase={auth:{onAuthStateChange(){}},
                 functions:{invoke(name,args){__calls.push({name,args});return new Promise(resolve=>__pending.push(resolve));}},
+                from(tabla){
+                    if(tabla!=='haiku_manager_capturas_v1')throw Error('Lectura fuera del catálogo de capturas');
+                    return {select(){return {async in(campo,claves){
+                        if(campo!=='clave')throw Error('Se requiere una clave de captura');
+                        __capturas.push(claves);
+                        if(window.__demorarFoto&&claves[0].startsWith('fotos/'))await new Promise(resolve=>{window.__soltarFoto=resolve;});
+                        return {data:claves.map(clave=>({clave,tipo:'image/png',contenido:clave.startsWith('fotos/')?foto:miniatura}))};
+                    }};}};
+                },
                 rpc(...args){__writes.push(args);throw Error('No debe registrar datos');}};
             window.alert=()=>{};window.confirm=()=>true;
-        });
+        },{miniatura:leerPng('manager/glosa-documento.png'),foto:leerPng('santander-movimientos.png')});
         await page.goto(`http://127.0.0.1:${server.address().port}/`);
         await page.locator('#haiku-asistente-boton').click();
         const input=page.locator('#haiku-asistente-texto'),rapidas=page.locator('#haiku-asistente-rapidas');
@@ -66,21 +78,27 @@ const server=http.createServer((req,res)=>{
             assert.ok(await manager.locator('.haku-guia__cuerpo').isVisible());
             let pasos=0;
             while(await manager.getByRole('button',{name:'Siguiente',exact:true}).count()){
-                assert.ok(await manager.locator('img').count()<=1,'sólo un recorte visible por paso');
+                assert.ok(await manager.locator('.haku-guia__datos img').count()<=1,'sólo un recorte visible entre los campos');
+                assert.ok(await manager.locator('img').count()<=3,'las acciones y el campo principal se mantienen compactos');
                 await manager.getByRole('button',{name:'Siguiente',exact:true}).click();assert.ok(++pasos<10);
             }
-            assert.ok(await manager.locator('img').count()<=1);
+            assert.ok(await manager.locator('img').count()<=3);
             await manager.getByRole('button',{name:'Terminar guía',exact:true}).click();
             assert.match(await manager.innerText(),/Fin de la guía.*No confirman que el pago o la reserva/s);
             await manager.getByRole('button',{name:'← Opciones',exact:true}).click();
         }
         await manager.getByRole('button',{name:/^Agregar transferencia/}).click();
+        const dialogo=page.getByRole('dialog',{name:'Captura del manual'});
+        await manager.getByRole('button',{name:'Ampliar captura: Finanzas → Comprobantes',exact:true}).click();
+        await dialogo.locator('img[src^="blob:"]').evaluate(img=>img.decode());
+        assert.deepEqual(await page.evaluate(()=>__capturas.at(-1)),['fotos/m1-03']);
+        await page.keyboard.press('Escape');
+        await dialogo.waitFor({state:'detached'});
         await manager.getByRole('button',{name:'Siguiente',exact:true}).click();
         assert.match(await manager.innerText(),/ARE.*Haber/s);
         // Comprobación en el panel web y en la vista incrustada en el chat móvil.
-        const recorteGlosa=manager.getByRole('button',{name:'Ampliar captura: Campo Glosa del documento',exact:true});
+        const recorteGlosa=manager.getByRole('button',{name:'Ampliar captura: Glosa del abono ARE',exact:true});
         const recorteRut=manager.getByRole('button',{name:'Ver captura: Campo RUT del cliente',exact:true});
-        const dialogo=page.getByRole('dialog',{name:'Captura del manual'});
         for(const tema of ['claro','oscuro']){
             await page.evaluate(t=>document.documentElement.dataset.haikuTema=t,tema);
             // 280 px corresponde al espacio del chat en un teléfono de 320 px con el margen del panel nativo.
@@ -96,17 +114,20 @@ const server=http.createServer((req,res)=>{
                 assert.equal(await page.locator('#haiku-asistente-panel').evaluate(e=>e.scrollWidth<=e.clientWidth+1),true);
                 assert.equal(await recorteGlosa.locator('xpath=ancestor::div[contains(@class,"haku-guia__campo")]/dt').innerText(),'Glosa');
                 assert.equal(await recorteRut.locator('xpath=ancestor::div[contains(@class,"haku-guia__campo")]/dt').innerText(),'RUT');
-                const img=recorteGlosa.locator('img');
+                const img=recorteGlosa.locator('img[src^="blob:"]');
                 await img.scrollIntoViewIfNeeded();
                 await img.evaluate(el=>el.decode());
                 assert.equal(await img.evaluate(el=>el.clientHeight<=32&&el.naturalWidth===253),true);
                 await manager.screenshot({path:path.join(capturasDir,`manager-are-${tema}-${width}.png`)});
-                for(const [control,archivo] of [[recorteGlosa,'glosa-documento.png'],[recorteRut,'rut.png']]){
+                for(const [control,clave] of [[recorteGlosa,'fotos/m1-31'],[recorteRut,'fotos/m1-17']]){
                     await control.click();
-                    const ampliada=dialogo.locator('img');
+                    const ampliada=dialogo.locator('img[src^="blob:"]');
                     await ampliada.evaluate(el=>el.decode());
-                    assert.equal(await ampliada.evaluate(el=>new URL(el.src).pathname.split('/').at(-1)),archivo);
-                    assert.equal(await dialogo.evaluate(el=>el.clientWidth<=304&&el.scrollWidth<=el.clientWidth+1),true);
+                    assert.deepEqual(await page.evaluate(()=>__capturas.at(-1)),[clave]);
+                    assert.equal(await ampliada.evaluate(el=>el.naturalWidth),662);
+                    assert.equal(await dialogo.evaluate(el=>el.scrollWidth<=el.clientWidth+1),true);
+                    await dialogo.getByRole('button',{name:'Tamaño real',exact:true}).click();
+                    assert.equal(await ampliada.evaluate(el=>el.clientWidth===el.naturalWidth),true);
                     await page.keyboard.press('Escape');
                     await dialogo.waitFor({state:'detached'});
                     assert.equal(await control.evaluate(el=>el===document.activeElement),true);
@@ -127,9 +148,30 @@ const server=http.createServer((req,res)=>{
         await manager.getByRole('button',{name:'Agregar pago Booking',exact:true}).click();
         for(let i=0;i<2;i++)await manager.getByRole('button',{name:'Siguiente',exact:true}).click();
         const campoRutBooking=manager.locator('.haku-guia__campo').filter({has:page.locator('dt',{hasText:/^RUT$/})});
-        assert.match(await campoRutBooking.locator('.haku-guia__nota-campo').innerText(),/55\.555\.555-5 para el cliente chileno si Booking no informa su RUT/);
-        assert.match(await manager.locator('.haku-guia__recorte img').getAttribute('src'),/\/manager\/rut\.png$/);
+        assert.match(await campoRutBooking.locator('.haku-guia__nota-campo').innerText(),/55555555-5 para el cliente chileno si Booking no informa su RUT/);
+        await campoRutBooking.locator('img[src^="blob:"]').evaluate(img=>img.decode());
         await manager.screenshot({path:path.join(capturasDir,'manager-booking-oscuro-320.png')});
+        const cuadrar=manager.getByRole('button',{name:'Ampliar captura: Botón Cuadrar en AC+B',exact:true});
+        await page.evaluate(()=>{window.__demorarFoto=true;});
+        await cuadrar.click();
+        await page.waitForFunction(()=>typeof window.__soltarFoto==='function');
+        assert.deepEqual(await page.evaluate(()=>__capturas.at(-1)),['fotos/m1-41']);
+        await page.evaluate(()=>{
+            document.documentElement.classList.add('haiku-privacidad-bloqueada');
+            dispatchEvent(new CustomEvent('haiku:privacidad-cambio',{detail:{bloqueada:true}}));
+            window.__soltarFoto();
+            window.__demorarFoto=false;
+        });
+        await dialogo.waitFor({state:'detached'});
+        assert.equal(await manager.locator('img[src^="blob:"]').count(),0,'el bloqueo limpia los datos y descarta descargas pendientes');
+        await page.evaluate(()=>{
+            document.documentElement.classList.remove('haiku-privacidad-bloqueada');
+            dispatchEvent(new CustomEvent('haiku:privacidad-cambio',{detail:{bloqueada:false}}));
+        });
+        await cuadrar.click();
+        await dialogo.locator('img[src^="blob:"]').evaluate(img=>img.decode());
+        await page.keyboard.press('Escape');
+        await dialogo.waitFor({state:'detached'});
         await manager.getByRole('button',{name:'← Opciones',exact:true}).click();
         await manager.getByRole('button',{name:'Agregar transferencia',exact:true}).click();
         await manager.getByRole('button',{name:'Siguiente',exact:true}).click();
@@ -199,7 +241,7 @@ const server=http.createServer((req,res)=>{
         await reservas.getByRole('button',{name:'Volver a los pasos',exact:true}).click();
         assert.match(await reservas.innerText(),/Verificar el correo/);
         // Capturas reales: rutas locales, ampliación y teclado.
-        const capturas=await page.evaluate(()=>Object.values(HAIKU_GUIAS_OPERATIVAS_V1.guias).flatMap(g=>g.pasos.flatMap(p=>HAIKU_GUIAS_OPERATIVAS_V1.imagenesDe(p))).map(r=>r.archivo));
+        const capturas=await page.evaluate(()=>Object.values(HAIKU_GUIAS_OPERATIVAS_V1.guias).flatMap(g=>g.pasos.flatMap(p=>HAIKU_GUIAS_OPERATIVAS_V1.imagenesDe(p))).map(r=>r.archivo).filter(Boolean));
         for(const archivo of new Set(capturas)){
             const response=await page.request.get(new URL('/assets/guias/'+archivo,page.url()).href);
             assert.equal(response.status(),200);assert.match(response.headers()['content-type'],/^image\//);

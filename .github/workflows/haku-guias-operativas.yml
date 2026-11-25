@@ -28,6 +28,7 @@ on:
       - "tests/haku-operaciones-*.cjs"
       - "tests/bove-*.cjs"
       - "supabase/migrations/*_haku_operaciones_chat.sql"
+      - "supabase/migrations/*_haiku_manager_capturas_privadas.sql"
       - "supabase/migrations/20260910180000_bove_registro_atomico.sql"
       - "tests/haku-ayuda-browser-check.cjs"
       - "tests/cloudbeds-informes.test.cjs"
@@ -70,6 +71,7 @@ jobs:
           NODE_PATH: ${{ runner.temp }}/haku-guias/node_modules
         run: |
           node tests/haku-operaciones-postgres.cjs
+          node tests/haku-guias-operativas-postgres.cjs
           node tests/bove-rpc-postgres.cjs
           node tests/cloudbeds-pago-alojamiento-postgres.cjs
           node tests/totales-v32-servicios-separados-postgres.cjs

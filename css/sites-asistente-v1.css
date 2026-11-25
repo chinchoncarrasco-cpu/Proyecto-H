@@ -65,7 +65,7 @@ html[data-haiku-tema="oscuro"] .haku-guia-imagen {
 
 /* Ejemplos de Manager junto a la indicación o el campo al que pertenecen. */
 html .haiku-asistente-root .haiku-asistente-panel .haku-guia-operativa[data-haku-guia-grupo="manager"],
-.haku-guia-imagen.haku-guia-imagen--recorte {
+.haku-guia-imagen.haku-guia-imagen--manager {
     --guia-acento: var(--cereza-acento);
     --guia-suave: var(--cereza-secundario);
 }
@@ -158,13 +158,33 @@ html .haiku-asistente-root .haiku-asistente-panel .haku-guia-operativa[data-haku
     background: currentColor;
     mask: url("../assets/guias/manager/ampliar.svg") center no-repeat;
 }
-.haku-guia-imagen.haku-guia-imagen--recorte {
-    width: min(304px, calc(100vw - 24px));
+.haku-guia__estado-captura { color: var(--guia-suave); font-size: 11px; }
+.haku-guia-imagen.haku-guia-imagen--manager {
+    width: min(940px, calc(100vw - 24px));
     margin: auto;
     border-color: var(--cereza-linea-fuerte);
 }
-html .haku-guia-imagen.haku-guia-imagen--recorte[open]::backdrop { background: rgb(25 23 27 / 72%); }
-.haku-guia-imagen--recorte .haku-guia-imagen__vista img { max-height: 104px; }
+html .haku-guia-imagen.haku-guia-imagen--manager[open]::backdrop { background: rgb(25 23 27 / 72%); }
+.haku-guia-imagen--manager header { flex-wrap: wrap; gap: 6px; }
+.haku-guia-imagen--manager header strong { flex: 1 1 150px; }
+.haku-guia-imagen--manager .haku-guia-imagen__vista {
+    max-height: calc(100dvh - 118px);
+    overflow: auto;
+    margin-top: 8px;
+    padding-top: 0;
+}
+.haku-guia-imagen--manager .haku-guia-imagen__vista img {
+    width: auto;
+    height: auto;
+    max-width: 100%;
+    max-height: calc(100dvh - 118px);
+    margin: 0 auto;
+}
+.haku-guia-imagen--manager .haku-guia-imagen__vista--real img {
+    max-width: none;
+    max-height: none;
+    margin: 0;
+}
 @media (max-width: 360px) {
     .haku-guia-operativa .haku-guia__recorte-texto { display: none; }
 }
