@@ -1669,7 +1669,7 @@
                         codigo_autorizacion: ref(/\bcod\.?\s*aout\.?\s*:?\s*(\d+)\b/i) ||
                             ref(/\b(?:c[oó]d(?:igo)?\.?\s*(?:de\s+)?autorizaci[oó]n|autorizaci[oó]n|cod\.?\s*aut\.?|aut\.?)\s*:?\s*([\w]*\d[\w]*)\b/i) ||
                             ref(/\bcod\.?\s*aut\.?(?:\s*:\s*|\s+)([a-z_]+)\b/i),
-                        folio: ref(/folio\s*:?\s*(\d+)/i), bovtar: ref(/bovtar\s*:?\s*(\d+)/i),
+                        folio: ref(/folio\s*:?\s*(\d+)/i), bovtar: ref(/bovtar\s*:?\s*(?:-\s*)?(\d+)/i),
                         bove: ref(/\bbove\b\s*:?\s*([\d.,]+)/i)?.replace(/[.,]/g, "") || null,
                         bove_pendiente: /pend[^/]{0,35}bove/.test(t), manager_pendiente: /pend[^/]{0,45}manage{1,2}r/.test(t),
                         penalidad_porcentaje: /penalidad/.test(t) ? Number(t.match(/(\d+)\s*%/)?.[1]) || null : null,
