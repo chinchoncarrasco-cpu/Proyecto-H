@@ -1,6 +1,6 @@
 -- Aplica un WebPay ya recibido a varias cabañas de la misma reserva.
 -- El total y cada destino se revisan antes de registrar un solo comprobante.
-create function private.haiku_libro_webpay_multicabana_v1(
+create or replace function private.haiku_libro_webpay_multicabana_v1(
   p_reserva_id uuid, p_argumentos jsonb, p_origen jsonb, p_manual boolean
 ) returns jsonb language plpgsql security invoker
 set search_path = pg_catalog, public, private
@@ -145,6 +145,9 @@ declare
   definicion text := pg_get_functiondef('private.haiku_libro_pago_distribuido_v1(uuid,jsonb,jsonb,boolean)'::regprocedure);
   entrada text := E'\nbegin\n';
 begin
+  if position('private.haiku_libro_webpay_multicabana_v1(' in definicion)>0 then
+    return;
+  end if;
   if (length(definicion)-length(replace(definicion,entrada,'')))/length(entrada)<>1 then
     raise exception 'Cambió el writer de comprobantes distribuidos';
   end if;
@@ -163,3 +166,5 @@ begin
     'grupo_alojamiento','grupo_alojamiento_penalidad','grupo_alojamiento_penalidad_manual','webpay_multicabana'));
 end;
 $function$;
+revoke all on function public.haiku_libro_distribucion_capacidad_v1() from public,anon;
+grant execute on function public.haiku_libro_distribucion_capacidad_v1() to authenticated;

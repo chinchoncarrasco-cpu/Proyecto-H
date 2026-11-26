@@ -22,6 +22,7 @@ test('un WebPay multicabaña registra un solo pago y conserva los montos por est
         const locks = sql('20260916041430_haku_libro_aplicaciones_servicio_seguras');
         await db.exec(locks.slice(0, locks.indexOf('-- Todos los writers')));
         await db.exec(sql('20261126230000_libro_webpay_multicabana'));
+        await db.exec(sql('20261126230000_libro_webpay_multicabana'));
 
         const operador = randomUUID(), reservaId = randomUUID();
         const titular = 'Andrea Cordero', titularPago = 'Andrea Coredro';
