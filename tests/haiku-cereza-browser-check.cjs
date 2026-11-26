@@ -22,6 +22,8 @@ async function run() {
             const page = await browser.newPage({ viewport: { width, height: 900 } });
             const errors = [];
             page.on("pageerror", e => errors.push(e.message));
+            let permitirConexion;
+            const conexion = new Promise(resolve => { permitirConexion = resolve; });
             await page.addInitScript(() => {
                 window.__calls = [];
                 window.HAIKU_PRIVACIDAD = { estado: () => ({ modo: "visible", armado: true }) };
@@ -36,7 +38,9 @@ async function run() {
             await page.route("**/*", route => {
                 const url = new URL(route.request().url());
                 if (url.hostname === "cdn.jsdelivr.net") {
-                    return route.fulfill({ contentType: "text/javascript", body: "window.supabase={createClient:()=>({})}" });
+                    return conexion.then(() => route.fulfill({
+                        contentType: "text/javascript", body: "window.supabase={createClient:()=>({})}"
+                    }));
                 }
                 if (url.origin !== origin) return route.abort();
                 const name = url.pathname.slice(1);
@@ -48,12 +52,23 @@ async function run() {
                 const contentType = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml" }[path.extname(file)];
                 return route.fulfill({ contentType, body: fs.readFileSync(file) });
             });
-            await page.goto(origin + "/panel.html");
+            await page.goto(origin + "/panel.html", { waitUntil: "commit" });
+            try {
+                const marcaArranque = page.locator(".haiku-loader img");
+                await marcaArranque.waitFor();
+                await marcaArranque.evaluate(img => img.decode());
+                assert.equal(await marcaArranque.getAttribute("src"), "assets/haku-cordillera-inverso.svg");
+            } finally {
+                permitirConexion();
+            }
             const chat = page.locator("#haiku-acceso-chat");
             const bubble = page.locator("#haiku-asistente-boton");
             const panel = page.locator("#haiku-asistente-panel");
             const message = page.locator("#haiku-asistente-texto");
             await page.waitForFunction(() => window.HAIKU_ASISTENTE && document.querySelector(".haiku-cereza-cabecera"));
+            const favicon = page.locator("link[data-haku-favicon]");
+            assert.equal(await favicon.getAttribute("href"), "assets/pestana-anonima.svg");
+            assert.equal(await favicon.getAttribute("data-haku-favicon"), "assets/haku-cordillera.svg");
             assert.equal(await chat.isVisible(), false);
             assert.equal(await bubble.isVisible(), false);
             await page.evaluate(() => {
@@ -83,6 +98,10 @@ async function run() {
                 if (width >= 1171) assert.ok((await header.boundingBox()).height <= 64, "la navegación comparte una línea");
                 assert.equal(await header.evaluate(n => getComputedStyle(n).backgroundColor), expected.shell);
                 assert.equal(await page.locator("#boton-nueva-reserva").evaluate(n => getComputedStyle(n).backgroundColor), expected.primary);
+                for (const marca of [header.locator(".sites-shell-brand-mark img"), bubble.locator("img")]) {
+                    await marca.evaluate(img => img.decode());
+                    assert.equal(await marca.getAttribute("src"), "assets/haku-cordillera-inverso.svg");
+                }
                 assert.equal(await bubble.evaluate(n => getComputedStyle(n).backgroundColor), expected.primary);
                 await bubble.hover();
                 assert.equal(await bubble.evaluate(n => getComputedStyle(n).backgroundColor), expected.primary, "la Burbuja mantiene el cereza al pasar el puntero");
