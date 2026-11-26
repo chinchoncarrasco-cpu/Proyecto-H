@@ -56,7 +56,9 @@
     <link rel="stylesheet" href="css/haiku-tema-finanzas-compactas-v1.css">
     <link rel="stylesheet" href="css/haiku-tema-legibilidad-v1.css">
     <link rel="stylesheet" href="css/haiku-cereza-v1.css?v=1">
+    <link rel="stylesheet" href="css/haiku-vista-dividida-v1.css">
     <script src="js/haiku-cereza-nav-v1.js?v=1" defer></script>
+    <script src="js/haiku-vista-dividida-v1.js" defer></script>
 </head>
 
 <body>
@@ -154,6 +156,13 @@
                         <div id="notificaciones-contenido" class="notificaciones-contenido"></div>
                     </div>
                 </div>
+                <button type="button" id="haiku-vista-dividir" class="haiku-cereza-icono" aria-label="Vista dividida"
+                    title="Dividir pantalla" aria-pressed="false" aria-controls="haiku-area-trabajo" hidden>
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <rect x="3.5" y="5" width="17" height="14" rx="2"/>
+                        <path d="M12 5v14"/>
+                    </svg>
+                </button>
                 <button type="button" id="haiku-acceso-chat" class="haiku-cereza-icono" aria-label="Abrir Haku Chat"
                     aria-haspopup="dialog" aria-controls="haiku-asistente-panel" aria-expanded="false" hidden>
                     <span class="haiku-cereza-icono-chat" aria-hidden="true"></span>
@@ -181,8 +190,19 @@
     <!-- =========================
          CONTENIDO PRINCIPAL
     ========================== -->
-    <main class="contenido sites-shell-main">
-        
+    <main id="haiku-area-trabajo" class="contenido sites-shell-main">
+        <div id="haiku-vista-controles" class="haiku-vista-controles" role="group" aria-label="Secciones abiertas" hidden>
+            <select id="haiku-vista-izquierda" aria-label="Sección del panel izquierdo"></select>
+            <button type="button" id="haiku-vista-intercambiar" aria-label="Intercambiar paneles" title="Intercambiar paneles">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h16m-4-4 4 4-4 4M20 16H4m4-4-4 4 4 4"/></svg>
+            </button>
+            <select id="haiku-vista-derecha" aria-label="Sección del panel derecho"></select>
+            <button type="button" id="haiku-vista-alternar" hidden></button>
+        </div>
+        <div id="haiku-vista-separador" role="separator" tabindex="0" aria-orientation="vertical"
+            aria-label="Ancho del panel izquierdo" aria-valuemin="25" aria-valuemax="75" aria-valuenow="50"
+            title="Arrastra para ajustar. Doble clic para volver a 50/50." hidden></div>
+
 <!-- =========================
      SECCIÓN RESUMEN
 ========================== -->

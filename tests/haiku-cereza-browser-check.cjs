@@ -7,7 +7,7 @@ const { chromium } = require("playwright");
 const root = path.resolve(__dirname, "..");
 const origin = "http://haiku-cereza.test";
 const scripts = new Set([
-    "haiku-cereza-nav-v1", "haiku-tema-v1", "haiku-dialogos-v1", "haiku-panel-coordinacion-v1",
+    "haiku-cereza-nav-v1", "haiku-vista-dividida-v1", "haiku-tema-v1", "haiku-dialogos-v1", "haiku-panel-coordinacion-v1",
     "app", "calendario", "supabase-auth-menu-v1", "supabase-asistente-v1", "supabase-asistente-historial-v1"
 ].map(name => `js/${name}.js`));
 const colors = {
@@ -105,10 +105,13 @@ async function run() {
                 assert.equal(await bubble.evaluate(n => getComputedStyle(n).backgroundColor), expected.primary);
                 await bubble.hover();
                 assert.equal(await bubble.evaluate(n => getComputedStyle(n).backgroundColor), expected.primary, "la Burbuja mantiene el cereza al pasar el puntero");
-                for (const target of [chat, page.locator("#haiku-tema-boton"), nav, group, page.locator("#busqueda-palabra")]) {
+                for (const target of [chat, page.locator("#haiku-vista-dividir"), page.locator("#haiku-tema-boton"), nav, group, page.locator("#busqueda-palabra")]) {
                     const box = await target.boundingBox();
                     assert.ok(box && box.x >= 0 && box.x + box.width <= width + 1, "controles dentro de la ventana");
                 }
+                const marcaVisible = await header.locator(".haiku-cereza-marca > span:visible").last().boundingBox();
+                const nuevaReserva = await page.locator("#boton-nueva-reserva").boundingBox();
+                assert.ok(marcaVisible.x + marcaVisible.width < nuevaReserva.x, "la marca y las acciones no se superponen");
                 await bubble.click();
                 await message.fill("Borrador sintético");
                 const bubbleBox = await panel.boundingBox();

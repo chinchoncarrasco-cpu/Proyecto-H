@@ -27,23 +27,15 @@ botonesMenu.forEach(boton => {
         seccionDestino
         );
 
-        // Ocultar todas las secciones
-        seccionesApp.forEach(seccion => {
-            seccion.classList.remove("activa");
-        });
-
-        // Quitar estado activo de los botones
-        botonesMenu.forEach(item => {
-            item.classList.remove("activo");
-        });
-
-        // Mostrar sección seleccionada
-        const nuevaSeccion =
-            document.getElementById(`seccion-${seccionDestino}`);
-
-        if (nuevaSeccion) {
-            nuevaSeccion.classList.add("activa");
-            boton.classList.add("activo");
+        if (!window.HAIKU_VISTA_DIVIDIDA_V1?.navegar(seccionDestino)) {
+            // Mostrar la sección única cuando la vista dividida está cerrada.
+            seccionesApp.forEach(seccion => seccion.classList.remove("activa"));
+            botonesMenu.forEach(item => item.classList.remove("activo"));
+            const nuevaSeccion = document.getElementById(`seccion-${seccionDestino}`);
+            if (nuevaSeccion) {
+                nuevaSeccion.classList.add("activa");
+                boton.classList.add("activo");
+            }
         }
 
         // Actualizar Pagos al entrar a la sección
@@ -953,7 +945,14 @@ function limpiarBusquedaPalabra() {
 }
 
 
-// Buscar dentro de la sección visible
+function seccionParaBusquedaPalabra() {
+    return window.HAIKU_VISTA_DIVIDIDA_V1?.seccionEnFoco()
+        || Array.from(seccionesApp).find(seccion =>
+            !seccion.hidden && getComputedStyle(seccion).display !== "none"
+        );
+}
+
+// Buscar dentro de la sección en foco
 function buscarPalabraEnSeccion() {
 
     if (!buscadorPalabra) {
@@ -974,18 +973,7 @@ function buscarPalabraEnSeccion() {
 }
 
 
-    // Buscar la sección actualmente visible
-    const seccionActiva =
-        Array.from(
-            document.querySelectorAll(".seccion-app")
-        ).find(seccion => {
-
-            return (
-                !seccion.hidden &&
-                getComputedStyle(seccion).display !== "none"
-            );
-
-        });
+    const seccionActiva = seccionParaBusquedaPalabra();
 
 
     if (!seccionActiva) {
@@ -1161,19 +1149,7 @@ buscadorPalabra.addEventListener(
 
         evento.preventDefault();
 
-        const seccionActiva =
-            Array.from(
-                document.querySelectorAll(
-                    ".seccion-app"
-                )
-            ).find(seccion => {
-
-                return (
-                    !seccion.hidden &&
-                    getComputedStyle(seccion).display !== "none"
-                );
-
-            });
+        const seccionActiva = seccionParaBusquedaPalabra();
 
         if (!seccionActiva) {
             return;
@@ -1262,15 +1238,7 @@ if (botonBusquedaAnterior) {
         "click",
         () => {
 
-            const seccionActiva =
-                Array.from(
-                    document.querySelectorAll(
-                        ".seccion-app"
-                    )
-                ).find(seccion =>
-                    !seccion.hidden &&
-                    getComputedStyle(seccion).display !== "none"
-                );
+            const seccionActiva = seccionParaBusquedaPalabra();
 
             if (!seccionActiva) return;
 
@@ -1319,28 +1287,16 @@ if (botonBusquedaAnterior) {
 }
 
 
-// Si cambiamos de sección,
-// repetir la búsqueda en la nueva sección
-document.addEventListener(
-    "click",
-    evento => {
+let busquedaCambioSeccion;
+function programarBusquedaSeccion() {
+    clearTimeout(busquedaCambioSeccion);
+    busquedaCambioSeccion = setTimeout(buscarPalabraEnSeccion, 50);
+}
 
-        const botonSeccion =
-            evento.target.closest(
-                "[data-seccion]"
-            );
-
-        if (!botonSeccion) {
-            return;
-        }
-
-        setTimeout(
-            buscarPalabraEnSeccion,
-            50
-        );
-
-    }
-);
+document.addEventListener("click", evento => {
+    if (evento.target.closest("[data-seccion]")) programarBusquedaSeccion();
+});
+window.addEventListener("haiku:vista-dividida-foco", programarBusquedaSeccion);
 
 // ========================================
 // PANEL DE NOTIFICACIONES
