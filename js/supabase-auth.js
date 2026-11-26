@@ -161,8 +161,22 @@
         document.getElementById("haiku-usuario-chip-rol");
     const botonSalir =
         document.getElementById("haiku-cerrar-sesion");
+    const iconoPestana = document.querySelector("link[data-haku-favicon]");
+    const iconoActivo = iconoPestana?.getAttribute("data-haku-favicon");
+    let privacidadBloqueada = false;
     let turnoSesion = 0;
     let validacionSesion = null;
+
+    function actualizarIconoPestana() {
+        if (iconoActivo) {
+            iconoPestana.href = window.haikuSesion && !privacidadBloqueada ? iconoActivo : "data:,";
+        }
+    }
+
+    window.addEventListener("haiku:privacidad-cambio", evento => {
+        privacidadBloqueada = evento.detail?.bloqueada === true;
+        actualizarIconoPestana();
+    });
 
     function mensajeError(texto = "") {
         errorElemento.textContent = texto;
@@ -207,6 +221,7 @@
     function retirarAcceso() {
         window.haikuSesion = null;
         window.haikuTienePermiso = () => false;
+        actualizarIconoPestana();
     }
 
     function cerrarSesionLocal(estado) {
@@ -290,6 +305,7 @@
 
         window.haikuTienePermiso = codigo =>
             permisos.includes(codigo);
+        actualizarIconoPestana();
 
         chipEmail.textContent =
             session.user.email || data.usuario.nombre || "Usuario";

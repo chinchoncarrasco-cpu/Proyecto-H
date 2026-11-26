@@ -37,7 +37,7 @@
         <div class="haiku-asistente-overlay" id="haiku-asistente-overlay" hidden></div>
         <section class="haiku-asistente-panel" id="haiku-asistente-panel" role="dialog" aria-modal="false" aria-labelledby="haiku-asistente-titulo" hidden>
             <header class="haiku-asistente-cabecera">
-                <span class="haiku-asistente-marca" aria-hidden="true">H</span>
+                <span class="haiku-asistente-marca" aria-hidden="true"><img src="assets/haku-cordillera-inverso.svg" width="29" height="29" alt=""></span>
                 <div class="haiku-asistente-titulo">
                     <strong id="haiku-asistente-titulo">Haku</strong>
                     <span>Asistente operativo</span>
@@ -103,7 +103,7 @@
             </div>
         </section>
 
-        <button type="button" class="haiku-asistente-boton" id="haiku-asistente-boton" aria-label="Abrir Haku" aria-haspopup="dialog" aria-expanded="false"><span aria-hidden="true">H</span></button>
+        <button type="button" class="haiku-asistente-boton" id="haiku-asistente-boton" aria-label="Abrir Haku" aria-haspopup="dialog" aria-expanded="false"><img src="assets/haku-cordillera-inverso.svg" width="30" height="30" alt=""></button>
     `;
     document.body.appendChild(root);
 
