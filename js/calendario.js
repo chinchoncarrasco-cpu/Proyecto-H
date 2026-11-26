@@ -2321,12 +2321,14 @@ function seleccionarDia(año, mes, dia, fechaISO, origenResumen) {
         guardarContextoFechas();
         // Pagos, Servicios y Cierre cargan la fecha al abrir sus secciones.
         // Esta navegación prepara únicamente el Resumen visible.
-        document.querySelectorAll(".seccion-app").forEach(seccion =>
-            seccion.classList.remove("activa"));
-        document.getElementById("seccion-resumen")?.classList.add("activa");
-        document.querySelectorAll(".menu-item").forEach(boton =>
-            boton.classList.remove("activo"));
-        document.querySelector('.menu-item[data-seccion="resumen"]')?.classList.add("activo");
+        if (!window.HAIKU_VISTA_DIVIDIDA_V1?.navegar("resumen")) {
+            document.querySelectorAll(".seccion-app").forEach(seccion =>
+                seccion.classList.remove("activa"));
+            document.getElementById("seccion-resumen")?.classList.add("activa");
+            document.querySelectorAll(".menu-item").forEach(boton =>
+                boton.classList.remove("activo"));
+            document.querySelector('.menu-item[data-seccion="resumen"]')?.classList.add("activo");
+        }
         refrescoResumen.solicitar(fechaISO, origenResumen || {
             categoria: "navegación usuario", evento: "seleccionarDia calendario",
             tipo: "usuario"
@@ -2400,29 +2402,13 @@ if (typeof actualizarCierreTurno === "function") {
     }
 
 
-    // Abrir Resumen
-    document
-        .querySelectorAll(".seccion-app")
-        .forEach(seccion => {
-            seccion.classList.remove("activa");
-        });
-
-    document
-        .getElementById("seccion-resumen")
-        .classList.add("activa");
-
-
-    // Cambiar botón activo
-    document
-        .querySelectorAll(".menu-item")
-        .forEach(boton => {
-            boton.classList.remove("activo");
-        });
-
-    const botonResumen = document.querySelector(
-        '.menu-item[data-seccion="resumen"]'
-    );
-
-    botonResumen.classList.add("activo");
+    if (!window.HAIKU_VISTA_DIVIDIDA_V1?.navegar("resumen")) {
+        document.querySelectorAll(".seccion-app").forEach(seccion =>
+            seccion.classList.remove("activa"));
+        document.getElementById("seccion-resumen")?.classList.add("activa");
+        document.querySelectorAll(".menu-item").forEach(boton =>
+            boton.classList.remove("activo"));
+        document.querySelector('.menu-item[data-seccion="resumen"]')?.classList.add("activo");
+    }
 
 }

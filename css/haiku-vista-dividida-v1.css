@@ -1,0 +1,291 @@
+html .haiku-cereza-cabecera #haiku-vista-dividir[hidden],
+.haiku-vista-controles[hidden],
+.haiku-vista-controles [hidden],
+#haiku-vista-separador[hidden] {
+    display: none !important;
+}
+
+:is(#haiku-vista-dividir, #haiku-vista-intercambiar) svg {
+    width: 18px;
+    height: 18px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.6;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+html .haiku-cereza-cabecera #haiku-vista-dividir[aria-pressed="true"] {
+    background: var(--cereza-seleccion);
+    border-color: var(--cereza-acento);
+    color: var(--cereza-acento);
+}
+
+body:has(> #haiku-area-trabajo[data-haiku-vista]) .haiku-cereza-cabecera .busqueda-palabra-wrap {
+    display: flex !important;
+}
+
+body > #haiku-area-trabajo[data-haiku-vista] {
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr);
+    height: calc(100dvh - var(--haiku-vista-cabecera, 62px));
+    min-height: 0;
+    min-width: 0;
+    max-width: none;
+    padding: 0;
+    background: var(--cereza-lienzo);
+}
+
+body > #haiku-area-trabajo[data-haiku-vista="doble"] {
+    grid-template-columns: minmax(0, var(--haiku-vista-izquierda, 1fr)) 12px minmax(0, var(--haiku-vista-derecha, 1fr));
+}
+
+#haiku-area-trabajo[data-haiku-vista] > .seccion-app[data-haiku-vista-lado] {
+    box-sizing: border-box;
+    grid-row: 2;
+    grid-column: 1;
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    min-height: 0;
+    margin: 0;
+    overflow: auto;
+    overscroll-behavior: contain;
+    scroll-padding-block: 12px;
+}
+
+#haiku-area-trabajo[data-haiku-vista="doble"] > .seccion-app[data-haiku-vista-lado="1"] {
+    grid-column: 3;
+}
+
+#haiku-area-trabajo[data-haiku-vista] > .seccion-app[hidden],
+#haiku-area-trabajo[data-haiku-vista="alternada"] > .seccion-app:not([data-haiku-vista-foco]) {
+    display: none !important;
+}
+
+.haiku-vista-controles {
+    display: grid;
+    grid-column: 1 / -1;
+    grid-row: 1;
+    grid-template-columns: minmax(0, var(--haiku-vista-izquierda, 1fr)) 32px minmax(0, var(--haiku-vista-derecha, 1fr));
+    align-items: center;
+    gap: 6px;
+    padding: 5px 10px;
+    border-bottom: 1px solid var(--cereza-linea);
+    background: var(--cereza-cabecera);
+}
+
+.haiku-vista-controles :is(select, button) {
+    min-width: 0;
+    min-height: 32px;
+    margin: 0;
+    padding: 0 9px;
+    border: 1px solid var(--cereza-linea);
+    border-radius: 6px;
+    background: var(--cereza-superficie);
+    color: var(--cereza-texto);
+    font: 600 13px/1.25 var(--sites-shell-font, system-ui);
+    cursor: pointer;
+}
+
+.haiku-vista-controles select {
+    width: min(100%, 215px);
+}
+
+.haiku-vista-controles :is(select[data-haiku-vista-foco], button:hover) {
+    background: var(--cereza-seleccion);
+    color: var(--cereza-acento);
+}
+
+.haiku-vista-controles :is(select, button):focus-visible,
+#haiku-vista-separador:focus-visible {
+    outline: 2px solid var(--cereza-acento);
+    outline-offset: 1px;
+}
+
+#haiku-vista-intercambiar {
+    display: grid;
+    place-items: center;
+    padding: 0;
+}
+
+#haiku-vista-separador {
+    display: grid;
+    grid-column: 2;
+    grid-row: 2;
+    place-items: center;
+    border-inline: 1px solid var(--cereza-linea);
+    background: var(--cereza-relieve);
+    cursor: col-resize;
+    touch-action: none;
+}
+
+#haiku-vista-separador::after {
+    width: 3px;
+    height: 36px;
+    border-radius: 3px;
+    background: var(--cereza-secundario);
+    content: "";
+}
+
+#haiku-vista-separador:is(:hover, :focus-visible)::after,
+[data-haiku-vista-arrastre] #haiku-vista-separador::after {
+    background: var(--cereza-acento);
+}
+
+[data-haiku-vista-arrastre] {
+    cursor: col-resize;
+    user-select: none;
+}
+
+[data-haiku-vista="alternada"] .haiku-vista-controles {
+    display: flex;
+    justify-content: space-between;
+}
+
+[data-haiku-vista="alternada"] .haiku-vista-controles select {
+    flex: 1 1 0;
+}
+
+#haiku-vista-alternar {
+    max-width: 54%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+@media (max-width: 400px) {
+    html .haiku-cereza-cabecera #haiku-vista-dividir {
+        width: 32px;
+    }
+}
+
+@media (max-width: 345px) {
+    .haiku-cereza-cabecera:has(#haiku-vista-dividir:not([hidden])) .haiku-cereza-marca > span:last-child {
+        display: none;
+    }
+}
+
+/* Las grillas y planillas mantienen su propio desplazamiento dentro del panel. */
+[data-haiku-vista="doble"] > .seccion-app[data-haiku-vista-lado] {
+    container: haiku-vista-panel / inline-size;
+    padding-inline: clamp(10px, 1.25vw, 20px);
+}
+
+[data-haiku-vista="doble"] :is(.resumen-estado-cabecera, .sites-calendario-encabezado, .sites-libro-heading, .sv-section-top) {
+    flex-wrap: wrap;
+}
+
+[data-haiku-vista="doble"] #seccion-libro-reserva .sites-libro-origen {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 155px), 1fr));
+}
+
+[data-haiku-vista="doble"] #seccion-libro-reserva .sites-libro-origen-bloque {
+    padding-inline: 10px;
+}
+
+[data-haiku-vista="doble"] #seccion-libro-reserva .sites-libro-origen-bloque strong {
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+[data-haiku-vista="doble"] #seccion-libro-reserva .libro-reserva-control-hoja {
+    flex-wrap: wrap;
+}
+
+[data-haiku-vista="doble"] #seccion-libro-reserva .sites-libro-hoja-info {
+    grid-template-columns: minmax(0, 1fr);
+}
+
+[data-haiku-vista="doble"] #seccion-libro-reserva .sites-libro-hoja-info > * {
+    grid-column: 1;
+    grid-row: auto;
+}
+
+[data-haiku-vista="doble"] #seccion-libro-reserva .sites-libro-hoja-controles {
+    flex-wrap: wrap;
+}
+
+@container haiku-vista-panel (max-width: 1050px) {
+    #seccion-resumen .sites-resumen-lista {
+        display: block;
+    }
+
+    #seccion-resumen .sites-resumen-encabezado {
+        display: none;
+    }
+
+    #seccion-resumen .sites-resumen-cabana {
+        padding: 10px 12px;
+        border-right: 0;
+    }
+
+    #seccion-resumen .sites-resumen-fila {
+        grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(100px, .85fr);
+        grid-template-areas:
+            "cabana huesped estado final"
+            "aseo servicios cobros final";
+        gap: 6px 10px;
+    }
+
+    #seccion-resumen .sites-resumen-celda--cabana { grid-area: cabana; }
+    #seccion-resumen .sites-resumen-celda--huesped { grid-area: huesped; }
+    #seccion-resumen .sites-resumen-celda--estado { grid-area: estado; text-align: start; }
+    #seccion-resumen .sites-resumen-celda--aseo { grid-area: aseo; }
+    #seccion-resumen .sites-resumen-celda--servicios { grid-area: servicios; }
+    #seccion-resumen .sites-resumen-celda--cobros { grid-area: cobros; }
+    #seccion-resumen .sites-resumen-celda--final { grid-area: final; }
+    #seccion-resumen .sites-resumen-celda { margin-left: 0; }
+
+    #seccion-resumen .sites-resumen-detalle {
+        grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr));
+        gap: 10px;
+    }
+
+    #seccion-resumen .sites-resumen-detalle-bloque { grid-column: auto; }
+}
+
+@container haiku-vista-panel (max-width: 760px) {
+    #seccion-resumen > .resumen .tarjeta {
+        justify-content: center;
+        min-height: 56px;
+        padding: 8px 5px;
+        text-align: center;
+    }
+
+    #seccion-resumen > .resumen .tarjeta > span:first-child { display: none; }
+
+    #seccion-historial .sites-history-filters,
+    #seccion-pagos .sites-pagos-metrics,
+    #seccion-pagos .sites-pagos-webpay-entry .pagos-webpay-nuevo {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    #seccion-historial .sites-history-filters label:first-child { grid-column: 1 / -1; }
+    #seccion-pagos .sites-pagos-webpay-layout { grid-template-columns: minmax(0, 1fr); }
+
+    #seccion-cierre .turno-layout,
+    #seccion-huespedes .hu-layout {
+        grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+    }
+
+    #seccion-huespedes .hu-filtros,
+    #seccion-servicios .sv-availability-actions {
+        flex-wrap: wrap;
+    }
+}
+
+@container haiku-vista-panel (max-width: 520px) {
+    #seccion-resumen .sites-resumen-fila {
+        grid-template-columns: minmax(0, 1.2fr) minmax(98px, 1fr);
+        grid-template-areas:
+            "cabana estado"
+            "huesped final"
+            "aseo final"
+            "servicios cobros";
+    }
+
+    #seccion-resumen .sites-resumen-celda--estado { text-align: end; }
+    #seccion-libro-reserva .sites-libro-hoja-info { flex-basis: 100%; }
+}
