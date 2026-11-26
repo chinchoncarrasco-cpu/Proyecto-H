@@ -30,6 +30,21 @@ test('el año del pago se ajusta sólo cuando la celda y la reserva lo respaldan
   assert.equal(p.ajuste_fecha_comprobante,undefined);
  }
 });
+test('lee BOVTAR con guion incluso cuando el folio aparece pegado', () => {
+    const { leer } = require('./fixtures/libro-transferencias-bancarias.cjs');
+    const { pagos } = leer([{ titular: 'Persona Prueba', pagos: [
+        { glosa: 'Persona Prueba // Bovtar:-004321Folio: 000771 / crédito // BOVE: 19021', concepto: 'TINAJA', monto: 30000 },
+        { glosa: 'Persona Prueba // BOVTAR: - // Folio: 000772 / crédito // BOVE: 19022', concepto: 'TINAJA', monto: 30000 }
+    ] }]);
+
+    assert.equal(pagos.length, 2);
+    assert.equal(pagos[0].bovtar, '004321');
+    assert.equal(pagos[0].folio, '000771');
+    assert.equal(pagos[0].bove, '19021');
+    assert.equal(pagos[1].bovtar, null);
+    assert.equal(pagos[1].folio, '000772');
+});
+
 function hojaDosNoches(texto){return {estilos:[{font:{color:{rgb:'000000'}}}],celdas:[
  {r:1,c:2,valor:'21 sep',fechaISO:'2026-09-21'},{r:1,c:6,valor:'22 sep',fechaISO:'2026-09-22'},{r:1,c:10,valor:'23 sep',fechaISO:'2026-09-23'},
  {r:2,c:0,valor:'cabaña 6'},{r:2,c:2,valor:texto,estiloId:0},{r:24,c:2,valor:'Pagos de arriendos de hoy'}
