@@ -180,17 +180,20 @@
 
     function tarjetaDesdePago(p) {
         const m = normalizar(p?.medio);
-        if (m.includes("webpay") || !m.includes("tarjeta")) return null;
+        const folio = String(p?.folio || "").trim();
+        const bovtar = String(p?.bovtar || "").trim();
+        const sinTipo = ["", "tarjeta", "tarjeta (sin especificar)", "tarjeta sin especificar", "tarjeta_sin_especificar"].includes(m) &&
+            /^\d*[1-9]\d*$/.test(folio) && /^\d*[1-9]\d*$/.test(bovtar) &&
+            !String(p?.codaut || "").trim() && !String(p?.glosa || "").trim();
         const credito = m.includes("credito");
         const debito = m.includes("debito");
-        const sinTipo = m === "tarjeta (sin especificar)" || m === "tarjeta_sin_especificar";
-        if (!sinTipo && credito === debito) return null;
+        if (!sinTipo && (m.includes("webpay") || !m.includes("tarjeta") || credito === debito)) return null;
         return {
             medio: sinTipo ? "tarjeta_sin_especificar" : credito ? "tarjeta_credito" : "tarjeta_debito",
             monto: Number(p?.monto),
             fecha: /^\d{4}-\d{2}-\d{2}$/.test(String(p?.fecha || "")) ? String(p.fecha) : null,
-            folio: String(p?.folio || "").trim(),
-            bovtar: String(p?.bovtar || "").trim()
+            folio,
+            bovtar
         };
     }
 
@@ -252,7 +255,10 @@
         const grid = document.createElement("div");
         grid.className = "haiku-asistente-preview-grid";
         agregarDato(grid, "Monto", moneda(p?.monto));
-        agregarDato(grid, "Medio", p?.medio === "airbnb_prepaid_card" ? "Airbnb Prepaid Card" : p?.medio);
+        const tarjeta = tarjetaDesdePago(p);
+        const medio = tarjeta?.medio === "tarjeta_sin_especificar" ? "Tarjeta (sin especificar)" :
+            p?.medio === "airbnb_prepaid_card" ? "Airbnb Prepaid Card" : p?.medio;
+        agregarDato(grid, "Medio", medio);
         agregarDato(grid, "Fecha", fechaVisible(p?.fecha));
         agregarDato(grid, "Glosa", p?.glosa);
         agregarDato(grid, "CodAut", p?.codaut);
@@ -359,13 +365,6 @@
         confianza.textContent = `Confianza ${preview?.confianza || "baja"}`;
         cabecera.append(titulo, confianza);
         card.appendChild(cabecera);
-
-        if (preview?.resumen) {
-            const resumen = document.createElement("p");
-            resumen.className = "haiku-asistente-preview-resumen";
-            resumen.textContent = preview.resumen;
-            card.appendChild(resumen);
-        }
 
         if (entradas.length !== 1) {
             agregarLista(card, "Revisar", ["Por ahora el registro independiente admite un solo destino de reserva por solicitud."], true);
@@ -555,7 +554,7 @@
             }
 
             estado.classList.remove("haiku-asistente-mensaje--procesando");
-            estado.textContent = data.preview?.resumen || "Pago leído. Revisa el destino antes de confirmar.";
+            estado.textContent = "Pago leído. Revisa el destino antes de confirmar.";
             await renderizarPagoExistente(data.preview);
             if (imagenes.length) limpiarAdjuntosViaInterfaz();
         } catch (error) {
