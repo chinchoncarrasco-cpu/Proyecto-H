@@ -505,7 +505,7 @@
         if (!p.origen?.celda || p.origen.hoja !== reserva.coordenadas_origen?.hoja ||
             Number(p.cabana) !== fila.cabana || p.fecha_bloque !== fila.entrada || p.fecha_comprobante !== c.fecha ||
             p.monto !== fila.credito || p.moneda !== "CLP" || p.pago_recibido !== true || p.estado_pago !== "registrado_en_libro" ||
-            p.fecha_comprobante_variable || p.webpay_por_confirmar || p.transaccion_distribuida || p.conflicto_distribucion ||
+            p.fecha_comprobante_variable || p.transaccion_distribuida || p.conflicto_distribucion ||
             ["dudoso", "nota_financiera"].includes(p.clasificacion_financiera) ||
             p.bove && c.bove && refCanon(p.bove) !== refCanon(c.bove)) return null;
         const advertencias = lista(p.advertencias);

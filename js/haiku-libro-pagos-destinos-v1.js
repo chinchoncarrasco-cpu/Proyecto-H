@@ -240,7 +240,7 @@
             return revision('Falta identificar en el desglose cada servicio mencionado en Concepto y su importe.');
         }
         if (!asociado || !reservaId || !estadiaId || pago.advertencias?.length) return revision('Falta comprobar la reserva y la estadía de este comprobante mixto.');
-        if (pago.clasificacion_financiera !== 'pago_real' || pago.pago_recibido !== true || pago.webpay_por_confirmar ||
+        if (pago.clasificacion_financiera !== 'pago_real' || pago.pago_recibido !== true ||
             !(pago.codigo_autorizacion || pago.folio && pago.bovtar)) return revision('Falta confirmar la recepción y el identificador del comprobante mixto.');
         if (!snapshot?.disponible) return revision('Falta consultar los cargos y saldos de la estadía.');
         const alojamiento = (snapshot.cargos || []).filter(cargo => cargo.reserva_id === reservaId && cargo.estadia_id === estadiaId &&

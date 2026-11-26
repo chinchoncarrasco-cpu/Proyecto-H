@@ -1490,11 +1490,20 @@
         CONFLICTO:'CONFLICTO'
     });
     const APROBACION_MANUAL_PAGO = 'Requiere aprobación manual de la asociación y el pago.';
-    const WEBPAY_PENDIENTE = 'El Libro indica WebPay por confirmar. Verifica que el pago se recibió.';
+    const WEBPAY_ABONO_INCOMPLETO = 'Comprueba la fecha de abono, el tipo de tarjeta y el código de autorización de WebPay.';
     const AIRBNB_LIQUIDACION_PENDIENTE = 'Confirma la recepción, la fecha y el monto liquidado por Airbnb.';
     const TRANSFERENCIA_NO_HABILITADA = 'La transferencia está identificada. Proyecto H aún no habilita guardarla desde esta comparación.';
     const PAGO_BLOQUE_VERIFICADO = 'bloque_alojamiento_verificado';
     const PAGO_BLOQUE_REVISION = 'bloque_alojamiento_revision';
+
+    function abonoWebpaySinEvidencia(pago) {
+        if (!pago.webpay_por_confirmar) return false;
+        const fecha = pago.fecha_comprobante || '';
+        return !medioLibro(pago)?.startsWith('webpay_') || !normalizarId(pago.codigo_autorizacion) ||
+            !/^\d{4}-\d{2}-\d{2}$/.test(fecha) || S.iso(...fecha.split('-')) !== fecha ||
+            pago.clasificacion_financiera !== 'pago_real' || pago.pago_recibido !== true ||
+            pago.estado_pago !== 'registrado_en_libro' || Boolean(pago.advertencias?.length || pago.conflicto_distribucion);
+    }
 
     function huellaFuentePago(pago, destino = {}) {
         const referencia = pagoTieneIdentificadorFuerte(pago) ? '' :
@@ -1644,7 +1653,7 @@
         });
     }
 
-    function resolverPagosExistentes(resultados, pagos, capacidadTransferencias = false, capacidadGlosaSinNombre = false) {
+    function resolverPagosExistentes(resultados, pagos, capacidadTransferencias = false, capacidadGlosaSinNombre = false, estadias = []) {
         const estados = ESTADOS_RESOLUCION_PAGO, resoluciones = new Map(), items = [], vistos = new Set(), consumidos = new Set();
         for (const result of resultados || []) {
             for (const p of [...(result.libro?.pagos || []), ...(result.libro?.pagos_sin_asociacion || [])]) {
@@ -1706,23 +1715,49 @@
             return datos?.aprobado_manualmente === true || datos?.evidencia_transferencia?.version === 2
                 ? reciboLibroPersistido(datos) : null;
         };
+        const cabanaReciboCompatible = (item, anterior) => {
+            const {p, result} = item;
+            if (Number(anterior.cabana) === Number(p.cabana)) return true;
+            // Un traslado de la única estadía de ese ingreso conserva su pago.
+            // Una reserva con más de una cabaña requiere identificar cada recibo por separado.
+            return Number(anterior.cabana) > 0 && anterior.fecha_bloque === p.fecha_bloque &&
+                !result.sistema.grupo_reserva_id &&
+                estadias.filter(e => e.reserva_id === result.sistema.reserva_id &&
+                    e.fecha_checkin === p.fecha_bloque).length === 1;
+        };
+        const fechaReciboPersistido = (p, anterior, datos) => {
+            if (p.fecha_comprobante) return p.fecha_comprobante;
+            const origen = source(p.origen);
+            const fecha = anterior?.fecha_comprobante;
+            if (!fecha || !p.origen?.hoja || !p.origen.celda ||
+                origen !== source(anterior.origen) || origen !== source(datos.origen_libro) ||
+                p.fecha_bloque !== anterior.fecha_bloque || Number(p.cabana) !== Number(anterior.cabana)) return null;
+            // Si se perdió la columna de fecha, la fila y su texto completo deben
+            // seguir identificando el recibo anterior, omitiendo sólo la fecha y el formato.
+            const dias = new Set([fecha, fecha.split('-').reverse().join('-')]);
+            const [primero, ...resto] = S.separarCampos(anterior.texto_original);
+            if (!dias.has(primero)) return null;
+            const compacto = texto => textoFinancieroCanon(texto).replace(/ /g, '');
+            return compacto(resto.join(' ')) === compacto(p.texto_original) ? fecha : null;
+        };
         const reciboPersistidoCoincide = (item, guardado) => {
-            const datos = guardado.datos_origen || {};
-            if (!contextoExistenteValido(item,guardado) || !firmaFinancieraCompatible(item,guardado) ||
+            const datos = guardado.datos_origen || {}, p = item.p;
+            const anterior = leerReciboAnterior(guardado);
+            const fecha = anterior && fechaReciboPersistido(p,anterior,datos);
+            if (!fecha || !contextoExistenteValido(item,guardado) ||
+                !firmaFinancieraCompatible({...item,p:{...p,fecha_comprobante:fecha}},guardado) ||
                 operacionesDistintas(item.banco.operacion_bancaria,operacionGuardada(guardado))) return false;
             const glosa = glosaReciboCanon(item.p.texto_original);
             if (!glosa || glosa !== glosaReciboCanon(guardado.referencia_externa || guardado.observaciones)) return false;
-            const anterior = leerReciboAnterior(guardado);
-            const p = item.p;
-            return anterior?.pago_recibido === true && anterior.estado_pago === 'registrado_en_libro' &&
+            return anterior.pago_recibido === true && anterior.estado_pago === 'registrado_en_libro' &&
                 anterior.tipo_movimiento === p.tipo_movimiento && medioLibro(anterior) === medioLibro(p) &&
                 Number(anterior.monto) === Number(p.monto) && anterior.moneda === p.moneda &&
-                anterior.fecha_comprobante === p.fecha_comprobante &&
+                anterior.fecha_comprobante === fecha &&
                 // Reagendar la misma reserva mueve el bloque/hoja del Libro,
                 // pero no cambia la recepción del dinero ni el recibo guardado.
                 // Su bloque original debe seguir siendo internamente consistente.
                 !!anterior.fecha_bloque && datos.fecha_bloque === anterior.fecha_bloque &&
-                Number(anterior.cabana) === Number(p.cabana) &&
+                cabanaReciboCompatible(item,anterior) &&
                 !!anterior.origen?.hoja && glosaReciboCanon(anterior.texto_original) === glosa;
         };
         const reciboDeOtraCabana = (guardado, cabana) => {
@@ -1757,10 +1792,11 @@
             reclamosHistoricos.set(candidato.id,(reclamosHistoricos.get(candidato.id) || 0)+1);
         for (const item of bancarios) {
             const candidatosHistoricos = historicos.get(item.p);
-            const competidores = (pagos || []).filter(guardado => firmaFinancieraCompatible(item,guardado) &&
+            const competidores = (pagos || []).filter(guardado =>
+                firmaFinancieraCompatible(item,guardado,{fecha:Boolean(item.p.fecha_comprobante)}) &&
                 glosaReciboCanon(guardado.referencia_externa || guardado.observaciones) === glosaReciboCanon(item.p.texto_original) &&
                 // Otro componente con recibo propio de otra CAB no compite.
-                !reciboDeOtraCabana(guardado,item.p.cabana));
+                (!reciboDeOtraCabana(guardado,item.p.cabana) || candidatosHistoricos.includes(guardado)));
             if (candidatosHistoricos.length === 1 && reclamosHistoricos.get(candidatosHistoricos[0].id) === 1 &&
                 competidores.length === 1 && !consumidos.has(candidatosHistoricos[0].id)) {
                 resolver(item,estados.EXISTENTE_SEGURO,candidatosHistoricos[0],
@@ -1969,8 +2005,8 @@
                 resolver(item,estados.AMBIGUO,null,'sin_destino',['Primero debe resolverse la reserva destino.']);
             } else if (item.p.airbnb_liquidacion_pendiente) {
                 resolver(item,estados.AMBIGUO,null,'airbnb_liquidacion_pendiente',[AIRBNB_LIQUIDACION_PENDIENTE]);
-            } else if (item.p.webpay_por_confirmar && medioLibro(item.p)?.startsWith('webpay_')) {
-                resolver(item,estados.AMBIGUO,null,'webpay_por_confirmar',[WEBPAY_PENDIENTE]);
+            } else if (abonoWebpaySinEvidencia(item.p)) {
+                resolver(item,estados.AMBIGUO,null,'webpay_abono_incompleto',[WEBPAY_ABONO_INCOMPLETO]);
             } else if (item.p.concepto_pago?.requiere_verificacion) {
                 resolver(item,estados.AMBIGUO,null,'evidencia_insuficiente',['Falta comprobar el comprobante y el saldo de alojamiento de esta estadía.']);
             } else if (item.asociado && pagoTieneIdentificadorFuerte(item.p) && medioLibro(item.p) &&
@@ -2020,7 +2056,7 @@
                 const fila = p.evidencia_financiera;
                 if (resolucion?.evidencia !== 'evidencia_insuficiente' || !reciboCompleto ||
                     p.tipo_movimiento !== 'alojamiento' || p.clasificacion_financiera !== 'pago_real' ||
-                    p.estado_pago !== 'registrado_en_libro' || p.pago_recibido !== true || p.webpay_por_confirmar ||
+                    p.estado_pago !== 'registrado_en_libro' || p.pago_recibido !== true ||
                     p.conflicto_distribucion || p.transaccion_distribuida || p.advertencias?.length ||
                     p.moneda !== 'CLP' || !Number.isSafeInteger(p.monto) || p.monto <= 0 ||
                     p.fecha_bloque !== r.fecha_checkin || Number(p.cabana) !== Number(r.cabana) ||
@@ -2308,7 +2344,7 @@
                 capacidadGlosaSinNombre = capacidadTransferencias && respuesta.data?.glosa_sin_nombre === true;
             } catch (_) { /* Contrato ausente: mantener revisión, sin escritura. */ }
         }
-        const resolucionesPago = resolverPagosExistentes(resultados, pagos, capacidadTransferencias, capacidadGlosaSinNombre);
+        const resolucionesPago = resolverPagosExistentes(resultados, pagos, capacidadTransferencias, capacidadGlosaSinNombre, systemAll);
         const leerServicios = async () => {
             if (q.incluirServicios === false) return [];
             if (finanzasInforme?.disponible && ids.length === 1 && ids[0] === reservaInforme) return finanzasInforme.servicios;
@@ -4922,7 +4958,8 @@
         // Comparación y preparación comparten la misma autoridad canónica. Una
         // decisión explícita de reserva cambia el destino de entrada, no las reglas.
         const pagosSnapshotCompletos = snapshot.pagos_todos || snapshot.pagos || [];
-        const resolucionesPreparacion = resolverPagosExistentes(resultadosConDecision,pagosSnapshotCompletos,snapshot.capacidadTransferencias,snapshot.capacidadGlosaSinNombre);
+        const resolucionesPreparacion = resolverPagosExistentes(resultadosConDecision,pagosSnapshotCompletos,
+            snapshot.capacidadTransferencias,snapshot.capacidadGlosaSinNombre,snapshot.estadias_todas || snapshot.estadias);
         for (const r of reservas.map(normalizarReservaComparacion).filter(r => !esReservaValida(r))) add('pendientes', 'invalida:' + claveReserva(r), (r.titular || 'Sin titular') + ' · CAB ' + (r.cabana || 'sin dato'), null, ['Faltan titular, cabaña o fechas válidas.']);
         const destinosFinancieros = new Map(destinos);
         destinosFinancierosSeguros.forEach((valor,clave) => destinosFinancieros.set(clave,valor));
@@ -5203,17 +5240,12 @@
                 motivos.push('El concepto del Libro no identifica a qué cargo corresponde el pago.');
             else if (p.tipo_movimiento !== 'alojamiento') motivos.push(...motivosDestinoFinanciero(x.destinoFinanciero, capacidadServicios));
             const medio = medioLibro(p);
-            const webpayPendiente = p.webpay_por_confirmar && (p.medio_pago === 'webpay' || medio?.startsWith('webpay_'));
-            if (!webpayPendiente && (p.pago_recibido !== true || p.estado_pago !== 'registrado_en_libro'))
+            if (p.pago_recibido !== true || p.estado_pago !== 'registrado_en_libro')
                 motivos.push('El Libro no confirma un pago recibido.');
             if (!medio) motivos.push(p.medio_pago === 'webpay' ? 'Falta precisar el medio de pago de WebPay. Revisa si es crédito o débito.' :
                 'Falta precisar el medio de pago. Revisa el comprobante.');
             const asociadoLibro = r.pagos.includes(p) || bloqueVerificado;
-            const webpayAprobable = webpayPendiente && asociadoLibro && medio?.startsWith('webpay_') &&
-                normalizarId(p.codigo_autorizacion) && p.fecha_comprobante && p.clasificacion_financiera === 'pago_real' &&
-                p.estado_pago === 'registrado_en_libro' && p.pago_recibido === true && !p.advertencias?.length &&
-                !p.transaccion_distribuida && !p.conflicto_distribucion && !conflictoIdentificador && !duplicado;
-            if (webpayPendiente && !(webpayAprobable && aprobados.has(id))) motivos.push(WEBPAY_PENDIENTE);
+            if (abonoWebpaySinEvidencia(p)) motivos.push(WEBPAY_ABONO_INCOMPLETO);
             // La revalidación canónica ya decidió si el movimiento sigue siendo
             // nuevo y seguro. Preparación comprueba que el payload todavía sea
             // construible, pero no vuelve a exigir una aprobación intermedia.
@@ -5232,7 +5264,7 @@
             const confirmacionAirbnb = x.decisionPagoManual?.tipo === CONFIRMACION_AIRBNB &&
                 x.decisionPagoManual.confirmacionRecibida === true && fechaConfirmacionAirbnbValida(x.decisionPagoManual.fechaPago)
                 ? x.decisionPagoManual : null;
-            const manual = aprobados.has(id) && (!webpayPendiente || webpayAprobable) &&
+            const manual = aprobados.has(id) &&
                 (medio !== 'airbnb_prepaid_card' || p.fecha_comprobante || !!confirmacionAirbnb);
             if(p.concepto_alojamiento==='diferencia_tarifa'&&!manual)motivos.push(APROBACION_MANUAL_PAGO);
             if (pagosEfectivosMedio.has(p) && medio !== 'airbnb_prepaid_card' && !pagoTieneIdentificadorFuerte(p) && !transferenciaContextualNueva)
@@ -5288,11 +5320,6 @@
             const motivosAprobables = new Set([APROBACION_MANUAL_PAGO, 'Hay otro pago con la misma reserva y monto, pero sin identificador fuerte; revisa ambos antes de aprobar.',
                 'Confirma la distribución explícita del comprobante antes de preparar el pago.']);
             item.aprobable = !transferenciaSinId && motivos.length > 0 && motivos.every(motivo => motivosAprobables.has(motivo));
-            if (webpayAprobable && motivos.includes(WEBPAY_PENDIENTE) &&
-                motivos.every(motivo => motivo === WEBPAY_PENDIENTE || motivo === APROBACION_MANUAL_PAGO)) {
-                item.aprobable = true;
-                item.etiquetaAprobacion = 'Confirmar recepción WebPay';
-            }
             if (motivos.includes(APROBACION_MANUAL_PAGO)) item.motivosRevisionPago = motivosRevisionComprobante(x,resolucionPago,esPagoExtraJacuzzi);
             const comparable = mismoMontoRegistrado.length === 1 ? mismoMontoRegistrado[0] : null;
             if (medio === 'efectivo' && comparable && pagoConfirmadoSistema(comparable) &&
@@ -8211,7 +8238,7 @@
                 const detalle=elemento('div', 'haku-pago-fila-detalle');
                 const datos=elemento('div', 'haiku-asistente-preview-grid haku-pago-detalle-grid');
                 for (const [etiqueta, valor] of [['Monto',money(p.monto)], ['Medio',(p.medio_pago === 'airbnb_prepaid_card' ? 'Airbnb Prepaid Card' : p.medio_pago?.replaceAll('_',' '))], ['Check-in',r.fecha_checkin],
-                    ['Fecha comprobante',p.fecha_comprobante], ['Fecha del bloque',p.fecha_bloque], ['Concepto / tipo',p.concepto || p.tipo_movimiento],
+                    [p.webpay_por_confirmar ? 'Fecha de abono (Libro)' : 'Fecha comprobante',p.fecha_comprobante], ['Fecha del bloque',p.fecha_bloque], ['Concepto / tipo',p.concepto || p.tipo_movimiento],
                     ['Folio',p.folio], ['Autorización',p.bovtar], ['CodAut',p.codigo_autorizacion], ['Origen XLSX',origenesComprobante(p).join(' · ')]]) {
                     if (valor !== null && valor !== undefined && valor !== '') agregarDato(datos, etiqueta, String(valor));
                 }
@@ -8232,8 +8259,7 @@
                 const motivoLectura = x.estado === 'revisar' && p.clasificacion_financiera === 'dudoso'
                     ? root.HAIKU_LIBRO_LENGUAJE_NATURAL_V1?.motivoRevisionPago?.(p) : null;
                 for (const motivo of new Set([...(x.motivos || []),...(x.resolucionPago?.motivos || []),
-                    ...(x.estado !== 'en_sistema' ? p.advertencias || [] : []), motivoLectura,
-                    p.webpay_por_confirmar && x.estado !== 'en_sistema' ? 'WebPay pendiente de confirmar en el Libro.' : null].filter(Boolean)))
+                    ...(x.estado !== 'en_sistema' ? p.advertencias || [] : []), motivoLectura].filter(Boolean)))
                     detalle.append(elemento('p','haiku-versiones-meta',motivo));
                 if (titulo==='Sin asociación segura' && x.estado!=='sin_estadia')
                     detalle.append(elemento('p','haiku-versiones-aviso','Requiere resolver su asociación antes de incorporar.'));
@@ -9306,8 +9332,6 @@
             estado = 'Transferencia repartida';
         } else if (item.pagoLibro?.airbnb_liquidacion_pendiente) {
             estado = 'Liquidación pendiente';
-        } else if (item.motivos?.includes(WEBPAY_PENDIENTE)) {
-            estado = 'WebPay por confirmar';
         } else if (item.ampliacionJacuzzi) {
             estado = 'Ampliar Jacuzzi';
             detalle = 'Primero actualiza la misma Jacuzzi para reflejar las personas extra y generar el saldo correcto. Después revisa el segundo pago; el primero se conserva.';

@@ -48,7 +48,7 @@ Las pruebas con débitos ficticios incluyen folio, BOVTAR y un cargo de alojamie
 | `CAB 10/1 noche` (débito completo de $72.000 y parcial de $36.000), `CAB10/2noches`, `Alojamiento`, `Arriendo` | Preparan el abono por cabaña y fecha si la estadía es única, el comprobante es válido y el importe cabe en el saldo. |
 | `2adl/1noche`, `2 ADL / 1 noche`, `2 pax - 1 noche`, `Abono de reserva`, `Anticipo alojamiento`, `Promo Haiku / 2 ADL / 1 noche` | Usan la misma verificación por cabaña y fecha cuando el comprobante no trae titular. |
 
-Se prepara un WebPay con código de autorización, pago recibido y destino comprobable. Si Proyecto H ya tiene el pago confirmado y conciliado, la fila queda omitida aunque el Libro conserve la glosa «por confirmar». Si la glosa indica que el pago sigue pendiente y no existe esa conciliación, queda en revisión.
+La glosa «WebPay por confirmar» se refiere a la fecha de abono. Haku prepara el pago con la fecha anotada si la fila acredita el ingreso, identifica el tipo de tarjeta y el código de autorización, y permite comprobar su destino. Si Proyecto H ya tiene el mismo pago conciliado, se muestra entre los registrados. Las filas con datos incompletos, contradictorios o con un pago expresamente pendiente de recibir quedan en revisión.
 
 Las pruebas inspeccionan el plan de incorporación y la operación que resultaría, sin registrar pagos.
 
