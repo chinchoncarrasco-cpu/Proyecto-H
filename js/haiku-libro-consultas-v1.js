@@ -3532,6 +3532,59 @@
         return 'pago:' + claveReserva(x.reserva) + ':' + source(original.origen) + ':' + JSON.stringify(original);
     }
 
+    function totalDeclaradoWebpay(texto) {
+        const importes = [...String(texto || '').matchAll(/(?:\$\s*|\bmonto\s*:?\s*)([\d.]+)/gi)]
+            .map(m => Number(m[1].replace(/\./g, '')));
+        if (!importes.length) return null;
+        const valores = [...new Set(importes)];
+        return valores.length === 1 && Number.isSafeInteger(valores[0]) && valores[0] > 0 ? valores[0] : NaN;
+    }
+
+    function distribucionWebpayMulticabana(grupo, comp, destinos) {
+        if (grupo.length < 2 || grupo.length > 11) return null;
+        const referencia = grupo[0].pago;
+        const medio = medioLibro(referencia), autorizacion = normalizarId(referencia.codigo_autorizacion);
+        if (!['webpay_credito','webpay_debito'].includes(medio) || !autorizacion) return null;
+        const destinosValidos = new Map(comp.filter(x => x.estado === 'asociada').map(x => [claveReserva(x.libro), x.sistema]));
+        const asignaciones = [];
+        for (const {pago, reserva} of grupo) {
+            const destino = destinos.get(claveReserva(reserva)), sistema = destinosValidos.get(claveReserva(reserva));
+            if (!destino?.reserva_id || !destino.estadia_id || destino.bloqueado ||
+                sistema?.reserva_id !== destino.reserva_id || sistema?.id !== destino.estadia_id ||
+                sistema.grupo_reserva_id || sistema.tipo_estadia !== 'alojamiento' ||
+                !mismasFechas(reserva, sistema) || !identidad(reserva, sistema).confirmable ||
+                reserva.advertencias?.length || Number(reserva.cabana) !== Number(sistema.cabana) ||
+                Number(pago.cabana) !== Number(sistema.cabana) ||
+                pago.tipo_movimiento !== 'alojamiento' || pago.clasificacion_financiera !== 'pago_real' ||
+                pago.pago_recibido !== true || pago.estado_pago !== 'registrado_en_libro' ||
+                pago.moneda !== 'CLP' || medioLibro(pago) !== medio || pago.advertencias?.length ||
+                !Number.isSafeInteger(pago.monto) || pago.monto <= 0 ||
+                pago.fecha_bloque !== reserva.fecha_checkin || pago.fecha_bloque !== referencia.fecha_bloque ||
+                !pago.fecha_comprobante || pago.fecha_comprobante !== referencia.fecha_comprobante ||
+                normalizarId(pago.codigo_autorizacion) !== autorizacion || pago.folio || pago.bovtar ||
+                !S.mismaPersona(pago.titular, referencia.titular) ||
+                !pago.origen?.hoja || !pago.origen?.celda || !pago.texto_original) return null;
+            asignaciones.push({pago, reserva, destino, sistema});
+        }
+        if (new Set(asignaciones.map(x => x.destino.reserva_id)).size !== 1 ||
+            new Set(asignaciones.map(x => x.destino.estadia_id)).size !== grupo.length ||
+            new Set(asignaciones.map(x => Number(x.sistema.cabana))).size !== grupo.length ||
+            new Set(asignaciones.map(x => x.pago.origen.hoja)).size !== 1 ||
+            new Set(asignaciones.map(x => source(x.pago.origen))).size !== grupo.length) return null;
+        const total = asignaciones.reduce((suma, x) => suma + x.pago.monto, 0);
+        const declarados = [...new Set(asignaciones.map(x => totalDeclaradoWebpay(x.pago.texto_original)).filter(x => x !== null))];
+        if (!Number.isSafeInteger(total) || declarados.length > 1 || declarados.some(Number.isNaN)) return null;
+        const componentes = asignaciones.sort((a,b) => Number(a.sistema.cabana)-Number(b.sistema.cabana))
+            .map(({pago, reserva, destino, sistema}) => ({...pago, item_id:idMovimientoIncorporacion({pago,reserva}),
+                reserva_id:destino.reserva_id, estadia_id:destino.estadia_id, titular_reserva:sistema.titular,
+                fecha_salida:sistema.fecha_checkout}));
+        const ids = componentes.map(x => x.item_id);
+        return {tipo:'webpay_multicabana', id:'distribucion:' + ids.join('|'), ids, total,
+            total_declarado:declarados[0] ?? null, titular:asignaciones[0].sistema.titular,
+            reserva_id_ancla:componentes[0].reserva_id, componentes,
+            dependeDe:[...new Set(asignaciones.flatMap(x => x.destino.dependeDe || []))]};
+    }
+
     // Sólo preparación: no altera la lectura ni las asociaciones del Libro.
     // Un alojamiento y un Early Check-In pueden ser partes del mismo comprobante.
     // El operador debe aprobar cada parte; ningún conflicto genérico se flexibiliza.
@@ -3556,6 +3609,11 @@
             // activo del 10% y que el total salde exactamente el grupo.
             const relacionados = movimientos.filter(y => pagoCoincide(x.pago,
                 { ...y.pago, datos_origen: { bovtar: y.pago.bovtar } }));
+            const webpayMulticabana = distribucionWebpayMulticabana(relacionados, comp, destinos);
+            if (webpayMulticabana) {
+                relacionados.forEach(y => salida.set(y, webpayMulticabana));
+                continue;
+            }
             let grupo = relacionados.filter(parteComprobante);
             let penalidadInferida = null;
             const alojamientos = relacionados.filter(y => parteConfirmada(y) && y.pago.tipo_movimiento === 'alojamiento');
@@ -5114,6 +5172,10 @@
                     `Comprobante compartido entre cabañas: ${money(distribucion.total)} en total, incluida la penalidad 10% de ${money(distribucion.penalidad_monto)} que ya existe en Proyecto H. Aprueba el comprobante completo para confirmar una sola transacción y saldar sus cargos sin crear otra penalidad.${distribucion.penalidad_inferida ? ' La parte de penalidad será aceptada sólo si el servidor confirma el ajuste activo del 10% y el saldo exacto del grupo.' : ''}` :
                     distribucion.tipo === 'grupo_alojamiento' ?
                     `Comprobante compartido entre cabañas: ${money(distribucion.total)} en total. Aprueba ambas partes para confirmar una sola transacción y conservar cuánto corresponde a cada cabaña.` :
+                    distribucion.tipo === 'webpay_multicabana' ?
+                    `WebPay único de ${money(distribucion.total)} para ${distribucion.componentes.length} cabañas. Confirma el total del comprobante y el monto de cada parte.` +
+                        (distribucion.total_declarado != null && distribucion.total_declarado !== distribucion.total ?
+                            ` La glosa del Libro dice ${money(distribucion.total_declarado)}. Verifica esta diferencia con el comprobante.` : '') :
                     `Comprobante compartido: ${money(distribucion.total)} en total. Aprueba y selecciona ambas partes para confirmar una sola transacción. Early Check-In conserva su concepto; si no hay un cargo de ese servicio, su importe queda sin aplicar hasta regularizarlo.`;
                 continue;
             }
@@ -6120,7 +6182,7 @@
             if (item.distribucionManual) {
                 const d = item.distribucionManual;
                 if (!d.ids.every(id => elegidos.has(id) && plan.items.find(i => i.id === id)?.payload?.aprobado_manualmente)) {
-                    throw new Error('Aprueba y selecciona ambas partes del comprobante compartido antes de confirmar.');
+                    throw new Error('Aprueba y selecciona todas las partes del comprobante compartido antes de confirmar.');
                 }
                 if (distribuidos.has(d.id)) return null;
                 distribuidos.add(d.id);
@@ -6129,7 +6191,8 @@
                         p_referencia_externa: d.componentes.map(c => c.texto_original).join('\n'),
                         p_observaciones: d.componentes.map(c => c.texto_original).join('\n') },
                     datos_origen: { ...item.payload.datos_origen, distribucion_manual: {
-                        ...d, componentes: d.componentes.map(c => ({ ...c,
+                        ...d, ...(d.tipo === 'webpay_multicabana' ? {total_confirmado:d.total} : {}),
+                        componentes: d.componentes.map(c => ({ ...c,
                             ...datosOrigenPago(c,{ reserva_id:c.reserva_id, grupo_reserva_id:c.grupo_reserva_id, cabana:c.cabana },
                                 { item_id:c.item_id }), aprobado_manualmente: true })) } },
                     aprobado_manualmente: true };
@@ -6654,6 +6717,7 @@
             const requiereGrupo = distribuciones.some(d => ['grupo_alojamiento','grupo_alojamiento_penalidad'].includes(d.tipo));
             const requierePenalidad = distribuciones.some(d => d.tipo === 'grupo_alojamiento_penalidad');
             const requierePenalidadManual = distribuciones.some(d => d.penalidad_inferida === true);
+            const requiereWebpayMulticabana = distribuciones.some(d => d.tipo === 'webpay_multicabana');
             const soportaBase = Number(capacidad.data?.version) >= 1;
             const soportaGrupo = Number(capacidad.data?.version) >= 2 &&
                 Array.isArray(capacidad.data?.modos) && capacidad.data.modos.includes('grupo_alojamiento');
@@ -6661,8 +6725,9 @@
                 Array.isArray(capacidad.data?.modos) && capacidad.data.modos.includes('grupo_alojamiento_penalidad');
             const soportaPenalidadManual = Number(capacidad.data?.version) >= 4 &&
                 Array.isArray(capacidad.data?.modos) && capacidad.data.modos.includes('grupo_alojamiento_penalidad_manual');
+            const soportaWebpayMulticabana = Array.isArray(capacidad.data?.modos) && capacidad.data.modos.includes('webpay_multicabana');
             if (capacidad.error || !soportaBase || requiereGrupo && !soportaGrupo || requierePenalidad && !soportaPenalidad ||
-                requierePenalidadManual && !soportaPenalidadManual) {
+                requierePenalidadManual && !soportaPenalidadManual || requiereWebpayMulticabana && !soportaWebpayMulticabana) {
                 throw new Error('Falta instalar el soporte de comprobantes distribuidos en Proyecto H. Las aprobaciones se conservan; no se registró este comprobante.');
             }
         }
@@ -10944,9 +11009,16 @@
             const pagos = seleccion.filter(i => i.categoria === "pagos").length;
             if (!seleccion.length) return;
             const comprobanteFoco = plan.focoComprobanteId ? seleccion.find(item => item.distribucionManual?.id === plan.focoComprobanteId)?.distribucionManual : null;
+            const multicabana = comprobanteFoco?.tipo === 'webpay_multicabana' ? comprobanteFoco : null;
+            const detalleMulticabana = multicabana?.componentes
+                .map(parte => `CAB ${parte.cabana} · ${money(parte.monto)}`).join('\n');
             const texto = etapaIdentidad ?
                 `Se actualizarán el titular y RUT en ${seleccion.filter(i => idsEtapa.has(i.id)).length} reserva(s) exacta(s), se incorporarán ${nuevas} reserva(s) nueva(s) independiente(s) y ${pagos} pago(s) ya habilitado(s). Los pagos con actualizaciones pendientes siguen bloqueados. ¿Confirmas esta selección?` :
-                comprobanteFoco ? `Se registrará un único comprobante de ${money(comprobanteFoco.total)}. Proyecto H volverá a validar el grupo, el ajuste del 10% y que el saldo quede exactamente en cero. ¿Confirmas?` :
+                multicabana ? `Confirma un WebPay de ${money(multicabana.total)} y su reparto.\n${detalleMulticabana}` +
+                    (multicabana.total_declarado != null && multicabana.total_declarado !== multicabana.total ?
+                        `\nLa glosa del Libro dice ${money(multicabana.total_declarado)}. Confirma que el comprobante respalda ${money(multicabana.total)}.` : '') :
+                comprobanteFoco?.tipo === 'grupo_alojamiento_penalidad' ? `Se registrará un único comprobante de ${money(comprobanteFoco.total)}. Proyecto H volverá a validar el grupo, el ajuste del 10% y que el saldo quede exactamente en cero. ¿Confirmas?` :
+                comprobanteFoco ? `Se registrará un único comprobante de ${money(comprobanteFoco.total)} con el reparto aprobado. ¿Confirmas?` :
                 `Se incorporarán ${nuevas} reserva(s), ${estadias} estadía(s) y ${pagos} pago(s), además de ${seleccion.filter(i => i.categoria === "actualizaciones").length} actualización(es) con los datos del Libro. Proyecto H volverá a comprobar duplicados antes de guardar. ¿Confirmas?`;
             if (!incorporacionDirecta(seleccion)) {
                 const cambios = seleccion.filter(i => i.esCambioDetectado).map(i => i.etiquetaCambio + ' · ' + i.texto);
