@@ -1107,6 +1107,7 @@
         if (rol === 'penalidad_10' || tipo === 'penalidad' || /\bpenalidad\b/.test(detalle)) return 'penalidad';
         if (tipo === 'alojamiento') return 'alojamiento';
         if (tipo === 'servicio' || /^early\s*(check\s*)?in$/i.test(String(pago?.concepto || '').trim())) return 'servicio';
+        if (tipo === 'otro' && S.normalizar(pago?.concepto)) return 'otro';
         return '';
     }
 
@@ -1125,8 +1126,9 @@
         const reservaId = componente?.reserva_id || sistema?.reserva_id || '';
         const estadiaId = componente?.estadia_id || sistema?.id || '';
         const grupoId = componente?.grupo_reserva_id || distribucion?.grupo_reserva_id || sistema?.grupo_reserva_id || '';
+        const rol = rolComponenteDistribuido(p);
         return JSON.stringify([
-            rolComponenteDistribuido(p), cabana, Number(p?.monto) || null,
+            rol, rol === 'otro' ? S.normalizar(p.concepto) : '', cabana, Number(p?.monto) || null,
             String(reservaId), String(estadiaId), String(grupoId),
             String(p?.fecha_comprobante || '').slice(0, 10),
             medioLibro(p) || medioSistema(p) || '', String(p?.moneda || 'CLP').trim().toUpperCase()
@@ -1190,7 +1192,8 @@
                     const result = (resultados || []).find(item => item.estado === 'asociada' &&
                         item.sistema?.reserva_id === componente.reserva_id && String(item.sistema?.id) === String(componente.estadia_id));
                     const candidatos = relacionados.filter(item => !usados.has(item.p) && item.result === result &&
-                        huellaFuentePago(item.p,{ cabana:item.result?.libro?.cabana }) === componente.source_fingerprint);
+                        huellaFuentePago(item.p,{ cabana:item.result?.libro?.cabana }) === componente.source_fingerprint &&
+                        (rolComponenteDistribuido(componente) !== 'otro' || S.normalizar(item.p.concepto) === S.normalizar(componente.concepto)));
                     if (!result || candidatos.length !== 1) { paresHuella.length = 0; break; }
                     usados.add(candidatos[0].p); paresHuella.push(candidatos[0]);
                 }
@@ -1673,6 +1676,54 @@
         });
     }
 
+    // Un total bancario sin identificador se reconoce sólo con el desglose conciliado de la misma estadía.
+    function transferenciaRepartidaPersistida(grupo, asociadosPorPago, pagos, consumidos) {
+        if (!grupo.completo) return null;
+        const movimientos = grupo.partes.map(p => asociadosPorPago.get(p));
+        const destino = movimientos[0]?.result;
+        if (!destino || !movimientos.every(item => item?.result === destino &&
+            item.p.fecha_bloque === destino.sistema.fecha_checkin &&
+            item.p.fecha_bloque === destino.libro.fecha_checkin &&
+            destino.libro.fecha_checkout === destino.sistema.fecha_checkout &&
+            Number(item.p.cabana) === Number(destino.sistema.cabana) &&
+            item.p.pago_recibido === true && item.p.estado_pago === 'registrado_en_libro')) return null;
+
+        const fecha = grupo.partes[0].fecha_comprobante;
+        const banco = S.evidenciaTransferencia(grupo.partes[0]);
+        if (!banco?.valida || !fecha) return null;
+        const candidatos = pagos.filter(p => p.id && p.reserva_id === destino.sistema.reserva_id &&
+            p.estado === 'confirmado' && p.tipo_movimiento === 'pago' && medioSistema(p) === 'transferencia' &&
+            p.moneda === 'CLP' && Number(p.monto) === grupo.total && mismaFechaCalendario(p.fecha_pago, fecha));
+        if (candidatos.length !== 1 || consumidos.has(candidatos[0].id)) return null;
+
+        const [pago] = candidatos;
+        const datos = pago.datos_origen;
+        const distribucion = datos?.distribucion_manual;
+        const componentes = distribucion?.componentes;
+        const evidencia = datos?.evidencia_transferencia;
+        if (datos?.source_kind !== 'libro_reserva' || datos.aprobado_manualmente !== true || !datos.operacion_id ||
+            distribucion?.tipo !== 'transferencia_repartida' || distribucion.total !== grupo.total ||
+            distribucion.reserva_id_ancla !== pago.reserva_id || distribucion.estadia_id !== destino.sistema.id ||
+            !Array.isArray(componentes) || componentes.length !== movimientos.length ||
+            evidencia?.version !== 2 || !evidencia.glosa_original ||
+            textoFinancieroCanon(evidencia.glosa_original) !== textoFinancieroCanon(banco.glosa_original) ||
+            evidencia.numero_remitente !== banco.numero_remitente || evidencia.fecha_recepcion !== fecha ||
+            (evidencia.operacion_bancaria || null) !== (banco.operacion_bancaria || null)) return null;
+
+        const firma = (item, parte = null) => {
+            const p = parte || item.p;
+            return JSON.stringify([firmaComponenteDistribuido(item,parte,distribucion),
+                source(p.origen), S.normalizar(p.concepto), p.fecha_bloque, textoFinancieroCanon(p.texto_original)]);
+        };
+        const firmas = new Set(movimientos.map(item => firma(item)));
+        for (const parte of componentes) {
+            if (parte?.reserva_id !== pago.reserva_id || parte.estadia_id !== destino.sistema.id ||
+                !parte.origen?.hoja || !parte.origen?.celda || !parte.texto_original ||
+                !firmas.delete(firma(null,parte))) return null;
+        }
+        return firmas.size ? null : pago;
+    }
+
     function resolverPagosExistentes(resultados, pagos, capacidadTransferencias = false, capacidadGlosaSinNombre = false, estadias = []) {
         const estados = ESTADOS_RESOLUCION_PAGO, resoluciones = new Map(), items = [], vistos = new Set(), consumidos = new Set();
         for (const result of resultados || []) {
@@ -2040,8 +2091,17 @@
                 resolver(item,estados.AMBIGUO,null,'evidencia_insuficiente',['No existe una correspondencia financiera única y confirmada.']);
             }
         }
+        const asociadosPorPago = new Map(asociados.map(item => [item.p,item]));
         for (const grupo of transferenciasConTotalCompartido(items)) {
             const registrados = grupo.partes.filter(p => resoluciones.get(p)?.estado === estados.EXISTENTE_SEGURO);
+            if (!registrados.length && grupo.partes.every(p => resoluciones.get(p)?.estado !== estados.CONFLICTO)) {
+                const pago = transferenciaRepartidaPersistida(grupo,asociadosPorPago,pagos || [],consumidos);
+                if (pago) {
+                    for (const p of grupo.partes) resolver(asociadosPorPago.get(p),estados.EXISTENTE_SEGURO,pago,'distribucion_persistida');
+                    consumidos.add(pago.id);
+                    continue;
+                }
+            }
             const reparto = {...grupo,registrados};
             for (const p of grupo.partes) {
                 const anterior = resoluciones.get(p);

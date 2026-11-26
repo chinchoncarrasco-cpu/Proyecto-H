@@ -461,6 +461,30 @@ test('a recorded distribution canonically omits every represented component; Sep
  assert.deepEqual(fourth(initial),fourth(complete));
 });
 
+test('un voucher distribuido reconoce un adicional ya registrado con el mismo concepto', async () => {
+ const campos = { cabana:1,moneda:'CLP',medio_pago:'credito',folio:'004321',bovtar:'956721',
+  fecha_comprobante:'2026-09-17',fecha_bloque:'2026-09-17',pago_recibido:true,estado_pago:'registrado_en_libro' };
+ const pagos = [
+  {...campos,tipo_movimiento:'servicio',monto:24000,concepto:'Tinaja',origen:{hoja:'Sep26',celda:'C32'}},
+  {...campos,tipo_movimiento:'otro',monto:17000,concepto:'Espumante',origen:{hoja:'Sep26',celda:'C33'}}
+ ];
+ const reserva = readyBook({titular:'Renata Ejemplo',rut_documento:'12345670-K',pagos});
+ const estadia = stay(reserva);
+ const importe = 41000;
+ const comprobante = { id:'voucher-sintetico',reserva_id:estadia.reserva_id,estado:'confirmado',tipo_movimiento:'pago',
+  monto:importe,moneda:'CLP',medio_pago:'tarjeta_credito',fecha_pago:campos.fecha_comprobante,folio:campos.folio,bove:campos.bovtar,
+  datos_origen:{bovtar:campos.bovtar,distribucion_manual:{tipo:'estadia_partes',total:importe,reserva_id_ancla:estadia.reserva_id,
+   componentes:pagos.map(p=>({...p,reserva_id:estadia.reserva_id,estadia_id:estadia.id}))}}
+ };
+ const conciliada = await compare([reserva],[estadia],[comprobante]);
+ assert.deepEqual(conciliada.pagosDetalle.map(p=>[p.estado,p.sistema?.id]),[
+  ['en_sistema',comprobante.id],['en_sistema',comprobante.id]
+ ]);
+ const cambiado = {...reserva,pagos:[pagos[0],{...pagos[1],concepto:'Aceite de oliva'}]};
+ const revision = await compare([cambiado],[estadia],[comprobante]);
+ assert.deepEqual(revision.pagosDetalle.map(p=>p.estado),['revisar','revisar']);
+});
+
 test('distribution confirmation refuses an old backend and revalidates before sending one receipt',async()=>{
  const state=await prepararKixitobe();
  const approved=new Set(state.plan.items.filter(i=>i.distribucionManual).map(i=>i.id));
