@@ -22,6 +22,7 @@
     const ANCHO_DOBLE = 960;
     const ANCHO_MINIMO_PANEL = 320;
     const ANCHO_SEPARADOR = 12;
+    const SELECTOR_PANEL = ".seccion-app[data-haiku-vista-lado]";
     let paneles = [];
     let ladoEnFoco = 0;
     let proporcion = 50;
@@ -39,6 +40,13 @@
 
     function seccionEnFoco() {
         return rutas.get(paneles[ladoEnFoco])?.seccion;
+    }
+
+    function contenerRueda(evento) {
+        if (evento.ctrlKey || evento.metaKey) return;
+        const seccion = evento.target.closest(SELECTOR_PANEL);
+        // El panel seleccionado y sus visores conservan el desplazamiento nativo.
+        if (seccion && seccion !== seccionEnFoco()) evento.preventDefault();
     }
 
     function modo() {
@@ -70,6 +78,8 @@
         }
 
         area.dataset.haikuVista = modoVista;
+        if (compacto) area.removeEventListener("wheel", contenerRueda);
+        else area.addEventListener("wheel", contenerRueda, { passive: false });
         area.style.setProperty("--haiku-vista-cabecera", cabecera.offsetHeight + "px");
         controles.hidden = false;
         separador.hidden = intercambiar.hidden = compacto;
@@ -111,6 +121,7 @@
         paneles = [];
         visibles = [];
         posiciones.clear();
+        area.removeEventListener("wheel", contenerRueda);
         delete area.dataset.haikuVista;
         delete area.dataset.haikuVistaArrastre;
         controles.hidden = separador.hidden = true;
@@ -191,7 +202,7 @@
         });
     });
     function elegirPanel(evento) {
-        const seccion = evento.target.closest(".seccion-app[data-haiku-vista-lado]");
+        const seccion = evento.target.closest(SELECTOR_PANEL);
         if (seccion) enfocar(Number(seccion.dataset.haikuVistaLado));
     }
     area.addEventListener("pointerdown", elegirPanel);

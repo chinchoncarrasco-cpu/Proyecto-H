@@ -59,6 +59,62 @@ async function abrir(browser, width) {
 
 const seccion = (page, id) => page.locator("#seccion-" + id);
 
+async function comprobarRueda(page, resumen, libro, visor) {
+    const encabezadoResumen = resumen.locator(".resumen-estado-cabecera h2");
+    const encabezadoLibro = libro.locator(".libro-reserva-cabecera h2");
+    const moverRueda = async destino => {
+        const caja = await destino.boundingBox();
+        await page.mouse.move(caja.x + caja.width / 2, caja.y + Math.min(caja.height / 2, 16));
+        await page.mouse.wheel(0, 240);
+    };
+    for (const panel of [resumen, libro]) {
+        await panel.evaluate(el => {
+            const relleno = document.createElement("div");
+            relleno.dataset.pruebaRueda = "";
+            relleno.style.height = "900px";
+            el.append(relleno);
+        });
+    }
+    const origen = await page.evaluate(() => window.scrollY);
+    await encabezadoResumen.click();
+    await moverRueda(encabezadoResumen);
+    await page.waitForFunction(() => document.getElementById("seccion-resumen").scrollTop > 0);
+    const desplazamientoResumen = await resumen.evaluate(el => el.scrollTop);
+    assert.equal(await libro.evaluate(el => el.scrollTop), 0);
+
+    await page.evaluate(() => {
+        window.__ruedaVistaCancelada = null;
+        window.addEventListener("wheel", evento => {
+            window.__ruedaVistaCancelada = evento.defaultPrevented;
+        }, { once: true, passive: true });
+    });
+    await moverRueda(encabezadoLibro);
+    await page.waitForFunction(() => typeof window.__ruedaVistaCancelada === "boolean");
+    assert.equal(await page.evaluate(() => window.__ruedaVistaCancelada), true,
+        "la rueda no desplaza el panel que aún no se seleccionó");
+    assert.equal(await libro.evaluate(el => el.scrollTop), 0);
+    assert.equal(await resumen.evaluate(el => el.scrollTop), desplazamientoResumen);
+
+    await encabezadoLibro.click();
+    await moverRueda(encabezadoLibro);
+    await page.waitForFunction(() => document.getElementById("seccion-libro-reserva").scrollTop > 0);
+    assert.equal(await resumen.evaluate(el => el.scrollTop), desplazamientoResumen);
+    await libro.evaluate(el => { el.scrollTop = 0; });
+    await moverRueda(visor);
+    await page.waitForFunction(() => document.getElementById("libro-reserva-visor").scrollTop > 130);
+    assert.equal(await libro.evaluate(el => el.scrollTop), 0, "la planilla sigue desplazándose dentro de su visor");
+    assert.equal(await resumen.evaluate(el => el.scrollTop), desplazamientoResumen);
+    assert.equal(await page.evaluate(() => window.scrollY), origen);
+
+    await page.evaluate(() => {
+        for (const el of document.querySelectorAll("[data-prueba-rueda]")) {
+            el.parentElement.scrollTop = 0;
+            el.remove();
+        }
+        document.getElementById("libro-reserva-visor").scrollTop = 130;
+    });
+}
+
 async function escritorio(browser) {
     const { page, errors } = await abrir(browser, 1440);
     const boton = page.getByRole("button", { name: "Vista dividida", exact: true });
@@ -95,6 +151,7 @@ async function escritorio(browser) {
         visor.scrollTop = 130;
     });
     const visor = libro.locator("#libro-reserva-visor");
+    await comprobarRueda(page, resumen, libro, visor);
     const divisor = await separador.boundingBox();
     await page.mouse.move(divisor.x + divisor.width / 2, divisor.y + divisor.height / 2);
     await page.mouse.down();

@@ -26,6 +26,8 @@ body:has(> #haiku-area-trabajo[data-haiku-vista]) .haiku-cereza-cabecera .busque
 }
 
 body > #haiku-area-trabajo[data-haiku-vista] {
+    --haiku-vista-barra-fondo: #efebe9;
+    --haiku-vista-barra-control: #8d8488;
     display: grid;
     grid-template-rows: auto minmax(0, 1fr);
     grid-template-columns: minmax(0, 1fr);
@@ -35,6 +37,11 @@ body > #haiku-area-trabajo[data-haiku-vista] {
     max-width: none;
     padding: 0;
     background: var(--cereza-lienzo);
+}
+
+html[data-haiku-tema="oscuro"] #haiku-area-trabajo[data-haiku-vista] {
+    --haiku-vista-barra-fondo: #0e0e0e;
+    --haiku-vista-barra-control: #bcbcbc;
 }
 
 body > #haiku-area-trabajo[data-haiku-vista="doble"] {
@@ -53,6 +60,30 @@ body > #haiku-area-trabajo[data-haiku-vista="doble"] {
     overflow: auto;
     overscroll-behavior: contain;
     scroll-padding-block: 12px;
+}
+
+@media (any-pointer: fine) {
+    #haiku-area-trabajo[data-haiku-vista] > .seccion-app[data-haiku-vista-lado]::-webkit-scrollbar {
+        width: 12px;
+    }
+
+    #haiku-area-trabajo[data-haiku-vista] > .seccion-app[data-haiku-vista-lado]::-webkit-scrollbar-track:vertical {
+        background: var(--haiku-vista-barra-fondo);
+    }
+
+    #haiku-area-trabajo[data-haiku-vista] > .seccion-app[data-haiku-vista-lado]::-webkit-scrollbar-thumb:vertical {
+        min-height: 28px;
+        border: 3px solid transparent;
+        border-radius: 999px;
+        background: var(--haiku-vista-barra-control) padding-box;
+    }
+
+    @supports not selector(::-webkit-scrollbar) {
+        #haiku-area-trabajo[data-haiku-vista] > .seccion-app[data-haiku-vista-lado] {
+            scrollbar-width: thin;
+            scrollbar-color: var(--haiku-vista-barra-control) var(--haiku-vista-barra-fondo);
+        }
+    }
 }
 
 #haiku-area-trabajo[data-haiku-vista="doble"] > .seccion-app[data-haiku-vista-lado="1"] {
