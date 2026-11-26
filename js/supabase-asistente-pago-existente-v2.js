@@ -247,6 +247,28 @@
             : [];
     }
 
+    function respetarMedioPosDelTexto(preview, comando) {
+        const entradas = preview?.reservas;
+        if (!Array.isArray(entradas) || entradas.length !== 1 || entradas[0]?.pagos?.length !== 1) return preview;
+        const [pago] = pagosDeEntrada(entradas[0]);
+        if (!pago) return preview;
+
+        const texto = normalizar(comando);
+        const folios = [...texto.matchAll(/\bfolio\s*:?\s*(\d+)\b/g)];
+        const bovtares = [...texto.matchAll(/\bbovtar\s*:?\s*(\d+)\b/g)];
+        if (folios.length !== 1 || bovtares.length !== 1 ||
+            /\b(?:web\s*pay|transferencia|efectivo|airbnb|debito|credito|tdc|tdd|tc|td)\b/.test(texto)) return preview;
+
+        const folio = folios[0][1], bovtar = bovtares[0][1];
+        const sinCeros = v => String(v || '').trim().replace(/^0+(?=\d)/,'');
+        if (sinCeros(pago.folio) !== sinCeros(folio) || sinCeros(pago.bovtar) !== sinCeros(bovtar)) return preview;
+
+        // La extracción no puede asignar un subtipo que el usuario no escribió.
+        const comprobante = { ...pago, folio, bovtar, medio:"Tarjeta (sin especificar)" };
+        if (!tarjetaDesdePago(comprobante)) return preview;
+        return { ...preview, reservas:[{ ...entradas[0], pagos:[comprobante] }] };
+    }
+
     function detallePagoVisible(p, indice, total) {
         const bloque = document.createElement("div");
         bloque.className = "haiku-asistente-preview-pago";
@@ -555,7 +577,8 @@
 
             estado.classList.remove("haiku-asistente-mensaje--procesando");
             estado.textContent = "Pago leído. Revisa el destino antes de confirmar.";
-            await renderizarPagoExistente(data.preview);
+            const preview = imagenes.length ? data.preview : respetarMedioPosDelTexto(data.preview, texto);
+            await renderizarPagoExistente(preview);
             if (imagenes.length) limpiarAdjuntosViaInterfaz();
         } catch (error) {
             console.error("HAIKU · Pago existente IA:", error);
