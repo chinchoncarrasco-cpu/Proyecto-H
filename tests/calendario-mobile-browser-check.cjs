@@ -121,7 +121,9 @@ async function comprobarFichaFullDay(page) {
 async function comprobarAnchoConPaneles(page, temas) {
     const inicioCabecera = html.indexOf('<header class="sites-shell-topbar haiku-cereza-cabecera"');
     assert.ok(inicioCabecera >= 0);
-    const shell = html.slice(inicioCabecera, html.indexOf('<main class="contenido sites-shell-main">', inicioCabecera));
+    const inicioContenido = html.indexOf('<main ', inicioCabecera);
+    assert.ok(inicioContenido > inicioCabecera);
+    const shell = html.slice(inicioCabecera, inicioContenido);
     await page.evaluate(shell => {
         document.body.insertAdjacentHTML('afterbegin', shell);
         document.querySelector('main').className = 'contenido sites-shell-main';
