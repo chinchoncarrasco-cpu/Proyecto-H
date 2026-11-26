@@ -19,6 +19,7 @@
     let instalado = false;
     const mediosCanonicos = Object.freeze({
         transferencia:'Transferencia', tarjeta_credito:'Tarjeta de crédito', tarjeta_debito:'Tarjeta de débito',
+        tarjeta_sin_especificar:'Tarjeta (sin especificar)',
         webpay_credito:'WebPay crédito', webpay_debito:'WebPay débito', efectivo:'Efectivo',
         airbnb_prepaid_card:'Airbnb Prepaid Card'
     });
@@ -26,6 +27,8 @@
     // convierte una abreviatura en evidencia ni altera el objeto original.
     function pagoConMedioManual(pago, medio) {
         if (!Object.hasOwn(mediosCanonicos,medio)) throw Error('Selecciona un medio de pago válido.');
+        if (medio === 'tarjeta_sin_especificar' && (!canonId(pago.folio) || !canonId(pago.bovtar) || pago.codigo_autorizacion))
+            throw Error('Tarjeta (sin especificar) requiere Folio y BOVTAR del comprobante POS.');
         return {...corregirPago(structuredClone(pago)),medio_pago:medio};
     }
 
@@ -109,6 +112,25 @@
         if (codAut) return `codaut:${codAut}`;
         const folio = canonId(pago?.folio), bovtar = canonId(pago?.bovtar);
         return folio && bovtar ? `voucher:${folio}:${bovtar}` : null;
+    }
+
+    function aplicarTarjetaPosSinTipo(pago) {
+        if (!pago || pago.medio_pago || pago.codigo_autorizacion || pago.pago_recibido !== true ||
+            pago.estado_pago !== 'registrado_en_libro' || pago.moneda !== 'CLP' ||
+            !Number.isSafeInteger(pago.monto) || pago.monto <= 0 || pago.fecha_comprobante_variable ||
+            !pago.origen?.hoja || !pago.origen?.celda || notaFinanciera(pago) ||
+            (pago.clasificacion_financiera && pago.clasificacion_financiera !== 'pago_real')) return pago;
+        const fila = pago.evidencia_financiera;
+        if (fila?.sector !== 'pagos' || fila.estructura_fila !== 'fecha_detalle_concepto_monto' ||
+            !['fecha','detalle','concepto','monto'].every(campo => fila.columnas_ocupadas?.[campo] === true) ||
+            ![pago.folio,pago.bovtar].every(v => /^\d*[1-9]\d*$/.test(String(v || '').trim()))) return pago;
+        const fecha = String(pago.fecha_comprobante || '');
+        const comprobante = Date.parse(fecha + 'T12:00:00Z');
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha) || !Number.isFinite(comprobante) ||
+            new Date(comprobante).toISOString().slice(0,10) !== fecha) return pago;
+        const texto = normalizarTexto(`${pago.texto_original || ''} ${pago.concepto || ''}`);
+        if (/\b(?:web\s*pay|transf(?:erencia)?|efectivo|airbnb\s+prepaid\s+card|credito|debito|tdc|tdd|tc|td|reembols\w*|anulad\w*|rechazad\w*)\b/.test(texto)) return pago;
+        return { ...pago, medio_pago:'tarjeta_sin_especificar', medio_pago_regla:'pos_sin_tipo_recepcion' };
     }
 
     function montoTotalDeclarado(pago) {
@@ -233,7 +255,7 @@
         }
         copia.identificador_pago = bovtar ? "bovtar" : (canonId(pago.codigo_autorizacion) ? "codigo_autorizacion" : null);
 
-        return copia;
+        return aplicarTarjetaPosSinTipo(copia);
     }
 
     function corregirResultado(resultado) {
@@ -294,7 +316,7 @@
     }
 
     // El cálculo también se usa sin UI; instalar sólo envuelve la fuente Web.
-    const api = Object.freeze({ mediosCanonicos, pagoConMedioManual, corregirPago,
+    const api = Object.freeze({ mediosCanonicos, pagoConMedioManual, corregirPago, aplicarTarjetaPosSinTipo,
         corregirResultado, medioDesdeTexto, liquidacionAirbnbPendiente, agruparTransaccionesDistribuidas, montoTotalDeclarado });
     root.HAIKU_LIBRO_PAGOS_CANON_V1 = api;
     if (typeof module !== "undefined" && module.exports) module.exports = api;

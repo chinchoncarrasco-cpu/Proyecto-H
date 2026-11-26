@@ -68,6 +68,7 @@
             airbnb_prepaid_card: "Airbnb Prepaid Card", efectivo: "Efectivo",
             tarjeta_credito: "Tarjeta crédito",
             tarjeta_debito: "Tarjeta débito",
+            tarjeta_sin_especificar: "Tarjeta (sin especificar)",
             webpay_credito: "WebPay crédito",
             webpay_debito: "WebPay débito"
         };

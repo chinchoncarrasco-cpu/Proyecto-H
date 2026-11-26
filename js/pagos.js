@@ -149,6 +149,9 @@ tarjeta.innerHTML = `
                     <option value="Tarjeta Débito" ${medioPago === "Tarjeta Débito" ? "selected" : ""}>
                         Tarjeta Débito
                     </option>
+                    <option value="Tarjeta (sin especificar)" ${medioPago === "Tarjeta (sin especificar)" ? "selected" : ""}>
+                        Tarjeta (sin especificar)
+                    </option>
 
                     <option value="airbnb_prepaid_card" ${["airbnb_prepaid_card", "Airbnb Prepaid Card"].includes(medioPago) ? "selected" : ""}>Airbnb Prepaid Card</option>
                     <option value="Efectivo" ${medioPago === "Efectivo" ? "selected" : ""}>
@@ -914,6 +917,9 @@ tarjeta.innerHTML = `
 
                     <option value="Tarjeta Débito">
                         Tarjeta Débito
+                    </option>
+                    <option value="Tarjeta (sin especificar)">
+                        Tarjeta (sin especificar)
                     </option>
 
                     <option value="Tarjeta Crédito">

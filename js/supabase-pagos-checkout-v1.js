@@ -21,6 +21,7 @@
         "WebPay Débito": "webpay_debito",
         "Tarjeta Crédito": "tarjeta_credito",
         "Tarjeta Débito": "tarjeta_debito",
+        "Tarjeta (sin especificar)": "tarjeta_sin_especificar",
         "Airbnb Prepaid Card": "airbnb_prepaid_card", "Efectivo": "efectivo"
     });
 
@@ -30,6 +31,7 @@
         webpay_debito: "WebPay Débito",
         tarjeta_credito: "Tarjeta Crédito",
         tarjeta_debito: "Tarjeta Débito",
+        tarjeta_sin_especificar: "Tarjeta (sin especificar)",
         airbnb_prepaid_card: "Airbnb Prepaid Card", efectivo: "Efectivo"
     });
 
@@ -85,7 +87,7 @@
         if (["webpay_credito", "webpay_debito"].includes(medioDB)) {
             return { glosa: false, folio: false, codAut: true };
         }
-        if (["tarjeta_credito", "tarjeta_debito"].includes(medioDB)) {
+        if (["tarjeta_credito", "tarjeta_debito", "tarjeta_sin_especificar"].includes(medioDB)) {
             return { glosa: false, folio: true, codAut: true };
         }
         return { glosa: false, folio: false, codAut: false };
@@ -240,6 +242,7 @@
             extras.push(`Glosa: ${escapar(pago.referencia_externa)}`);
         }
         if (pago.folio) extras.push(`Folio: ${escapar(pago.folio)}`);
+        if (pago.datos_origen?.bovtar) extras.push(`BOVTAR: ${escapar(pago.datos_origen.bovtar)}`);
         if (pago.codigo_autorizacion) {
             extras.push(`CodAut: ${escapar(pago.codigo_autorizacion)}`);
         }
@@ -333,7 +336,8 @@
 
     function actualizarCamposPorMedio(tarjeta) {
         const medioUI = tarjeta.querySelector("[data-haiku-checkout-medio]")?.value || "";
-        const req = requisitosMedio(codigoMedio(medioUI));
+        const medio = codigoMedio(medioUI);
+        const req = requisitosMedio(medio);
 
         [
             ["glosa", req.glosa],
@@ -344,7 +348,11 @@
             const input = tarjeta.querySelector(`[data-haiku-checkout-${campo}]`);
             if (fila) fila.hidden = !visible;
             input?.toggleAttribute("required", visible);
-            if (campo === "glosa") referenciaOpcional(fila, input, codigoMedio(medioUI));
+            if (campo === "glosa") referenciaOpcional(fila, input, medio);
+            if (campo === "codaut") {
+                const etiqueta = fila?.querySelector("span");
+                if (etiqueta) etiqueta.textContent = medio === "tarjeta_sin_especificar" ? "BOVTAR" : "CodAut";
+            }
         });
     }
 
@@ -471,7 +479,7 @@
             if (!medioDB) throw new Error("Selecciona el medio de pago.");
             if (req.glosa && !datos.glosa) throw new Error("Transferencia requiere Glosa.");
             if (req.folio && !datos.folio) throw new Error("Este medio requiere Folio.");
-            if (req.codAut && !datos.codAut) throw new Error("Este medio requiere CodAut.");
+            if (req.codAut && !datos.codAut) throw new Error(medioDB === "tarjeta_sin_especificar" ? "Tarjeta requiere BOVTAR." : "Este medio requiere CodAut.");
             if (!datos.manager) throw new Error("Manager debe revisar el pago antes de registrarlo.");
             if (fecha !== fechaActual()) throw new Error("La fecha seleccionada cambió. Vuelve a abrir el pago.");
             const { data, error } = await cliente.rpc("haiku_registrar_pago_checkout", {

@@ -22,6 +22,7 @@
         webpay_debito: "WebPay Débito",
         tarjeta_credito: "Tarjeta Crédito",
         tarjeta_debito: "Tarjeta Débito",
+        tarjeta_sin_especificar: "Tarjeta (sin especificar)",
         airbnb_prepaid_card: "Airbnb Prepaid Card", efectivo: "Efectivo",
         otro: "Otro"
     });
@@ -185,7 +186,7 @@
         if (["webpay_credito", "webpay_debito"].includes(pago.medio)) {
             return `CodAut: ${escapar(pago.codAut || "No registrado")}`;
         }
-        if (["tarjeta_credito", "tarjeta_debito"].includes(pago.medio)) {
+        if (["tarjeta_credito", "tarjeta_debito", "tarjeta_sin_especificar"].includes(pago.medio)) {
             return `Folio: ${escapar(pago.folio || "No registrado")} · BOVTAR: ${escapar(pago.bove || "No registrado")}`;
         }
         return "";

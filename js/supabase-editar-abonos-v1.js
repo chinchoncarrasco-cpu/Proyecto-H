@@ -15,6 +15,7 @@
         webpay_debito: "WebPay Débito",
         tarjeta_credito: "Tarjeta Crédito",
         tarjeta_debito: "Tarjeta Débito",
+        tarjeta_sin_especificar: "Tarjeta (sin especificar)",
         airbnb_prepaid_card: "Airbnb Prepaid Card", efectivo: "Efectivo",
         otro: "Otro"
     });
@@ -370,7 +371,7 @@
         if (["webpay_credito","webpay_debito"].includes(medio) && !datos.codaut) {
             throw new Error("Ingresa el CodAut de WebPay.");
         }
-        if (["tarjeta_credito","tarjeta_debito"].includes(medio) && (!datos.folio || !datos.bove)) {
+        if (["tarjeta_credito","tarjeta_debito","tarjeta_sin_especificar"].includes(medio) && (!datos.folio || !datos.bove)) {
             throw new Error("Ingresa Folio y BOVTAR.");
         }
 
@@ -407,9 +408,9 @@
                 p_monto: datos.monto,
                 p_medio_pago: datos.medio,
                 p_fecha_pago: datos.fecha,
-                p_folio: ["tarjeta_credito","tarjeta_debito"].includes(datos.medio) ? (datos.folio || null) : null,
-                p_codigo_autorizacion: ["webpay_credito","webpay_debito","tarjeta_credito","tarjeta_debito"].includes(datos.medio) ? (datos.codaut || null) : null,
-                p_bove: ["tarjeta_credito","tarjeta_debito"].includes(datos.medio) ? (datos.bove || null) : null,
+                p_folio: ["tarjeta_credito","tarjeta_debito","tarjeta_sin_especificar"].includes(datos.medio) ? (datos.folio || null) : null,
+                p_codigo_autorizacion: ["webpay_credito","webpay_debito","tarjeta_credito","tarjeta_debito","tarjeta_sin_especificar"].includes(datos.medio) ? (datos.codaut || null) : null,
+                p_bove: ["tarjeta_credito","tarjeta_debito","tarjeta_sin_especificar"].includes(datos.medio) ? (datos.bove || null) : null,
                 p_referencia_externa: ["transferencia", "airbnb_prepaid_card"].includes(datos.medio) ? (datos.glosa || null) : null,
                 p_observaciones: datos.observacion || null
             });

@@ -224,6 +224,7 @@
 
     const columnasPago = "id,reserva_id,pago_grupo_id,fecha_pago,estado,etapa_operativa,tipo_movimiento,medio_pago,monto,moneda,folio,codigo_autorizacion,bove,referencia_externa,actualizado_en";
     const medios = { transferencia: "Transferencia", efectivo: "Efectivo", tarjeta_credito: "Tarjeta crédito", tarjeta_debito: "Tarjeta débito",
+        tarjeta_sin_especificar: "Tarjeta (sin especificar)",
         webpay_credito: "WebPay crédito", webpay_debito: "WebPay débito", airbnb_prepaid_card: "Airbnb Prepaid Card", otro: "Otro" };
     const nombrePago = p => [moneda(p.monto), medios[p.medio_pago] || p.medio_pago, fecha(diaPago(p)),
         p.folio && "Folio " + p.folio, p.codigo_autorizacion && "CodAut " + p.codigo_autorizacion, p.referencia_externa].filter(Boolean).join(" · ");

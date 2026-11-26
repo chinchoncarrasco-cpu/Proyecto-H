@@ -3,11 +3,13 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),http=require('n
 const {chromium}=require('playwright');
 const {read,consultas,setup,agregarCasosAcumulados}=require('./fixtures/libro-medio-pago-manual.cjs');
 const root=path.resolve(__dirname,'..'),externos=[],errores=[];
+const estilos=['styles','supabase-asistente-v1','supabase-haku-reconciliacion-v1','sites-asistente-v1','haiku-libro-pagos-ui-v1',
+    'haiku-paleta-v1','haiku-tema-oscuro-v1','haiku-cereza-v1'];
 const server=http.createServer((req,res)=>{
     const pathname=new URL(req.url,'http://localhost').pathname;
     if(pathname==='/') return res.writeHead(200,{'Content-Type':'text/html;charset=utf-8'}).end(
         '<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'+
-        ['styles','supabase-asistente-v1','supabase-haku-reconciliacion-v1','sites-asistente-v1','haiku-libro-pagos-ui-v1'].map(s=>'<link rel="stylesheet" href="/css/'+s+'.css">').join('')+
+        estilos.map(s=>'<link rel="stylesheet" href="/css/'+s+'.css">').join('')+
         '</head><body style="margin:0"><div class="haiku-asistente-root"><div class="haiku-asistente-panel"><header class="haiku-asistente-cabecera">Haku</header><div id="out" class="haiku-asistente-mensajes"></div></div></div></body></html>');
     const file=path.resolve(root,'.'+pathname);
     if(!file.startsWith(root+path.sep)) return res.writeHead(403).end();
@@ -63,7 +65,16 @@ const server=http.createServer((req,res)=>{
             await page.getByRole('button',{name:'Aprobación manual',exact:true}).click();
             await assert.equal(await page.getByRole('heading',{name:'Definir medio de pago',exact:true}).count(),1);
             const selector=page.getByLabel('Medio de pago',{exact:true}),cta=page.getByRole('button',{name:'Confirmar medio y revalidar',exact:true});
-            assert.equal(await cta.isDisabled(),true);assert.equal(await selector.locator('option').count(),8);
+            assert.equal(await cta.isDisabled(),true);assert.equal(await selector.locator('option').count(),9);
+            const tarjeta=selector.locator('option[value="tarjeta_sin_especificar"]');
+            assert.equal(await tarjeta.textContent(),'Tarjeta (sin especificar)');
+            await selector.selectOption('tarjeta_sin_especificar');
+            for(const tema of ['claro','oscuro']){
+                await page.evaluate(tema=>document.documentElement.setAttribute('data-haiku-tema',tema),tema);
+                assert.equal(await selector.inputValue(),'tarjeta_sin_especificar');
+                assert.equal(await selector.evaluate(e=>e.getBoundingClientRect().right>innerWidth),false);
+            }
+            await page.evaluate(()=>document.documentElement.setAttribute('data-haiku-tema','claro'));
             await selector.selectOption('tarjeta_credito');await page.getByRole('button',{name:'Cancelar revisión',exact:true}).click();
             assert.equal(await page.evaluate(()=>h.aprobados.size),0);
             await page.getByRole('button',{name:'Aprobación manual',exact:true}).click();assert.equal(await selector.inputValue(),'');
@@ -79,7 +90,7 @@ const server=http.createServer((req,res)=>{
             try {
                 await preview.route('**/*',r=>new URL(r.request().url()).hostname==='127.0.0.1'?r.continue():r.abort());
                 await preview.setContent('<!doctype html><html><head><base href="'+page.url()+'">'+
-                    ['styles','supabase-asistente-v1','supabase-haku-reconciliacion-v1','sites-asistente-v1','haiku-libro-pagos-ui-v1'].map(s=>'<link rel="stylesheet" href="css/'+s+'.css">').join('')+
+                    estilos.map(s=>'<link rel="stylesheet" href="css/'+s+'.css">').join('')+
                     '</head><body style="display:block;margin:0;overflow:auto;width:100vw"><div class="haiku-asistente-root" style="position:static;width:100%;max-width:none">'+vista.html+'</div></body></html>');
                 await preview.locator('body').evaluate((e,font)=>e.style.fontFamily=font,vista.font);
                 await preview.locator('.haiku-incorporacion-manual-pago-panel').screenshot({path:path.join(require('node:os').tmpdir(),'haiku-medio-'+viewport.width+'.png')});

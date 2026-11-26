@@ -18,6 +18,7 @@
         "WebPay Débito": "webpay_debito",
         "Tarjeta Crédito": "tarjeta_credito",
         "Tarjeta Débito": "tarjeta_debito",
+        "Tarjeta (sin especificar)": "tarjeta_sin_especificar",
         "Airbnb Prepaid Card": "airbnb_prepaid_card", "Efectivo": "efectivo"
     });
 
@@ -27,6 +28,7 @@
         webpay_debito: "WebPay Débito",
         tarjeta_credito: "Tarjeta Crédito",
         tarjeta_debito: "Tarjeta Débito",
+        tarjeta_sin_especificar: "Tarjeta (sin especificar)",
         airbnb_prepaid_card: "Airbnb Prepaid Card", efectivo: "Efectivo"
     });
 
@@ -57,7 +59,7 @@
     function opcionesMedio(valor = "") {
         const opciones = [
             "Transferencia","WebPay Crédito","WebPay Débito",
-            "Tarjeta Crédito","Tarjeta Débito","Airbnb Prepaid Card", "Efectivo"
+            "Tarjeta Crédito","Tarjeta Débito","Tarjeta (sin especificar)","Airbnb Prepaid Card", "Efectivo"
         ];
         return [
             `<option value="" ${!valor ? "selected" : ""}>Seleccionar...</option>`,

@@ -50,7 +50,7 @@
         if (medio === "transferencia" && !valor("haiku-pago-glosa")) valida = false;
         if (["webpay_credito","webpay_debito"].includes(medio) &&
             !valor("haiku-pago-codaut")) valida = false;
-        if (["tarjeta_credito","tarjeta_debito"].includes(medio) &&
+        if (["tarjeta_credito","tarjeta_debito","tarjeta_sin_especificar"].includes(medio) &&
             (!valor("haiku-pago-folio") || !valor("haiku-pago-bove"))) valida = false;
         if (!window.haikuTienePermiso?.("pagos.registrar") ||
             !window.haikuTienePermiso?.("pagos.anular")) valida = false;
@@ -136,7 +136,7 @@
         if (!medio || !fecha) return ponerEstado("Completa medio de pago y fecha.", "error");
         if (medio === "transferencia" && !glosa) return ponerEstado("Transferencia requiere Glosa.", "error");
         if (["webpay_credito","webpay_debito"].includes(medio) && !codaut) return ponerEstado("WebPay requiere CodAut.", "error");
-        if (["tarjeta_credito","tarjeta_debito"].includes(medio) && (!folio || !bove)) return ponerEstado("Pago con tarjeta requiere Folio y BOVTAR.", "error");
+        if (["tarjeta_credito","tarjeta_debito","tarjeta_sin_especificar"].includes(medio) && (!folio || !bove)) return ponerEstado("Pago con tarjeta requiere Folio y BOVTAR.", "error");
         if (!window.haikuTienePermiso?.("pagos.registrar") || !window.haikuTienePermiso?.("pagos.anular")) {
             return ponerEstado("Tu usuario no tiene permiso para corregir este abono.", "error");
         }
@@ -156,9 +156,9 @@
                 p_monto: monto,
                 p_medio_pago: medio,
                 p_fecha_pago: fecha,
-                p_folio: ["tarjeta_credito","tarjeta_debito"].includes(medio) ? (folio || null) : null,
+                p_folio: ["tarjeta_credito","tarjeta_debito","tarjeta_sin_especificar"].includes(medio) ? (folio || null) : null,
                 p_codigo_autorizacion: ["webpay_credito","webpay_debito"].includes(medio) ? (codaut || null) : null,
-                p_bove: ["tarjeta_credito","tarjeta_debito"].includes(medio) ? (bove || null) : null,
+                p_bove: ["tarjeta_credito","tarjeta_debito","tarjeta_sin_especificar"].includes(medio) ? (bove || null) : null,
                 p_referencia_externa: ["transferencia", "airbnb_prepaid_card"].includes(medio) ? (glosa || null) : null,
                 p_observaciones: observacion || null
             });

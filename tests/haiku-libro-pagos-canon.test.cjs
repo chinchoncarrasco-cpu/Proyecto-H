@@ -77,6 +77,32 @@ const aplicacion=(extra={})=>({titular:'Persona Prueba',cabana:5,fecha_bloque:'2
  monto:30000,concepto:'Tinaja',tipo_movimiento:'servicio',texto_original:'Folio 000271 // BOVTAR 008714 // Débito',
  origen:{hoja:'Sep26',celda:'AU47:AX47'},...extra});
 
+test('un POS recibido sin subtipo conserva el voucher y queda como Tarjeta (sin especificar)',()=>{
+    const original = aplicacion({ medio_pago:null, texto_original:'Folio 000271 // BOVTAR 008714',
+        evidencia_financiera:{sector:'pagos',estructura_fila:'fecha_detalle_concepto_monto',
+            columnas_ocupadas:{fecha:true,detalle:true,concepto:true,monto:true}} });
+    const normalizado = C.corregirPago(original);
+    assert.equal(original.medio_pago,null);
+    assert.equal(normalizado.medio_pago,'tarjeta_sin_especificar');
+    assert.equal(normalizado.medio_pago_regla,'pos_sin_tipo_recepcion');
+    for (const campo of ['folio','bovtar','monto','fecha_comprobante','texto_original','origen'])
+        assert.deepEqual(normalizado[campo],original[campo]);
+    for (const [cambio,medio] of [
+        [{bovtar:null,bove:'008714'},null],
+        [{codigo_autorizacion:'121212'},null],
+        [{pago_recibido:false},null],
+        [{estado_pago:'por_confirmar'},null],
+        [{fecha_comprobante:'2026-02-31'},null],
+        [{fecha_comprobante_variable:true},null],
+        [{monto:-30000},null],
+        [{evidencia_financiera:null},null],
+        [{texto_original:'Folio 000271 // BOVTAR 008714 // TC'},null],
+        [{texto_original:'Folio 000271 // BOVTAR 008714 // TDC'},'credito'],
+        [{texto_original:'Folio 000271 // BOVTAR 008714 // Débito'},'debito'],
+        [{texto_original:'Folio 000271 // BOVTAR 008714 // WebPay'},'webpay']
+    ]) assert.equal(C.corregirPago({...original,...cambio}).medio_pago,medio,JSON.stringify(cambio));
+});
+
 test('Camila: explicit total creates one transaction with Tinaja and firewood applications',()=>{
  const filas=[aplicacion({texto_original:'TOTAL $38.000 // Folio 000271 // BOVTAR 008714'}),
   aplicacion({monto:8000,concepto:'Leña',origen:{hoja:'Sep26',celda:'AU48:AX48'},texto_original:'TOTAL $38.000 // Folio 000271 // BOVTAR 008714'})];

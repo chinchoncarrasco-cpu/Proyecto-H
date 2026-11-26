@@ -21,6 +21,7 @@
         webpay_debito: "WebPay Débito",
         tarjeta_credito: "Tarjeta Crédito",
         tarjeta_debito: "Tarjeta Débito",
+        tarjeta_sin_especificar: "Tarjeta (sin especificar)",
         airbnb_prepaid_card: "Airbnb Prepaid Card", efectivo: "Efectivo",
         otro: "Otro"
     });
@@ -70,13 +71,13 @@
         const d=datosModal(),saldo=numeroTexto("haiku-pago-saldo");if(!(d.monto>saldo||saldo<=0)||!basicoValido(d))return;
         if(d.medio==="transferencia"&&!d.glosa)return estadoPago("Ingresa la glosa de la transferencia.","error");
         if(["webpay_credito","webpay_debito"].includes(d.medio)&&!d.codaut)return estadoPago("Ingresa el CodAut de WebPay.","error");
-        if(["tarjeta_credito","tarjeta_debito"].includes(d.medio)&&(!d.folio||!d.bovtar))return estadoPago("Ingresa Folio y BOVTAR.","error");
+        if(["tarjeta_credito","tarjeta_debito","tarjeta_sin_especificar"].includes(d.medio)&&(!d.folio||!d.bovtar))return estadoPago("Ingresa Folio y BOVTAR.","error");
         if(!window.haikuTienePermiso?.("pagos.registrar"))return estadoPago("Tu usuario no tiene permiso para registrar pagos.","error");
         registrando=true;const btn=document.getElementById("haiku-pago-confirmar"),txt=btn?.textContent||"Registrar pago";if(btn){btn.disabled=true;btn.textContent="Registrando..."}estadoPago("Registrando pago y saldo a favor...");
         try{
             // El parámetro RPC `p_bove` es un nombre heredado: en pagos de
             // tarjeta transporta BOVTAR. El BOVE SII se registra por su flujo propio.
-            const{data,error}=await sb.rpc("haiku_registrar_pago_grupo",{p_reserva_id:d.reservaId,p_monto:d.monto,p_medio_pago:d.medio,p_etapa_operativa:"abono",p_fecha_pago:d.fecha,p_folio:["tarjeta_credito","tarjeta_debito"].includes(d.medio)?d.folio||null:null,p_codigo_autorizacion:["webpay_credito","webpay_debito"].includes(d.medio)?d.codaut||null:null,p_bove:["tarjeta_credito","tarjeta_debito"].includes(d.medio)?d.bovtar||null:null,p_referencia_externa:["transferencia", "airbnb_prepaid_card"].includes(d.medio) ?d.glosa||null:null,p_observaciones:d.observacion||null});if(error)throw error;
+            const{data,error}=await sb.rpc("haiku_registrar_pago_grupo",{p_reserva_id:d.reservaId,p_monto:d.monto,p_medio_pago:d.medio,p_etapa_operativa:"abono",p_fecha_pago:d.fecha,p_folio:["tarjeta_credito","tarjeta_debito","tarjeta_sin_especificar"].includes(d.medio)?d.folio||null:null,p_codigo_autorizacion:["webpay_credito","webpay_debito"].includes(d.medio)?d.codaut||null:null,p_bove:["tarjeta_credito","tarjeta_debito","tarjeta_sin_especificar"].includes(d.medio)?d.bovtar||null:null,p_referencia_externa:["transferencia", "airbnb_prepaid_card"].includes(d.medio) ?d.glosa||null:null,p_observaciones:d.observacion||null});if(error)throw error;
             window.HAIKU_PAGOS_REFRESH_V1?.escrituraConfirmada("registrar pago con excedente");
             limpiarCache();await Promise.allSettled([window.haikuCargarAbonosSupabase?.(),window.haikuCargarSaldosCheckinSupabase?.(),window.haikuSincronizarReservasSupabase?.(),window.haikuCargarCheckoutSupabase?.(),window.HAIKU_EDITAR_ABONOS_V1?.refrescar?.()]);
             ["haiku-pago-monto","haiku-pago-glosa","haiku-pago-codaut","haiku-pago-folio","haiku-pago-bove","haiku-pago-observacion"].forEach(id=>{const el=document.getElementById(id);if(el)el.value=""});

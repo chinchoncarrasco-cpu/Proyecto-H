@@ -638,6 +638,9 @@
         } else if (tieneCredito) {
             medioRpc = "tarjeta_credito";
             medioEtiqueta = "Tarjeta Crédito";
+        } else if (medioTexto === "tarjeta (sin especificar)" || medioTexto === "tarjeta_sin_especificar") {
+            medioRpc = "tarjeta_sin_especificar";
+            medioEtiqueta = "Tarjeta (sin especificar)";
         }
 
         if (!medioRpc) return null;

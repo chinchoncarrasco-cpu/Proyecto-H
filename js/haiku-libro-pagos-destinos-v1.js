@@ -314,7 +314,7 @@
             pago?.tipo_movimiento!=='servicio' ||
             pago?.pago_recibido!==true || pago?.estado_pago!=='registrado_en_libro' ||
             pago?.moneda!=='CLP' || pago?.monto!==cantidad*10000 ||
-            !['debito','credito','tarjeta_debito','tarjeta_credito'].includes(pago?.medio_pago) ||
+            !['debito','credito','tarjeta_debito','tarjeta_credito','tarjeta_sin_especificar'].includes(pago?.medio_pago) ||
             !pago?.folio || !pago?.bovtar || pago?.codigo_autorizacion ||
             !/^\d{4}-\d{2}-\d{2}$/.test(pago?.fecha_comprobante||'') ||
             !pago?.origen?.hoja || !pago?.origen?.celda ||
