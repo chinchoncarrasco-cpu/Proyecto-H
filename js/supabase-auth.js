@@ -162,14 +162,15 @@
     const botonSalir =
         document.getElementById("haiku-cerrar-sesion");
     const iconoPestana = document.querySelector("link[data-haku-favicon]");
+    const iconoAnonimo = iconoPestana?.getAttribute("href");
     const iconoActivo = iconoPestana?.getAttribute("data-haku-favicon");
     let privacidadBloqueada = false;
     let turnoSesion = 0;
     let validacionSesion = null;
 
     function actualizarIconoPestana() {
-        if (iconoActivo) {
-            iconoPestana.href = window.haikuSesion && !privacidadBloqueada ? iconoActivo : "data:,";
+        if (iconoActivo && iconoAnonimo) {
+            iconoPestana.href = window.haikuSesion && !privacidadBloqueada ? iconoActivo : iconoAnonimo;
         }
     }
 

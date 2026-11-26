@@ -67,7 +67,7 @@ async function run() {
             const message = page.locator("#haiku-asistente-texto");
             await page.waitForFunction(() => window.HAIKU_ASISTENTE && document.querySelector(".haiku-cereza-cabecera"));
             const favicon = page.locator("link[data-haku-favicon]");
-            assert.equal(await favicon.getAttribute("href"), "data:,");
+            assert.match(await favicon.getAttribute("href"), /^data:image\/svg\+xml,/);
             assert.equal(await favicon.getAttribute("data-haku-favicon"), "assets/haku-cordillera.svg");
             assert.equal(await chat.isVisible(), false);
             assert.equal(await bubble.isVisible(), false);

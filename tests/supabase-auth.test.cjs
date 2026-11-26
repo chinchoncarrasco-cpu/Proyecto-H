@@ -5,13 +5,15 @@ const vm = require('node:vm');
 const { parseHTML } = require('linkedom');
 
 const fuente = fs.readFileSync(require.resolve('../js/supabase-auth.js'), 'utf8');
+const iconoAnonimo = parseHTML(fs.readFileSync(require.resolve('../panel.html'), 'utf8'))
+    .document.querySelector('link[rel="icon"]').getAttribute('href');
 const sesion = { access_token: 'token-de-prueba', user: { id: 'usuario-de-prueba', email: 'operador@example.test' } };
 const autorizado = { data: { usuario: { activo: true }, roles: [], permisos: ['reservas.ver'] } };
 const microtareas = () => new Promise(resolve => setImmediate(resolve));
 
 async function entorno(consultar, { sesionInicial = null, errorIngreso = null } = {}) {
     const { window, document, Event, CustomEvent } = parseHTML(
-        '<html><head><link rel="icon" href="data:," data-haku-favicon="assets/haku-cordillera.svg"></head><body></body></html>'
+        `<html><head><link rel="icon" href="${iconoAnonimo}" data-haku-favicon="assets/haku-cordillera.svg"></head><body></body></html>`
     );
     const cierres = [], tareas = [];
     let listener, authOcupado = false, consultas = 0, avisos = 0;
@@ -98,15 +100,16 @@ test('el acceso se abre con los campos vacíos aunque el navegador conserve el c
 
 test('Cordillera identifica la pestaña durante la sesión y deja anónimos el acceso y el bloqueo', async () => {
     const e = await entorno(() => autorizado);
-    assert.equal(e.icono(), 'data:,');
+    assert.match(iconoAnonimo, /^data:image\/svg\+xml,/);
+    assert.equal(e.icono(), iconoAnonimo);
     await e.ingresar();
     assert.equal(e.icono(), 'assets/haku-cordillera.svg');
     e.privacidad(true);
-    assert.equal(e.icono(), 'data:,');
+    assert.equal(e.icono(), iconoAnonimo);
     e.privacidad(false);
     assert.equal(e.icono(), 'assets/haku-cordillera.svg');
     await e.notificar('SIGNED_OUT', null);
-    assert.equal(e.icono(), 'data:,');
+    assert.equal(e.icono(), iconoAnonimo);
 });
 
 test('la demora al validar no cierra la sesión y permite recuperarla al comprobar otra vez', async () => {

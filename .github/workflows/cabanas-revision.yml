@@ -7,6 +7,9 @@ on:
       - "js/haiku-tareas-generales-v1.js"
       - "js/supabase-auth.js"
       - "tests/supabase-auth.test.cjs"
+      - "tests/haiku-cereza-browser-check.cjs"
+      - "panel.html"
+      - "assets/haku-cordillera*.svg"
       - "css/haiku-tareas-generales-v1.css"
       - "supabase/migrations/*_tareas_generales_seguimiento_v1.sql"
       - "tests/tareas-generales*.cjs"
@@ -78,7 +81,9 @@ jobs:
       - name: Acceso interno durante fallos de Supabase
         env:
           NODE_PATH: ${{ runner.temp }}/haku-ui/node_modules
-        run: node --test tests/supabase-auth.test.cjs
+        run: |
+          node --test tests/supabase-auth.test.cjs
+          node tests/haiku-cereza-browser-check.cjs
 
       - name: Insumos y salidas con contexto de estadía
         env:
