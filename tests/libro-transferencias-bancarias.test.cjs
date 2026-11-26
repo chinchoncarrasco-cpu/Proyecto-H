@@ -240,6 +240,40 @@ test('una glosa con total repartido queda en una ficha sin preparar partes indep
  assert.match(items[0].motivos.join(' '),/Falta el número de operación/);
  assert.ok(!Q.serializarIncorporacion(plan).some(i=>i.tipo==='pago'));
 });
+test('una transferencia repartida y conciliada sólo cubre su desglose exacto', async () => {
+ const glosa = 'Transf. 0000001200 PERSONA FICTICIA // GO (180.000 TOTAL)';
+ const libro = F.leer([{pagos:[
+  {glosa,monto:125000,concepto:'cab10/1noche'},
+  {glosa,monto:20000,concepto:'TINAJA'},
+  {glosa,monto:35000,concepto:'LATE CHECK OUT'}
+ ]}]);
+ const banco = F.S.evidenciaTransferencia(libro.pagos[0]);
+ const componentes = libro.pagos.map(p => ({...p, reserva_id:'reserva-sintetica-0', estadia_id:'estadia-sintetica-0'}));
+ const pago = guardado({monto:180000,referencia_externa:glosa,datos_origen:{
+  source_kind:'libro_reserva', aprobado_manualmente:true, operacion_id:'conciliacion-sintetica',
+  evidencia_transferencia:banco, distribucion_manual:{
+   tipo:'transferencia_repartida',total:180000,reserva_id_ancla:'reserva-sintetica-0',
+   estadia_id:'estadia-sintetica-0',componentes
+  }
+ }});
+ const db = F.cliente(libro.reservas,[pago]);
+ const comparacion = await Q.compararSistema(libro.reservas,db,q);
+ assert.deepEqual(comparacion.pagosDetalle.map(p=>[p.estado,p.sistema?.id]),[
+  ['en_sistema',pago.id],['en_sistema',pago.id],['en_sistema',pago.id]
+ ]);
+ const plan = await Q.prepararIncorporacion({reservas:libro.reservas,q,comparacion},new Map(),new Set(),db);
+ assert.ok(!Q.serializarIncorporacion(plan).some(i=>i.tipo==='pago'));
+ assert.equal(plan.items.filter(i=>i.pagoLibro&&i.categoria==='omitidos').length,3);
+ const otraFuente = structuredClone(pago);
+ otraFuente.datos_origen.distribucion_manual.componentes[1].origen.celda = 'Z99';
+ const otros = [[otraFuente], [pago,{...pago,id:'segundo'}], [{...pago,reserva_id:'otra-reserva'}],
+  [{...pago,estado:'anulado'}]];
+ for (const guardados of otros) {
+  const revision = await Q.compararSistema(libro.reservas,F.cliente(libro.reservas,guardados),q);
+  assert.deepEqual(revision.pagosDetalle.map(p=>p.estado),['revisar','revisar','revisar']);
+ }
+ sinEscrituras({db});
+});
 test('sólo la confirmación final envía el indicador al writer, sin aprobación manual ficticia',async()=>{
  const h=await comparar([{pagos:[{glosa:F.glosa+' // Operacion 901'}]}]);
  const plan=await Q.prepararIncorporacion(h.result,new Map(),new Set(),h.db);
