@@ -230,6 +230,7 @@
     const mediosPago = {
         transferencia: "transferencia", transf: "transferencia", efectivo: "efectivo",
         "tarjeta debito": "tarjeta_debito", debito: "tarjeta_debito", "tarjeta credito": "tarjeta_credito",
+        "tarjeta (sin especificar)": "tarjeta_sin_especificar", "tarjeta sin especificar": "tarjeta_sin_especificar",
         credito: "tarjeta_credito", "webpay credito": "webpay_credito", "webpay debito": "webpay_debito",
         "airbnb prepaid card": "airbnb_prepaid_card", otro: "otro"
     };

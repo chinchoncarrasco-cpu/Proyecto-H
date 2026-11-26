@@ -183,9 +183,10 @@
         if (m.includes("webpay") || !m.includes("tarjeta")) return null;
         const credito = m.includes("credito");
         const debito = m.includes("debito");
-        if (credito === debito) return null;
+        const sinTipo = m === "tarjeta (sin especificar)" || m === "tarjeta_sin_especificar";
+        if (!sinTipo && credito === debito) return null;
         return {
-            medio: credito ? "tarjeta_credito" : "tarjeta_debito",
+            medio: sinTipo ? "tarjeta_sin_especificar" : credito ? "tarjeta_credito" : "tarjeta_debito",
             monto: Number(p?.monto),
             fecha: /^\d{4}-\d{2}-\d{2}$/.test(String(p?.fecha || "")) ? String(p.fecha) : null,
             folio: String(p?.folio || "").trim(),

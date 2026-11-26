@@ -183,7 +183,7 @@
         const t=normalizarBase(pago?.texto_original||''),fila=pago?.evidencia_financiera?.columnas_ocupadas;
         return pago?.tipo_movimiento==='penalidad'&&pago.evidencia_financiera?.sector==='pagos'&&
             fila?.fecha&&fila.detalle&&fila.concepto&&fila.monto&&pago.folio&&pago.bovtar&&
-            ['credito','debito','tarjeta_credito','tarjeta_debito','webpay_credito','webpay_debito'].includes(pago.medio_pago)&&
+            ['credito','debito','tarjeta_credito','tarjeta_debito','tarjeta_sin_especificar','webpay_credito','webpay_debito'].includes(pago.medio_pago)&&
             Number.isSafeInteger(pago.monto)&&pago.monto>0&&/^\d{4}-\d{2}-\d{2}$/.test(pago.fecha_comprobante||'')&&
             !/\b(?:por|x)\s+pagar\b|saldo\s+pendiente|reembolso|devolucion|nota\s+de\s+credito/.test(t);
     }
@@ -237,7 +237,7 @@
         const texto = normalizarBase(pago.texto_original || "");
         const montoValido = Number.isFinite(Number(pago.monto)) && Number(pago.monto) > 0;
         const fechaValida = /^\d{4}-\d{2}-\d{2}$/.test(String(pago.fecha_comprobante || ""));
-        const medioValido = ["transferencia","webpay","webpay_debito","webpay_credito","debito","credito","tarjeta_debito","tarjeta_credito","airbnb_prepaid_card","efectivo"].includes(pago.medio_pago);
+        const medioValido = ["transferencia","webpay","webpay_debito","webpay_credito","debito","credito","tarjeta_debito","tarjeta_credito","tarjeta_sin_especificar","airbnb_prepaid_card","efectivo"].includes(pago.medio_pago);
         const identificadorFuerte = !!pago.codigo_autorizacion || !!(pago.folio && pago.bovtar);
         // La ubicación en Pagos, un titular o una fecha no acreditan otro
         // movimiento. Cada fila aporta sus propios datos; una referencia a

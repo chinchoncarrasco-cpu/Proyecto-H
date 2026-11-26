@@ -21,12 +21,12 @@ for(const signal of ['PrePago','FC','PrePago / FC','TC','TD']) test(signal+' sig
     assert.equal(parseado.pagos.length,1);assert.equal(parseado.pagos[0].medio_pago,null);
     assert.equal(h.C.corregirResultado(parseado).pagos[0].medio_pago,null);
 });
-test('medio único faltante y aprobable=false ofrecen formulario con siete medios, sin escrituras',async()=>{
+test('medio único faltante y aprobable=false ofrecen formulario con ocho medios, sin escrituras',async()=>{
     const h=entorno(),plan=await h.preparar(),i=h.item(plan),original=JSON.stringify(h.r),fila=h.render(plan);
     assert.equal(i.aprobable,false);assert.equal(i.manualPago.tipo,'definir_medio_pago');assert.equal(h.Q.resolucionManualDisponible(i),true);
     await boton(fila,'Aprobación manual').events.click();
     const panel=fila.querySelector('.haiku-incorporacion-manual-pago-panel'),selector=panel.querySelector('select');assert.equal(panel.hidden,false);
-    assert.deepEqual(Array.from(selector.children).map(x=>x.value),['','transferencia','tarjeta_credito','tarjeta_debito','webpay_credito','webpay_debito','efectivo','airbnb_prepaid_card']);
+    assert.deepEqual(Array.from(selector.children).map(x=>x.value),['','transferencia','tarjeta_credito','tarjeta_debito','tarjeta_sin_especificar','webpay_credito','webpay_debito','efectivo','airbnb_prepaid_card']);
     selector.value='tarjeta_credito';selector.events.change();assert.equal(boton(fila,'Confirmar medio y revalidar').disabled,false);
     await boton(fila,'Cancelar revisión').events.click();assert.equal(selector.value,'');assert.equal(panel.hidden,true);
     assert.equal(JSON.stringify(h.r),original);assert.equal(h.aprobados.size,0);assert.equal(escrituras(h).length,0);

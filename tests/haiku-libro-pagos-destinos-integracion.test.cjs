@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 global.HAIKU_LIBRO_SEMANTICA = require('../js/haiku-libro-semantica-v1.js');
+require('../js/haiku-libro-pagos-canon-v1.js');
 global.HAIKU_LIBRO_PAGOS_DESTINOS_V1 = require('../js/haiku-libro-pagos-destinos-v1.js');
 delete require.cache[require.resolve('../js/haiku-libro-consultas-v1.js')];
 const Q = require('../js/haiku-libro-consultas-v1.js');
@@ -45,6 +46,35 @@ function cliente(tablas, fallarFinanzas = false) {
         async rpc() { throw new Error('Una prueba de lectura no debe invocar RPC.'); }
     };
 }
+
+test('POS sin subtipo prepara alojamiento, conserva crédito previo y bloquea otra cabaña', async () => {
+    const recibo = pago({ tipo_movimiento:'alojamiento', concepto:'CAB 1 / 1 noche', cabana:1,
+        clasificacion_financiera:'pago_real', medio_pago:null, codigo_autorizacion:null, folio:'000471', bovtar:'007514',
+        texto_original:'Folio 000471 // BOVTAR 007514',
+        evidencia_financiera:{sector:'pagos',estructura_fila:'fecha_detalle_concepto_monto',
+            columnas_ocupadas:{fecha:true,detalle:true,concepto:true,monto:true}} });
+    const libro = reserva(recibo);
+    const comparar = (reservaLibro, pagos = []) =>
+        Q.compararSistema([reservaLibro], cliente({reserva_estadias:[estadia(libro)],pagos}), q);
+    const nuevo = await comparar(libro);
+    assert.equal(nuevo.pagosDetalle[0].estado,'nuevo_seguro');
+    const item = Q.crearPlanIncorporacion([libro],nuevo).items.find(i => i.pagoLibro);
+    assert.equal(item.categoria,'pagos');
+    assert.equal(item.payload.argumentos.p_medio_pago,'tarjeta_sin_especificar');
+    assert.equal(item.payload.argumentos.p_bove,'007514');
+    assert.equal(item.payload.argumentos.p_observaciones.split('\n')[1],recibo.texto_original);
+
+    const registrado = { id:'p-pos', reserva_id:'r1', monto:recibo.monto, moneda:'CLP', estado:'confirmado',
+        tipo_movimiento:'pago', medio_pago:'tarjeta_credito', folio:recibo.folio,
+        datos_origen:{bovtar:recibo.bovtar}, fecha_pago:recibo.fecha_comprobante };
+    const otraCabana = reserva({...recibo,concepto:'CAB 2 / 1 noche'});
+    assert.equal((await comparar(otraCabana,[registrado])).pagosDetalle[0].estado,'en_sistema');
+    const sinRegistrar = await comparar(otraCabana);
+    const revision = Q.crearPlanIncorporacion([otraCabana],sinRegistrar).items.find(i => i.pagoLibro);
+    assert.equal(revision.categoria,'dudosos');
+    assert.equal(revision.payload,null);
+    assert.match(revision.motivos.join(' '),/otra cabaña/);
+});
 
 test('comparación adjunta destino único, pero el plan bloquea escritura por contrato incompatible', async () => {
     const p = pago(), r = reserva(p);

@@ -4,7 +4,7 @@
     if (window.HAIKU_RESUMEN_PAGO_SITES_V1) return;
 
     const MEDIOS = ["Transferencia", "WebPay Crédito", "WebPay Débito",
-        "Tarjeta Crédito", "Tarjeta Débito", "Airbnb Prepaid Card", "Efectivo"];
+        "Tarjeta Crédito", "Tarjeta Débito", "Tarjeta (sin especificar)", "Airbnb Prepaid Card", "Efectivo"];
     let drawer = null;
     let actual = null;
     let guardando = false;
@@ -183,7 +183,7 @@
                 <label data-pago-campo="glosa" hidden><span>Glosa</span><input data-pago-glosa type="text" placeholder="Pegar glosa bancaria"></label>
                 <label data-pago-campo="folio" hidden>Folio<input data-pago-folio type="text" placeholder="Folio de transacción"></label>
                 <label data-pago-campo="bovtar" hidden>BOVTAR<input data-pago-bovtar type="text" placeholder="Código BOVTAR"></label>
-                <label data-pago-campo="codaut" hidden>CodAut<input data-pago-codaut type="text" placeholder="Código de autorización"></label>
+                <label data-pago-campo="codaut" hidden><span>CodAut</span><input data-pago-codaut type="text" placeholder="Código de autorización"></label>
                 ${tipo === "abono" ? `<label>Nota opcional<textarea data-pago-observacion placeholder="Ej: Abono recibido por titular..."></textarea></label>` :
                     `<label class="sites-resumen-pago-manager"><input data-pago-manager type="checkbox"><span>Manager revisó este pago</span></label>`}
             </div>` : `<p class="sites-resumen-pago-aviso">No hay saldo pendiente de cobro para esta reserva.</p>`}
@@ -210,6 +210,11 @@
             if (campo === "glosa") {
                 fila.querySelector("span").textContent = referenciaAirbnb ? "Referencia Airbnb / externa (opcional)" : "Glosa";
                 fila.querySelector("input").placeholder = referenciaAirbnb ? "Referencia real, si existe" : "Pegar glosa bancaria";
+            }
+            if (campo === "codaut") {
+                const pos = medio === "Tarjeta (sin especificar)";
+                fila.querySelector("span").textContent = pos ? "BOVTAR" : "CodAut";
+                fila.querySelector("input").placeholder = pos ? "Código BOVTAR" : "Código de autorización";
             }
         }
     }
@@ -252,7 +257,7 @@
         if (requisitos.folio && !datos.folio) return "Ingresa el Folio del pago.";
         if (requisitos.bovtar && !datos.bovtar) return "Ingresa el BOVTAR del pago.";
         if ((requisitos.codAut || requisitos.codaut) && !datos.codAut) {
-            return "Ingresa el CodAut del pago.";
+            return datos.medio === "Tarjeta (sin especificar)" ? "Ingresa el BOVTAR del pago." : "Ingresa el CodAut del pago.";
         }
         return "";
     }

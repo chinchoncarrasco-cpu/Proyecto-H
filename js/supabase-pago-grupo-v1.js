@@ -21,6 +21,7 @@
         webpay_debito: "WebPay Débito",
         tarjeta_credito: "Tarjeta Crédito",
         tarjeta_debito: "Tarjeta Débito",
+        tarjeta_sin_especificar: "Tarjeta (sin especificar)",
         airbnb_prepaid_card: "Airbnb Prepaid Card", efectivo: "Efectivo",
         otro: "Otro"
     });
@@ -155,6 +156,7 @@
                             <option value="webpay_debito">WebPay Débito</option>
                             <option value="tarjeta_credito">Tarjeta Crédito</option>
                             <option value="tarjeta_debito">Tarjeta Débito</option>
+                            <option value="tarjeta_sin_especificar">Tarjeta (sin especificar)</option>
                             <option value="airbnb_prepaid_card" >Airbnb Prepaid Card</option>
                     <option value="efectivo">Efectivo</option>
                             <option value="otro">Otro</option>
@@ -489,8 +491,8 @@
         return {
             glosa: medio === "transferencia",
             codAut: ["webpay_credito", "webpay_debito"].includes(medio),
-            folio: ["tarjeta_credito", "tarjeta_debito"].includes(medio),
-            bovtar: ["tarjeta_credito", "tarjeta_debito"].includes(medio)
+            folio: ["tarjeta_credito", "tarjeta_debito", "tarjeta_sin_especificar"].includes(medio),
+            bovtar: ["tarjeta_credito", "tarjeta_debito", "tarjeta_sin_especificar"].includes(medio)
         };
     }
 
@@ -741,7 +743,7 @@
 
         if (["transferencia", "airbnb_prepaid_card"].includes(medio)) visibles.add("glosa");
         if (["webpay_credito","webpay_debito"].includes(medio)) visibles.add("codaut");
-        if (["tarjeta_credito","tarjeta_debito"].includes(medio)) {
+        if (["tarjeta_credito","tarjeta_debito","tarjeta_sin_especificar"].includes(medio)) {
             visibles.add("folio");
             visibles.add("bove");
         }
@@ -798,7 +800,7 @@
             throw new Error("Ingresa el CodAut de WebPay.");
         }
 
-        if (["tarjeta_credito","tarjeta_debito"].includes(medio) && (!datos.folio || !datos.bove)) {
+        if (["tarjeta_credito","tarjeta_debito","tarjeta_sin_especificar"].includes(medio) && (!datos.folio || !datos.bove)) {
             throw new Error("Ingresa Folio y BOVTAR.");
         }
 

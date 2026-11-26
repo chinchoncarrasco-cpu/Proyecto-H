@@ -1,7 +1,7 @@
 (() => {
 "use strict";
 const sb=window.haikuSupabase;if(!sb)return;
-const M={"Transferencia":"transferencia","WebPay Crédito":"webpay_credito","WebPay Débito":"webpay_debito","Tarjeta Crédito":"tarjeta_credito","Tarjeta Débito":"tarjeta_debito","Airbnb Prepaid Card": "airbnb_prepaid_card", "Efectivo":"efectivo"};
+const M={"Transferencia":"transferencia","WebPay Crédito":"webpay_credito","WebPay Débito":"webpay_debito","Tarjeta Crédito":"tarjeta_credito","Tarjeta Débito":"tarjeta_debito","Tarjeta (sin especificar)":"tarjeta_sin_especificar","Airbnb Prepaid Card": "airbnb_prepaid_card", "Efectivo":"efectivo"};
 const busy=new Set();let timer=0,seq=0;
 const esc=v=>String(v??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;");
 const money=v=>"$"+Number(v||0).toLocaleString("es-CL");
@@ -9,7 +9,7 @@ function req(m){
  if(m==="airbnb_prepaid_card")return[["glosa","Referencia Airbnb / externa (opcional)","Referencia real, si existe"]];
  if(m==="transferencia")return[["glosa","Glosa","Pegar glosa bancaria"]];
  if(["webpay_credito","webpay_debito"].includes(m))return[["codaut","CodAut","Código de autorización WebPay"]];
- if(["tarjeta_credito","tarjeta_debito"].includes(m))return[["folio","Folio","Folio de la transacción"],["bovtar","BOVTAR","Código BOVTAR"]];
+ if(["tarjeta_credito","tarjeta_debito","tarjeta_sin_especificar"].includes(m))return[["folio","Folio","Folio de la transacción"],["bovtar","BOVTAR","Código BOVTAR"]];
  return[];
 }
 function medio(card){return codigoMedio(card?.querySelector(".pago-abono-medio")?.value||"")}
@@ -33,7 +33,7 @@ function extras(card,m){
  const x={glosa:v("glosa"),codAut:v("codaut"),folio:v("folio"),bovtar:v("bovtar")};
  if(m==="transferencia"&&!x.glosa)throw Error("Para una transferencia debes ingresar la Glosa antes de confirmar el abono.");
  if(["webpay_credito","webpay_debito"].includes(m)&&!x.codAut)throw Error("Para WebPay debes ingresar el CodAut antes de confirmar el abono.");
- if(["tarjeta_credito","tarjeta_debito"].includes(m)&&(!x.folio||!x.bovtar))throw Error("Para pago con tarjeta debes ingresar Folio y BOVTAR antes de confirmar el abono.");
+ if(["tarjeta_credito","tarjeta_debito","tarjeta_sin_especificar"].includes(m)&&(!x.folio||!x.bovtar))throw Error("Para pago con tarjeta debes ingresar Folio y BOVTAR antes de confirmar el abono.");
  return x;
 }
 async function saldo(id){
@@ -48,7 +48,7 @@ function detail(p){
  if(p.medio_pago==="airbnb_prepaid_card")return p.referencia_externa?`Referencia Airbnb / externa: ${esc(p.referencia_externa)}`:"";
  if(p.medio_pago==="transferencia")return p.referencia_externa?`Glosa: ${esc(p.referencia_externa)}`:"Glosa: no registrada en este abono";
  if(["webpay_credito","webpay_debito"].includes(p.medio_pago))return p.codigo_autorizacion?`CodAut: ${esc(p.codigo_autorizacion)}`:"CodAut: no registrado en este abono";
- if(["tarjeta_credito","tarjeta_debito"].includes(p.medio_pago))return`Folio: ${p.folio?esc(p.folio):"no registrado"} · BOVTAR: ${p.bove?esc(p.bove):"no registrado"}`;
+ if(["tarjeta_credito","tarjeta_debito","tarjeta_sin_especificar"].includes(p.medio_pago))return`Folio: ${p.folio?esc(p.folio):"no registrado"} · BOVTAR: ${p.bove?esc(p.bove):"no registrado"}`;
  return"";
 }
 async function verified(){

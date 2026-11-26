@@ -5,7 +5,7 @@
 //
 // Reglas cerradas Proyecto H:
 // - COD.AUT           => WebPay Credito/Debito
-// - Folio + BOVTAR    => Tarjeta Credito/Debito
+// - Folio + BOVTAR    => Tarjeta, con subtipo cuando el comprobante lo indica
 // - Glosa             => Transferencia bancaria
 // - Efectivo          => sin referencia
 //
@@ -125,12 +125,10 @@
                 pago.medio = "Tarjeta Crédito";
             } else if (subtipo === "debito") {
                 pago.medio = "Tarjeta Débito";
+            } else if (folio && bovtar && (!medioClave || /^tarjeta(?:_sin_especificar|\s*\(?sin especificar\)?)?$/.test(medioClave))) {
+                pago.medio = "Tarjeta (sin especificar)";
             } else {
                 pago.medio = "Tarjeta · subtipo por revisar";
-                agregarUnico(
-                    advertencias,
-                    "Folio/BOVTAR identifica Tarjeta, pero no se pudo determinar si corresponde a Crédito o Débito."
-                );
             }
 
             if (!folio || !bovtar) {
@@ -234,7 +232,7 @@
         if (medio.includes("webpay") && medio.includes("credito")) return Boolean(texto(p.codaut));
         if (medio.includes("webpay") && medio.includes("debito")) return Boolean(texto(p.codaut));
         if (medio.includes("transferencia")) return Boolean(texto(p.glosa));
-        if (medio.includes("tarjeta") && (medio.includes("credito") || medio.includes("debito"))) {
+        if (medio.includes("tarjeta") && (medio.includes("credito") || medio.includes("debito") || medio === "tarjeta (sin especificar)")) {
             return Boolean(texto(p.folio) && texto(p.bovtar));
         }
         if (medio === "airbnb_prepaid_card" || /^airbnb\s+prepaid\s+card$/.test(medio)) return true;

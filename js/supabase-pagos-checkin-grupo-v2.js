@@ -8,7 +8,7 @@
     const sb=window.haikuSupabase;if(!sb)return;
     let procesando=false,guardando=false,timer=0,observer=null;
     const borradores=new Map();
-    const MEDIOS=Object.freeze({"Transferencia":"transferencia","WebPay Crédito":"webpay_credito","WebPay Débito":"webpay_debito","Tarjeta Crédito":"tarjeta_credito","Tarjeta Débito":"tarjeta_debito","Airbnb Prepaid Card": "airbnb_prepaid_card", "Efectivo":"efectivo"});
+    const MEDIOS=Object.freeze({"Transferencia":"transferencia","WebPay Crédito":"webpay_credito","WebPay Débito":"webpay_debito","Tarjeta Crédito":"tarjeta_credito","Tarjeta Débito":"tarjeta_debito","Tarjeta (sin especificar)":"tarjeta_sin_especificar","Airbnb Prepaid Card": "airbnb_prepaid_card", "Efectivo":"efectivo"});
     const esc=v=>String(v??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;");
     const money=v=>"$"+Math.round(Number(v||0)).toLocaleString("es-CL");
     const fecha=()=>{try{return String(fechaSeleccionada||"").slice(0,10)}catch{return""}};
@@ -28,9 +28,20 @@
         return[...grupos.values()].filter(g=>g.miembros.length>1);
     }
     async function finanzas(id){const{data,error}=await sb.rpc("haiku_finanzas_grupo",{p_reserva_id:id});if(error)throw error;return data||{}}
-    function requisitos(m){if(m==="transferencia")return{glosa:true,folio:false,codaut:false};if(["webpay_credito","webpay_debito"].includes(m))return{glosa:false,folio:false,codaut:true};if(["tarjeta_credito","tarjeta_debito"].includes(m))return{glosa:false,folio:true,codaut:true};return{glosa:false,folio:false,codaut:false}}
+    function requisitos(m){if(m==="transferencia")return{glosa:true,folio:false,codaut:false};if(["webpay_credito","webpay_debito"].includes(m))return{glosa:false,folio:false,codaut:true};if(["tarjeta_credito","tarjeta_debito","tarjeta_sin_especificar"].includes(m))return{glosa:false,folio:true,codaut:true};return{glosa:false,folio:false,codaut:false}}
     function guardar(card){const id=card?.dataset?.grupoId;if(!id)return;borradores.set(id,{monto:Number(card.querySelector("[data-grupo-saldo-monto]")?.value||0),medio:card.querySelector("[data-grupo-saldo-medio]")?.value||"",glosa:card.querySelector("[data-grupo-saldo-glosa]")?.value?.trim()||"",folio:card.querySelector("[data-grupo-saldo-folio]")?.value?.trim()||"",codaut:card.querySelector("[data-grupo-saldo-codaut]")?.value?.trim()||"",manager:card.querySelector("[data-grupo-saldo-manager]")?.checked===true});}
-    function campos(card){const ui=card.querySelector("[data-grupo-saldo-medio]")?.value||"",r=requisitos(codigoMedio(ui));[["glosa",r.glosa],["folio",r.folio],["codaut",r.codaut]].forEach(([k,on])=>{const el=card.querySelector(`[data-grupo-campo-${k}]`);if(el)el.hidden=!on;if(k==="glosa")referenciaOpcional(el,card.querySelector("[data-grupo-saldo-glosa]"),codigoMedio(ui))});}
+    function campos(card){
+        const medio=codigoMedio(card.querySelector("[data-grupo-saldo-medio]")?.value||""),r=requisitos(medio);
+        for(const [campo,visible] of [["glosa",r.glosa],["folio",r.folio],["codaut",r.codaut]]){
+            const fila=card.querySelector(`[data-grupo-campo-${campo}]`);
+            if(fila)fila.hidden=!visible;
+            if(campo==="glosa")referenciaOpcional(fila,card.querySelector("[data-grupo-saldo-glosa]"),medio);
+            if(campo==="codaut"){
+                const etiqueta=fila?.querySelector("span");
+                if(etiqueta)etiqueta.textContent=medio==="tarjeta_sin_especificar"?"BOVTAR":"CodAut";
+            }
+        }
+    }
 
     function htmlGrupo(g,f){
         const total=Number(f.total_alojamiento||0),saldo=Number(f.saldo_alojamiento||0),miembros=(f.miembros||[]).length?f.miembros:g.miembros.map(m=>({cabana:m.numero,reserva_id:m.reservaId})),cabs=miembros.map(m=>Number(m.cabana)).filter(Boolean).sort((a,b)=>a-b),d=borradores.get(g.grupoId)||{monto:saldo,medio:"",glosa:"",folio:"",codaut:"",manager:false},boves=g.miembros.map(m=>m.bove).filter(Boolean),boveComun=boves.length===g.miembros.length&&new Set(boves).size===1?boves[0]:"",servicios=Number(f.servicios_pendientes||0);
@@ -94,7 +105,7 @@
             if(!datos.manager)throw new Error("El pago debe ser revisado por Manager.");
             if(r.glosa&&!datos.glosa)throw new Error("Transferencia requiere Glosa.");
             if(r.folio&&!datos.folio)throw new Error("Completa el Folio.");
-            if(r.codaut&&!datos.codaut)throw new Error("Completa el CodAut.");
+            if(r.codaut&&!datos.codaut)throw new Error(medio==="tarjeta_sin_especificar"?"Completa el BOVTAR.":"Completa el CodAut.");
             if(fechaEsperada!==fecha())throw new Error("La fecha seleccionada cambió. Vuelve a abrir el pago.");
             const{data,error}=await sb.rpc("haiku_registrar_pago_checkin_grupo",{
                 p_reserva_id:contexto.rpcReservaId,p_monto:monto,p_medio_pago:medio,

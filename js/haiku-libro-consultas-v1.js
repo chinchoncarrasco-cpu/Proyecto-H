@@ -379,14 +379,16 @@
         const ocupadas = rango.ocupadas.length
             ? rango.ocupadas
             : (rango.checkin ? [rango.checkin] : []);
+        const reglaPos = root.HAIKU_LIBRO_PAGOS_CANON_V1?.aplicarTarjetaPosSinTipo;
+        const normalizarPagos = lista => Array.isArray(lista) ? (reglaPos ? lista.map(reglaPos) : lista) : [];
         return {
             ...base,
             cabana: cabanaNumero(base.cabana),
             fecha_checkin: rango.checkin,
             fecha_checkout: rango.checkout,
             fechas_ocupadas: ocupadas,
-            pagos: Array.isArray(base.pagos) ? base.pagos : [],
-            pagos_sin_asociacion: Array.isArray(base.pagos_sin_asociacion) ? base.pagos_sin_asociacion : [],
+            pagos: normalizarPagos(base.pagos),
+            pagos_sin_asociacion: normalizarPagos(base.pagos_sin_asociacion),
             servicios: Array.isArray(base.servicios) ? base.servicios : [],
             _serviciosNoLeidos:base._serviciosNoLeidos??!Array.isArray(base.servicios),
             advertencias: Array.isArray(base.advertencias) ? base.advertencias : []
@@ -447,7 +449,8 @@
         return ({
             transferencia: 'transferencia', debito: 'tarjeta_debito', credito: 'tarjeta_credito',
             webpay_debito: 'webpay_debito', webpay_credito: 'webpay_credito', tarjeta_debito: 'tarjeta_debito',
-            tarjeta_credito: 'tarjeta_credito', airbnb_prepaid_card: 'airbnb_prepaid_card', efectivo: 'efectivo'
+            tarjeta_credito: 'tarjeta_credito', tarjeta_sin_especificar: 'tarjeta_sin_especificar',
+            airbnb_prepaid_card: 'airbnb_prepaid_card', efectivo: 'efectivo'
         })[p?.medio_pago];
     }
 
@@ -461,7 +464,23 @@
     }
 
     function medioTarjetaFisica(p) {
-        return ['tarjeta_credito', 'tarjeta_debito'].includes(medioSistema(p));
+        return ['tarjeta_credito', 'tarjeta_debito', 'tarjeta_sin_especificar'].includes(medioSistema(p));
+    }
+
+    function medioLibroParaPagoExistente(libro, sistema) {
+        const medio = medioLibro(libro);
+        return medio === 'tarjeta_sin_especificar' && medioTarjetaFisica(sistema) && pagoCoincide(libro,sistema)
+            ? medioSistema(sistema) : medio;
+    }
+
+    function cabanaDistintaEnVoucherPos(pago, cabana) {
+        return pago.medio_pago_regla === 'pos_sin_tipo_recepcion' &&
+            [...S.normalizar(pago.concepto).matchAll(/\bcab(?:ana)?[.\s]*(\d+)\b/g)].some(match => Number(match[1]) !== Number(cabana));
+    }
+
+    function observacionesComprobante(pago) {
+        if (pago.medio_pago_regla !== 'pos_sin_tipo_recepcion') return pago.texto_original || null;
+        return `Tarjeta (sin especificar) según Folio y BOVTAR del Libro.\n${pago.texto_original || ''}`;
     }
 
     function codAutSistema(p) {
@@ -802,7 +821,7 @@
         const candidato = relacionados[0];
         const moneda = pago => String(pago?.moneda || "").trim().toUpperCase();
         const monedaLibro = moneda(pagoLibro), monedaSistema = moneda(candidato);
-        const medioPagoLibro = medioLibro(pagoLibro), medioPagoSistema = medioSistema(candidato);
+        const medioPagoLibro = medioLibroParaPagoExistente(pagoLibro,candidato), medioPagoSistema = medioSistema(candidato);
         const compatible = identidadCompleta(candidato) && S.normalizar(candidato.estado) === "confirmado" &&
             S.normalizar(candidato.tipo_movimiento) === "pago" && candidato.reserva_id === reservaId &&
             Number.isSafeInteger(Number(candidato.monto)) && Number(candidato.monto) === Number(pagoLibro.monto) &&
@@ -826,7 +845,7 @@
     function asociacionFinancieraInequivoca(pagoLibro, pagoSistema, coincidencias, destino) {
         const monedaLibro = String(pagoLibro?.moneda || '').trim().toUpperCase();
         const monedaSistema = String(pagoSistema?.moneda || '').trim().toUpperCase();
-        const medioPagoLibro = medioLibro(pagoLibro), medioPagoSistema = medioSistema(pagoSistema);
+        const medioPagoLibro = medioLibroParaPagoExistente(pagoLibro,pagoSistema), medioPagoSistema = medioSistema(pagoSistema);
         return coincidencias?.length === 1 && coincidencias[0]?.id && coincidencias[0].id === pagoSistema?.id &&
             destino?.bloqueado !== true && destino?.reserva_id && pagoSistema.reserva_id === destino.reserva_id &&
             pagoTieneIdentificadorFuerte(pagoLibro) && pagoCoincide(pagoLibro, pagoSistema) &&
@@ -1605,7 +1624,7 @@
         return pagoConfirmadoSistema(pagoSistema) && pagoSistema.reserva_id === sistema?.reserva_id &&
             Number(pagoSistema.monto) === Number(p.monto) &&
             String(pagoSistema.moneda || 'CLP').trim().toUpperCase() === String(p.moneda || 'CLP').trim().toUpperCase() &&
-            medioSistema(pagoSistema) === medioLibro(p) &&
+            medioSistema(pagoSistema) === medioLibroParaPagoExistente(p,pagoSistema) &&
             (!fecha || mismaFechaCalendario(pagoSistema.fecha_pago,p.fecha_comprobante));
     }
 
@@ -1623,7 +1642,8 @@
         if (pagoSistema?.reserva_id !== item.result.sistema?.reserva_id) diferencias.push('reserva/grupo incompatible');
         if (Number(pagoSistema?.monto) !== Number(item.p?.monto) ||
             String(pagoSistema?.moneda || 'CLP').trim().toUpperCase() !== String(item.p?.moneda || 'CLP').trim().toUpperCase()) diferencias.push('monto/moneda diferente');
-        if (medioSistema(pagoSistema) && medioLibro(item.p) && medioSistema(pagoSistema) !== medioLibro(item.p)) diferencias.push('medio de pago diferente');
+        const medioDetectado = medioLibroParaPagoExistente(item.p,pagoSistema);
+        if (medioSistema(pagoSistema) && medioDetectado && medioSistema(pagoSistema) !== medioDetectado) diferencias.push('medio de pago diferente');
         if (pagoSistema?.fecha_pago && item.p?.fecha_comprobante &&
             !mismaFechaCalendario(pagoSistema.fecha_pago,item.p.fecha_comprobante)) diferencias.push('fecha de pago diferente');
         return diferencias;
@@ -2005,6 +2025,8 @@
                 resolver(item,estados.AMBIGUO,null,'sin_destino',['Primero debe resolverse la reserva destino.']);
             } else if (item.p.airbnb_liquidacion_pendiente) {
                 resolver(item,estados.AMBIGUO,null,'airbnb_liquidacion_pendiente',[AIRBNB_LIQUIDACION_PENDIENTE]);
+            } else if (cabanaDistintaEnVoucherPos(item.p,item.result.libro.cabana)) {
+                resolver(item,estados.AMBIGUO,null,'pos_cabana_distinta',['El comprobante indica otra cabaña. Verifica a qué estadía corresponde.']);
             } else if (abonoWebpaySinEvidencia(item.p)) {
                 resolver(item,estados.AMBIGUO,null,'webpay_abono_incompleto',[WEBPAY_ABONO_INCOMPLETO]);
             } else if (item.p.concepto_pago?.requiere_verificacion) {
@@ -3331,7 +3353,7 @@
             q:{...q,incluirServicios:false,serviciosOperativos:false}};
     }
     function actualizacionPagoLibro(p, s) {
-        const propuesta = { monto:p.monto, moneda:p.moneda, medio_pago:medioLibro(p), folio:p.folio, bovtar:p.bovtar,
+        const propuesta = { monto:p.monto, moneda:p.moneda, medio_pago:medioLibroParaPagoExistente(p,s), folio:p.folio, bovtar:p.bovtar,
             codigo_autorizacion:p.codigo_autorizacion };
         if (p.fecha_comprobante && !mismaFechaCalendario(s.fecha_pago,p.fecha_comprobante)) propuesta.fecha_pago = p.fecha_comprobante + 'T12:00:00Z';
         if (p.medio_pago === 'transferencia') propuesta.referencia_externa = p.texto_original;
@@ -3823,7 +3845,7 @@
                 p_codigo_autorizacion: pago.codigo_autorizacion || null,
                 p_bove: bovtar,
                 p_referencia_externa: (medioLibro(pago) === 'airbnb_prepaid_card' ? pago.referencia_externa || null : pago.texto_original) || null,
-                p_observaciones: pago.texto_original || null,
+                p_observaciones: observacionesComprobante(pago),
                 p_aplicaciones: [],
                 p_modo_aplicacion: 'ninguno'
             },
@@ -3946,6 +3968,9 @@
         const p = item.manualPago?.tipo === DEFINIR_MEDIO_PAGO ? item.manualPago : item.resolucionMedio;
         if (!p || accion.tipo !== DEFINIR_MEDIO_PAGO ||
             !Object.hasOwn(root.HAIKU_LIBRO_PAGOS_CANON_V1.mediosCanonicos,accion.medio)) throw Error('Selecciona un medio de pago válido.');
+        if (accion.medio === 'tarjeta_sin_especificar' && (!normalizarId(p.original.folio) ||
+            !normalizarId(p.original.bovtar) || p.original.codigo_autorizacion))
+            throw Error('Tarjeta (sin especificar) requiere Folio y BOVTAR del comprobante POS.');
         const vigente = async () => {
             await verificarFuenteManual(result,plan,item);
             const e = estadoFuente(result);
@@ -5072,6 +5097,12 @@
                 item.aplicacionExistente=proponerAplicacionExistente(item,comp,r,capacidadServicios);
                 continue;
             }
+            if (cabanaDistintaEnVoucherPos(p,r.cabana)) {
+                const item = add('dudosos',id,texto,null,['El comprobante indica otra cabaña. Verifica a qué estadía corresponde.']);
+                item.pagoLibro = p;
+                item.aprobable = false;
+                continue;
+            }
             if (resolucionPago?.evidencia === 'transferencia_repartida') {
                 const {reparto,motivos} = resolucionPago;
                 if (transferenciasRepartidasVistas.has(reparto)) continue;
@@ -5158,7 +5189,7 @@
                             // El RPC histórico llama `p_bove` al canal de BOVTAR.
                             // Nunca se envía aquí el número tributario BOVE del Libro.
                             p_codigo_autorizacion: p.codigo_autorizacion, p_bove: p.bovtar || null,
-                            p_referencia_externa: (medioLibro(p) === 'airbnb_prepaid_card' ? p.referencia_externa || null : p.texto_original), p_observaciones: p.texto_original,
+                            p_referencia_externa: (medioLibro(p) === 'airbnb_prepaid_card' ? p.referencia_externa || null : p.texto_original), p_observaciones: observacionesComprobante(p),
                             p_aplicaciones: [], p_modo_aplicacion: 'ninguno' },
                         datos_origen: datosOrigenPago(p,{...destino,reserva_id:distribucion.reserva_id_ancla},{item_id:id}), aprobado_manualmente: manual },
                     manual ? [] : ['Requiere aprobación manual de esta parte del comprobante y su asociación.'], distribucion.dependeDe || [], ['pagos.registrar']);
@@ -5369,7 +5400,7 @@
                 argumentos: { p_reserva_id: destino?.reserva_id || null, p_monto: p.monto, p_medio_pago: medio || null, p_etapa_operativa: 'abono', p_referencia_externa: (medio === 'airbnb_prepaid_card' ? confirmacionAirbnb?.referenciaExterna || p.referencia_externa : p.texto_original) || null,
                     p_fecha_pago: confirmacionAirbnb?.fechaPago || p.fecha_comprobante || null, p_folio: confirmacionAirbnb ? null : p.folio || null, p_codigo_autorizacion: confirmacionAirbnb ? null : p.codigo_autorizacion || null,
                     // Adaptador de esquema heredado: `p_bove` transporta BOVTAR.
-                    p_bove: confirmacionAirbnb ? null : p.bovtar || null, p_observaciones: p.texto_original || null, p_aplicaciones: [], p_modo_aplicacion: 'alojamiento' },
+                    p_bove: confirmacionAirbnb ? null : p.bovtar || null, p_observaciones: observacionesComprobante(p), p_aplicaciones: [], p_modo_aplicacion: 'alojamiento' },
                 datos_origen: {...datosOrigenPago(p,destino,{item_id:id}),...(x.decisionPagoManual?.tipo === REVISION_ADMIN_PAGO ? {
                     revision_pago_admin_v1:structuredClone(x.decisionPagoManual.auditoria),evidencia_libro:structuredClone(p)} : {}),...(confirmacionAirbnb ? {
                     fecha:confirmacionAirbnb.fechaPago, evidencia_libro:structuredClone(p),
@@ -9144,7 +9175,8 @@
     function datosPagoIncorporacion(pago) {
         const medio = medioLibro(pago) || String(pago?.medio_pago || '').toLowerCase();
         const nombres = { transferencia:'Transferencia', webpay_credito:'WebPay Crédito', webpay_debito:'WebPay Débito',
-            tarjeta_credito:'Tarjeta Crédito', tarjeta_debito:'Tarjeta Débito', airbnb_prepaid_card: 'Prepago Airbnb', efectivo:'Efectivo' };
+            tarjeta_credito:'Tarjeta Crédito', tarjeta_debito:'Tarjeta Débito', tarjeta_sin_especificar:'Tarjeta (sin especificar)',
+            airbnb_prepaid_card: 'Prepago Airbnb', efectivo:'Efectivo' };
         let segundo = ['Detalle', pago?.texto_original || pago?.concepto || 'Sin dato'];
         if (medio === 'transferencia') segundo = ['Glosa', pago?.texto_original || 'Sin dato'];
         else if (medio.startsWith('webpay_')) segundo = ['CodAut', pago?.codigo_autorizacion || 'Sin dato'];
