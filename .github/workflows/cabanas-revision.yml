@@ -10,6 +10,7 @@ on:
       - "tests/haiku-cereza-browser-check.cjs"
       - "panel.html"
       - "assets/haku-cordillera*.svg"
+      - "assets/pestana-anonima.svg"
       - "css/haiku-tareas-generales-v1.css"
       - "supabase/migrations/*_tareas_generales_seguimiento_v1.sql"
       - "tests/tareas-generales*.cjs"

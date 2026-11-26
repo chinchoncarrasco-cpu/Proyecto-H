@@ -100,7 +100,8 @@ test('el acceso se abre con los campos vacíos aunque el navegador conserve el c
 
 test('Cordillera identifica la pestaña durante la sesión y deja anónimos el acceso y el bloqueo', async () => {
     const e = await entorno(() => autorizado);
-    assert.match(iconoAnonimo, /^data:image\/svg\+xml,/);
+    assert.equal(iconoAnonimo, 'assets/pestana-anonima.svg');
+    assert.ok(fs.existsSync(require.resolve('../' + iconoAnonimo)));
     assert.equal(e.icono(), iconoAnonimo);
     await e.ingresar();
     assert.equal(e.icono(), 'assets/haku-cordillera.svg');
