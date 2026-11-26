@@ -177,7 +177,7 @@
 
     // Compatibilidad de pagos del Libro real:
     // - una fila del bloque de pagos con monto representa un pago recibido;
-    // - "Webpay por confirmar" es un pendiente administrativo, no una deuda del huésped;
+    // - "WebPay por confirmar" se refiere a la fecha de abono; la fila acredita el pago;
     // - si la glosa dice débito/crédito, ese dato específico tiene prioridad sobre "Webpay".
     function comprobanteTarjetaPenalidad(pago){
         const t=normalizarBase(pago?.texto_original||''),fila=pago?.evidencia_financiera?.columnas_ocupadas;
@@ -190,8 +190,10 @@
     function ajustarPagoLibro(pago) {
         if (!pago || typeof pago !== "object") return pago;
         const texto = normalizarBase(pago.texto_original || "");
-        const pendienteCliente = /(?:\bpor\b|\bx\b)\s*pagar\b|saldo\s+pendiente/.test(texto);
         const webpayPorConfirmar = /web\s*pay.{0,25}(?:por|x)\s*confirmar/.test(texto);
+        const webpayNoRecibido = webpayPorConfirmar &&
+            /\b(?:rechazad[oa]|anulad[oa]|cancelad[oa]|no\s+recibid[oa]|pendiente\s+de\s+recibir)\b/.test(texto);
+        const pendienteCliente = webpayNoRecibido || /(?:\bpor\b|\bx\b)\s*pagar\b|saldo\s+pendiente/.test(texto);
         const copia = { ...pago, webpay_por_confirmar: webpayPorConfirmar };
 
         const canon = root.HAIKU_LIBRO_PAGOS_CANON_V1;

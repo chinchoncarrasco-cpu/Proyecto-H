@@ -398,6 +398,42 @@ test('relectura del writer v2 reconoce el recibo aunque cambie BOVE y se mueva l
  const h=await comparar([{desplazamiento:2,pagos:[{glosa:F.glosa+' // BOVE:17152'}]}],[g]);
  assert.equal(movimiento(h).estado,'en_sistema');sinEscrituras(h);
 });
+test('un traslado de cabaña con el mismo ingreso conserva el recibo guardado de esa reserva',async()=>{
+ const g=reciboHistorico(F.leer([{cabana:6}]));
+ const h=await comparar([{cabana:2,pagos:[{glosa:F.glosa+' // BOVE: 17152'}]}],[g]);
+ assert.equal(movimiento(h).estado,'en_sistema');
+ assert.equal(movimiento(h).sistema.id,g.id);
+ const plan=await Q.prepararIncorporacion(h.result,new Map(),new Set(),h.db);
+ assert.equal(plan.items.find(i=>i.pagoLibro).categoria,'omitidos');
+ assert.ok(!Q.serializarIncorporacion(plan).some(i=>i.tipo==='pago'));
+ sinEscrituras(h);
+});
+test('el recibo de otra cabaña no se asocia si la reserva tiene otro tramo del mismo ingreso',async()=>{
+ const g=reciboHistorico(F.leer([{cabana:6}]));
+ const actual=F.leer([{cabana:2}]),db=F.cliente(actual.reservas,[g]);
+ const tramo=db.estadias[0];
+ db.estadias.push({...tramo,id:'otra-estadia',cabanas:{numero:6},estado_estadia:'cancelada'});
+ const c=await Q.compararSistema(actual.reservas,db,q);
+ assert.equal(c.pagosDetalle[0].estado,'revisar');sinEscrituras({db});
+});
+test('una transferencia sin fecha actual se reconoce sólo con la misma fila y el texto íntegro del recibo guardado',async()=>{
+ const g=reciboHistorico(F.leer());
+ const h=await comparar([{pagos:[{fecha:null}]}],[g]);
+ assert.equal(movimiento(h).estado,'en_sistema');
+ assert.equal(movimiento(h).sistema.id,g.id);
+ const plan=await Q.prepararIncorporacion(h.result,new Map(),new Set(),h.db);
+ assert.equal(plan.items.find(i=>i.pagoLibro).categoria,'omitidos');
+ assert.ok(!Q.serializarIncorporacion(plan).some(i=>i.tipo==='pago'));
+ sinEscrituras(h);
+ for (const caso of [
+  {desplazamiento:2,pagos:[{fecha:null}]},
+  {pagos:[{fecha:null,glosa:F.glosa+' // comprobante distinto'}]},
+  {pagos:[{fecha:null,monto:76000}]}
+ ]) {
+  const distinto=await comparar([caso],[g]);
+  assert.equal(movimiento(distinto).estado,'revisar');sinEscrituras(distinto);
+ }
+});
 for(const pago of [{fecha:'2026-10-22'},{monto:76000},{glosa:'Transf. 0111111111 OTRO REMITENTE'},
  {glosa:F.glosa+' // Operacion 902'},{concepto:'cab11/1noche'},{glosa:F.glosa+' // por pagar'}])
  test('una contradicción financiera no queda oculta por un recibo anterior '+JSON.stringify(pago),async()=>{

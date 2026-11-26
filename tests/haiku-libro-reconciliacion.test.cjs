@@ -2833,9 +2833,13 @@ test('WebPay sin titular usa CAB y fecha o reconoce el abono ya confirmado en Pr
     assert.equal(confirmado.comparacion.pagosDetalle[0].estado,'en_sistema');
     assert.equal(confirmado.plan.items.find(i=>i.pagoLibro)?.categoria,'omitidos');
     assert.ok(!confirmado.operaciones.some(i=>i.tipo==='pago'));
-    const pendiente = await escenarioConceptoComprobante({...base, medio:'WebPay débito por confirmar'}).preparar();
-    assert.ok(!pendiente.operaciones.some(i=>i.tipo==='pago'));
-    assert.equal(pendiente.plan.items.find(i=>i.pagoLibro)?.categoria,'dudosos');
+    const abono = await escenarioConceptoComprobante({...base, medio:'WebPay débito por confirmar'}).preparar();
+    assert.equal(abono.comparacion.pagosDetalle[0].estado,'nuevo_seguro');
+    assert.equal(abono.plan.items.find(i=>i.pagoLibro)?.categoria,'pagos');
+    assert.equal(abono.operaciones.find(i=>i.tipo==='pago')?.argumentos.p_fecha_pago,'2026-10-30');
+    const excedido = await escenarioConceptoComprobante({...base, medio:'WebPay débito por confirmar', saldo:100000}).preparar();
+    assert.equal(excedido.plan.items.find(i=>i.pagoLibro)?.categoria,'dudosos');
+    assert.ok(!excedido.operaciones.some(i=>i.tipo==='pago'));
 });
 
 test('El mismo comprobante en el Libro o ya guardado no genera un segundo abono',async()=>{
