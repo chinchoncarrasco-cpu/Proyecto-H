@@ -253,7 +253,8 @@ function setPrivacyState(page,blocked) {
         assert.equal(stored.foto_posicion_y,position);
         assert.equal(stored.fotos_adicionales.length,1);
         assert.notEqual(stored.foto,stored.fotos_adicionales[0]);
-        const vehicleRow=card.locator('.hu-relacionados .hu-integrante').filter({hasText:type});
+        const vehicles=card.locator('.hu-bloque').filter({has:page.getByRole('heading',{name:'Vehículos de la estadía',exact:true})});
+        const vehicleRow=vehicles.locator('.hu-integrante').filter({hasText:type});
         const thumbnailAt=photo=>vehicleRow.locator('img.hu-vehiculo-miniatura[src="/guest-test-photo/'+encodeURIComponent(photo)+'"]');
         const thumbnail=thumbnailAt(stored.foto);
         await thumbnail.evaluate(image=>image.decode());
@@ -270,7 +271,8 @@ function setPrivacyState(page,blocked) {
 
         const openVehicle=vehicleRow.getByRole('button',{name:'Ver perfil',exact:true});
         const saveVehicle=vehicleForm.getByRole('button',{name:'Guardar vehículo',exact:true});
-        await openVehicle.click();
+        await card.locator('summary[aria-label="Más opciones del huésped"]').click();
+        await card.getByRole('button',{name:'Ver vehículo',exact:true}).click();
         const framedPhoto=vehicleForm.locator('.hu-vehicle-photo>img');
         await framedPhoto.evaluate(image=>image.decode());
         const framing=await framedPhoto.evaluate(image=>{
