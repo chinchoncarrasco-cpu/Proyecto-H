@@ -74,7 +74,7 @@
             modelo.catalogo = catalogo;
             modelo.error = "";
             if (!seleccionado()) {
-                modelo.seleccion = articulos()[0]?.codigo ?? "";
+                modelo.seleccion = articulos().find(a => !modelo.estado || a.estado === modelo.estado)?.codigo ?? "";
                 modelo.ficha = false;
             }
             if (modelo.abiertas.size === 0 && !modelo.catalogoMostrado) {
@@ -126,11 +126,15 @@
     }
 
     function metricas() {
-        const tarjetas = [["Artículos","total","articulos",articulos().length],
+        const tarjetas = [["Artículos","","articulos",articulos().length],
             ...estados.map((estado,i) => [["Disponibles","Críticos","Agotados"][i],estado,["disponibles","criticos","agotados"][i],articulos().filter(a => a.estado === estado).length])];
+        const filtraPorResumen = modelo.vista === "existencias" && !modelo.categoria && !modelo.filtro;
         return `<div class="inv-metricas">${tarjetas.map(([label,estado,imagen,n]) => `
-            <div class="inv-metrica" data-estado="${estado}"><span class="inv-metrica-icono">${icono(imagen)}</span>
-                <div><span class="inv-subtexto">${label}</span><strong>${numero.format(n)}</strong></div></div>`).join("")}</div>`;
+            <button type="button" class="inv-metrica" name="inv-metrica-${imagen}" value="${estado}" data-accion="filtrar-estado"
+                data-estado="${estado || "total"}" aria-pressed="${filtraPorResumen && modelo.estado === estado}">
+                <span class="inv-metrica-icono">${icono(imagen)}</span>
+                <span><span class="inv-subtexto">${label}</span><strong>${numero.format(n)}</strong></span>
+            </button>`).join("")}</div>`;
     }
     function paginacion(total, p, segmento, extra = "") {
         const limite = segmento === "mov" ? modelo.filtrosMov.limite : 10;
@@ -433,6 +437,22 @@
             modelo.ficha = true;
             modelo.historial = null;
             cargarHistorial();
+        } else if (accion === "filtrar-estado") {
+            modelo.vista = "existencias";
+            modelo.ficha = false;
+            modelo.filtro = "";
+            modelo.categoria = "";
+            modelo.estado = b.value;
+            modelo.pagina = 0;
+            const primero = articulos().find(a => !modelo.estado || a.estado === modelo.estado);
+            modelo.abiertas = new Set(primero ? [primero.categoria] : []);
+            modelo.completas.clear();
+            if (modelo.seleccion !== (primero?.codigo ?? "")) {
+                modelo.seleccion = primero?.codigo ?? "";
+                modelo.historial = null;
+                cargarHistorial();
+            }
+            b.focus({preventScroll:true});
         } else if (accion === "vista" || accion === "ver-historial" || accion === "todos-mov") {
             modelo.vista = b.dataset.vista || "movimientos";
             modelo.ficha = false;
