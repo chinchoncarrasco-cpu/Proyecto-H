@@ -18,7 +18,7 @@ test('El mapa distingue llegada y salida y usa la estadía exacta al guardar', a
             'supabase/migrations/20260902045000_cancelar_reserva_desde_ficha_supabase.sql',
             'supabase/migrations/20260902162629_reactivar_reserva_cancelada_segura.sql',
             'supabase/migrations/20260928020822_cambio_manual_estado_reserva.sql',
-            'supabase/migrations/20261127202611_haiku_mapa_estado_reserva.sql']) {
+            'supabase/migrations/20261127204746_haiku_mapa_estado_reserva.sql']) {
             await db.exec(read(file));
         }
         await db.exec('grant usage on schema private, auth to authenticated');
