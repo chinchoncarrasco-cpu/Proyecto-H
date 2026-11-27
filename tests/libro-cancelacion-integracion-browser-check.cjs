@@ -3,6 +3,28 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),http=require('node:http');
 const {chromium}=require('playwright');
 const root=path.resolve(__dirname,'..'),solicitudes=[];
+async function comprobarTemaTarjeta(tarjeta,tema){
+    const estilos=await tarjeta.evaluate(el=>{
+        const fondo=getComputedStyle(el).backgroundColor;
+        const estilo=selector=>getComputedStyle(el.querySelector(selector));
+        const distintivo=estilo('.haiku-cancelacion-badge');
+        return {fondo,texto:estilo('.haiku-cancelacion-nombre').color,
+            secundario:estilo('.haiku-cancelacion-secundario').color,
+            fondoDistintivo:distintivo.backgroundColor,distintivo:distintivo.color};
+    });
+    const luminancia=color=>color.match(/[\d.]+/g).slice(0,3).map((x,i)=>{
+        const s=Number(x)/255;
+        return [0.2126,0.7152,0.0722][i]*(s<=0.04045?s/12.92:((s+0.055)/1.055)**2.4);
+    }).reduce((a,b)=>a+b,0);
+    const contraste=(a,b)=>{
+        const [menor,mayor]=[luminancia(a),luminancia(b)].sort((x,y)=>x-y);
+        return (mayor+0.05)/(menor+0.05);
+    };
+    assert.equal(luminancia(estilos.fondo)>0.5,tema==='claro','Fondo de la tarjeta según el tema');
+    assert.ok(contraste(estilos.texto,estilos.fondo)>=4.5,'Título de cancelación legible');
+    assert.ok(contraste(estilos.secundario,estilos.fondo)>=4.5,'Detalle de cancelación legible');
+    assert.ok(contraste(estilos.distintivo,estilos.fondoDistintivo)>=4.5,'Estado de cancelación legible');
+}
 const modulos=new Set(['supabase-client','supabase-auth-menu-v1','supabase-asistente-v1','supabase-reserva-estados-v1','haiku-dialogos-v1','haiku-ayuda-v1',
     'haiku-libro-semantica-v1','haiku-fullday-tarifa-v1','haiku-libro-pagos-canon-v1','haiku-libro-lenguaje-natural-v1',
     'haiku-libro-pagos-destinos-v1','haiku-libro-consultas-v1','haiku-libro-cancelaciones-v1','haiku-libro-reconciliacion-ux-v1',
@@ -102,8 +124,10 @@ const server=http.createServer((req,res)=>{
             assert.match(await informe.innerText(),/01\/10\/2026 al 31\/10\/2026/);
             await informe.getByText('Cancelaciones por verificar (1)',{exact:true}).click();
             await informe.getByText('Falta un titular inequívoco.',{exact:true}).waitFor();
+            await comprobarTemaTarjeta(informe.locator('.haiku-cancelacion-card--revision'),tema);
             await informe.getByText('Cancelaciones · Ya coincide (1)',{exact:true}).click();
             await informe.getByText('Proyecto H: Cancelada',{exact:true}).waitFor();
+            await comprobarTemaTarjeta(informe.locator('.haiku-cancelacion-card--resuelta'),tema);
             await rapidas.click();
             await page.getByRole('button',{name:'Ayuda',exact:true}).click();
             const ayuda=page.getByRole('region',{name:'Ayuda de Haku'});

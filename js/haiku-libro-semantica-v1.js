@@ -287,9 +287,9 @@
         const t = normalizar(texto);
         const registro = /^(?:(?:check[\s-]*in|check[\s-]*out)(?:\s+(?:en\s+)?acordeon\b|\s+(?:cb|realizad[oa]|pendiente)\b)|reserva\s+(?:(?:en\s+)?acordeon|reagendada|realizada|modificada)\b)/;
         const tarifa = /^(?:(?:tarifa|descuento|precio)\s+(?:de\s+descuento|especial|autorizad[oa]|acordad[oa])\b|autorizado\s*por\b|se\s+le\s+respeta\s+(?:el\s+)?(?:precio|tarifa)\b)/;
-        const gestion = /^(?:(?:se\s+(?:(?:les?|ne)\s+)?)?(?:presto|prestaron|entregaron|repuso|repone|guardo|puso)\s+|(?:debe\s+)?present(?:a|o|ar)\s+(?:pdi|pasaporte|documento)\b|(?:dar\s+prioridad\s+en|extender\s+(?:una|\d+)\s+noche|modificada\s+la\s+estadia)\b)/;
+        const gestion = /^(?:(?:se\s+(?:(?:les?|ne)\s+)?)?(?:presto|prestaron|entregaron|repuso|repone|guardo|puso)\s+|s\.?\s+entrego\b|(?:debe\s+)?present(?:a|o|ar)\s+(?:pdi|pasaporte|documento)\b|(?:dar\s+prioridad\s+en|extender\s+(?:una|\d+)\s+noche|modificada\s+la\s+estadia)\b)/;
         const objeto = /^(?:(?:saca\s*corchos?|descorchador|juguera|alargador|utensilios?|utencilios?|chispero|batas?|ceniceros?)\s+(?:prestad[oa]s?|entregad[oa]s?)\b|saca\s+corchos?\s*$|extra\s+de\s+carbon\b)/;
-        const celebracion = /^(?:(?:atencion|atecion|cotesia)\s+(?:de\s+)?(?:aniversario|cumpleanos)\b|cumpleanos\s+(?:aval|respaldo)\b)/;
+        const celebracion = /^(?:(?:atencion|atecion|cotesia)\s+(?:de\s+)?(?:aniversario|cumpleanos)\b|cumpleanos\s+(?:aval|respaldo)\b|(?:(?:posible|posiblemente)\s+)?pedida\s+de\s+matrimonio\b)/;
         const administrativo = /^(?:grupo\s+(?:agencia\s+de\s+viaje|familiar)\s*$|(?:numero\s+)?telefonico\s*$|numero\s+(?:de\s+)?telefono\s*$|check[\s-]*in\s+en\b|late\s+(?:x|por)\s+pagar\b|el\s+contrato\s+de\s+mascotas\b|(?:viene|vienen)\s+con\s+(?:un\s+conejo|dos\s+autos)\b|saca\s*corchos?\s*,|utencilios\s+de\s+parrilla\b|cobro\s+hecho\s+sin\s+iva\b|paga\s+diferencia\s+promo\b)/;
         return registro.test(t) || tarifa.test(t) || gestion.test(t) || objeto.test(t) || celebracion.test(t) || administrativo.test(t);
     }
