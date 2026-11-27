@@ -795,6 +795,35 @@
         }
     }
 
+    function distribuirDuracionMasaje(unidades) {
+        if (unidades.length !== 2 || !unidades.every(u => u.ancla_prestacion && u.cantidad === 1)) return;
+        const [primera, segunda] = unidades;
+        const medida = String.raw`(?:30|60)\s*min(?:uto)?s?|(?:1|una)\s*(?:hora|hra?s?|h)|media\s+hora`;
+        const patron = new RegExp(String.raw`\b(?:amb[oa]s\s+(?:de\s+)?(?:${medida})|(?:de\s+)?(?:${medida})\s+(?:cada\s+un[oa]|c\s*\/\s*[ud]))\b`, 'gi');
+        const declaraciones = [...segunda.texto.matchAll(patron)].filter(m => !esHoraProgramada(segunda.texto, m.index));
+        if (!declaraciones.length) return;
+
+        const [declaracion] = declaraciones;
+        const nombrePropio = profesionalesMasaje(segunda.texto.slice(0, declaracion.index));
+        if (nombrePropio.length) segunda.profesionales = nombrePropio;
+        const textoPropio = segunda.texto.replace(patron, (valor, indice) =>
+            esHoraProgramada(segunda.texto, indice) ? valor : ' '.repeat(valor.length));
+        const propias = [primera.duracion_minutos, duracionMasaje(textoPropio)];
+        const duracion = duracionMasaje(declaracion[0]);
+        if (declaraciones.some(m => duracionMasaje(m[0]) !== duracion) || propias.some(n => n != null && n !== duracion)) {
+            for (const [i, unidad] of unidades.entries()) {
+                unidad.duracion_minutos = propias[i];
+                unidad.conflictos_masaje = ['Información contradictoria de duración del masaje.'];
+            }
+            return;
+        }
+        const inicio = segunda.posicion_inicio + declaracion.index;
+        for (const unidad of unidades) {
+            unidad.duracion_minutos = duracion;
+            unidad.duracion_compartida = { texto: declaracion[0], inicio, fin: inicio + declaracion[0].length };
+        }
+    }
+
     function unidadesMasajeOriginales(texto) {
         const original = String(texto || "").trim(), anclas = anclasMasaje(original);
         if (!anclas.length) return [];
@@ -829,10 +858,13 @@
             };
         });
         const simultaneidadGlobal = masajesSimultaneos(original);
+        distribuirDuracionMasaje(unidades);
         inferirTurnosMasaje(unidades, original, simultaneidadGlobal);
         const profesionalesCompartidos = profesionalesMasaje(original);
         const horasGlobales = [...new Set(unidades.map(u => u.hora).filter(Boolean))];
-        const comparteProfesional = simultaneidadGlobal || /\bambos?\s+con\b/.test(normalizar(original));
+        const profesionalesPorUnidad = unidades.filter(u => u.ancla_prestacion && u.profesionales.length);
+        const comparteProfesional = /\b(?:ambos?|ambas)\s+con\b/.test(normalizar(original)) ||
+            simultaneidadGlobal && profesionalesPorUnidad.length < 2;
         for (const unidad of unidades) {
             if (simultaneidadGlobal) {
                 unidad.simultaneo = true;
@@ -920,17 +952,24 @@
             modalidad_horario: unidades.find(u => u.modalidad_horario)?.modalidad_horario ?? null,
             fragmentos_originales: fragmentos
         }] : unidades;
-        return grupos.map(u => ({ ...u, texto_fuente_completo: fuente,
-            conflictos_masaje: conflictos,
-            grupo_masaje_v1: { agrupado: unir, origen,
-                fragmentos: u.fragmentos_originales.map(f => ({ ...f, origen })),
-                evidencias: { cantidad: u.fragmentos_originales.filter(f => /\b\d+\s*masajes?\b|\bx\s*\d+\b/i.test(f.texto)),
-                    duracion: u.fragmentos_originales.filter(f => duracionMasaje(f.texto)),
-                    tipo: u.fragmentos_originales.filter(f => tipoMasaje(f.texto)),
-                    fecha: u.fragmentos_originales.filter(f => /\b(?:para\s+)?el\s+\d{1,2}\b|\b\d{1,2}[-/.]\d{1,2}\b|\b(?:lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo)\b/i.test(f.texto)),
-                    hora: u.fragmentos_originales.filter(f => horasDeServicio(textoSinDuracionMasaje(f.texto)).length) }
-            }
-        }));
+        return grupos.map(u => {
+            const fragmentosUnidad = u.fragmentos_originales;
+            const compartida = u.duracion_compartida;
+            const inicioFuente = fragmentosUnidad[0].inicio - u.posicion_inicio;
+            const duracion = compartida ? [{ ...compartida, inicio: inicioFuente + compartida.inicio,
+                fin: inicioFuente + compartida.fin, origen }] : fragmentosUnidad.filter(f => duracionMasaje(f.texto));
+            return { ...u, texto_fuente_completo: fuente,
+                conflictos_masaje: [...new Set([...conflictos, ...(u.conflictos_masaje || [])])],
+                grupo_masaje_v1: { agrupado: unir, origen,
+                    fragmentos: fragmentosUnidad.map(f => ({ ...f, origen })),
+                    evidencias: { cantidad: fragmentosUnidad.filter(f => /\b\d+\s*masajes?\b|\bx\s*\d+\b/i.test(f.texto)),
+                        duracion,
+                        tipo: fragmentosUnidad.filter(f => tipoMasaje(f.texto)),
+                        fecha: fragmentosUnidad.filter(f => /\b(?:para\s+)?el\s+\d{1,2}\b|\b\d{1,2}[-/.]\d{1,2}\b|\b(?:lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo)\b/i.test(f.texto)),
+                        hora: fragmentosUnidad.filter(f => horasDeServicio(textoSinDuracionMasaje(f.texto)).length) }
+                }
+            };
+        });
     }
 
     function clasificarComplementoCobro(unidad) {
@@ -1044,6 +1083,8 @@
         return ocurrencias.sort((a, b) => a.indice - b.indice).filter((x, i, xs) => !i || x.indice !== xs[i - 1].indice || x.concepto !== xs[i - 1].concepto);
     }
 
+    const esResumenCobroMasajesTinajas = texto => /^masajes\s+y\s+tinajas\s+(?:por|x)\s+(?:pagar|cobrar)[\s.!]*$/.test(normalizar(texto));
+
     function unidadesDeServicio(texto) {
         const original = String(texto || ""), ocurrencias = ocurrenciasDeServicio(original);
         if (ocurrencias.length && ocurrencias.every(x => x.concepto === "masaje")) return parsearUnidadesMasaje(original);
@@ -1059,13 +1100,17 @@
             const financiera = clasificarIntencionFinanciera(todosMasajes ? original : segmento);
             return { concepto: ocurrencia.concepto, texto: segmento || original.trim(), cantidad, hora: horas[0] || null, hora_fin: horas[1] || null,
                 intencion_financiera: financiera.intencion, evidencias_financieras: financiera.evidencias };
-        });
+        }).filter(u => u.concepto !== "masaje" || !esResumenCobroMasajesTinajas(u.texto));
     }
 
     function clasificarFragmentoServicio(fragmento, contextoReserva = {}) {
         const texto = String(fragmento || "").trim(), t = normalizar(texto), conceptos = conceptosDeServicio(texto), evidencias = [];
         const base = semantica => ({ semantica, conceptos, evidencias: [...evidencias], unidadesServicio: [] });
         if (!conceptos.length) return base(SEMANTICA_SERVICIO.NO_SERVICIO);
+        if (esResumenCobroMasajesTinajas(t)) {
+            evidencias.push('recordatorio de cobro de servicios');
+            return base(SEMANTICA_SERVICIO.NO_SERVICIO);
+        }
         if (conceptos.length === 1 && conceptos[0] === 'masaje' && esNotaPrecaucionMasaje(texto)) {
             evidencias.push('precaución sobre el masaje');
             return base(SEMANTICA_SERVICIO.NO_SERVICIO);
