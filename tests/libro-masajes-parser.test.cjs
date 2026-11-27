@@ -99,6 +99,55 @@ test('simultaneidad comparte hora y profesionales sin inventar asignación indiv
   ]);
 });
 
+test('ambos de una hora conserva los dos masajes, sus profesionales y el horario propio del Tonel', () => {
+  const P = scope();
+  const nota = '27//11/2026 1 MASAJE RELAJANTE CON JOSEFINA Y 1 MASAJE DESCONTRACTURANTE  CON  MONICA AMBOS DE 1 HORA POR PAGAR CONFIRMADOS SIMULTANEOS'
+    + '//1 HORA DE TINAJA TONEL DE 19:15 A 20:15  MASAJES Y TINAJAS POR PAGAR.';
+  const reserva = { titular: 'Persona de prueba', cabana: 1, fecha_checkin: '2026-11-27',
+    fecha_checkout: '2026-11-29', noches: 2, adultos: 2, tipo_estadia: 'alojamiento' };
+  const asociacion = { estado: 'asociada', sistema: { id: 'estadia', reserva_id: 'reserva' } };
+  const servicios = S.servicios(nota, { origen_campo: 'notas_reserva' });
+  assert.deepEqual(servicios.map(s => [s.concepto, s.tipo, s.duracion_minutos, s.hora, s.asignacion_profesional]), [
+    ['masaje', 'terapeutico', 60, null, 'Josefina'],
+    ['masaje', 'descontracturante', 60, null, 'Mónica'],
+    ['tonel', null, null, '19:15', null]
+  ]);
+  const masajes = servicios.filter(s => s.concepto === 'masaje');
+  assert.ok(masajes.every(s => s.simultaneo && s.cantidad === 1));
+  for (const servicio of masajes) {
+    const evidencia = servicio.grupo_masaje_v1.evidencias.duracion[0];
+    assert.equal(evidencia.texto, 'AMBOS DE 1 HORA');
+    assert.equal(nota.slice(evidencia.inicio, evidencia.fin), evidencia.texto);
+    const preparado = P.prepararServicio(reserva, servicio, asociacion);
+    assert.equal(preparado.fecha, '2026-11-27');
+    assert.deepEqual(Array.from(preparado.razones), ['Falta horario del masaje.']);
+    assert.equal(preparado.payload, null);
+  }
+  const recordatorio = S.clasificarFragmentoServicio('MASAJES Y TINAJAS POR PAGAR.', { origen_campo: 'notas_reserva' });
+  assert.equal(recordatorio.semantica, 'NO_SERVICIO');
+});
+
+test('cada uno distribuye la duración expresa de dos masajes y distingue una hora de inicio', () => {
+  const base = '1 masaje relajante y 1 masaje descontracturante';
+  for (const [variante, minutos] of [['ambas de media hora', [30, 30]], ['de 60 min cada uno', [60, 60]],
+    ['de 1 hora c/u', [60, 60]], ['de 60 min', [null, 60]], ['a las 1 h cada uno', [null, null]]]) {
+    const unidades = S.parsearUnidadesMasaje(`${base} ${variante}`);
+    assert.deepEqual(unidades.map(u => u.duracion_minutos), minutos, variante);
+  }
+});
+
+test('una duración común en conflicto con la de una prestación queda para revisar', () => {
+  for (const texto of [
+    '1 masaje relajante de 30 min y 1 masaje descontracturante ambos de 1 hora',
+    '1 masaje relajante y 1 masaje descontracturante de 1 hora ambos de 30 min'
+  ]) {
+    const servicios = S.servicios(texto, { origen_campo: 'notas_reserva' });
+    assert.equal(servicios.length, 2);
+    assert.ok(servicios.every(s => s.semantica === 'AMBIGUO' &&
+      s.evidencias_semanticas.includes('Información contradictoria de duración del masaje.')));
+  }
+});
+
 test('Relajante y Holístico son alias explícitos de Terapéutico según duración', () => {
   const P = scope();
   const casos = [
