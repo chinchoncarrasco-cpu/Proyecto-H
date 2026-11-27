@@ -29,13 +29,9 @@ botonesMenu.forEach(boton => {
 
         if (!window.HAIKU_VISTA_DIVIDIDA_V1?.navegar(seccionDestino)) {
             // Mostrar la sección única cuando la vista dividida está cerrada.
-            seccionesApp.forEach(seccion => seccion.classList.remove("activa"));
-            botonesMenu.forEach(item => item.classList.remove("activo"));
             const nuevaSeccion = document.getElementById(`seccion-${seccionDestino}`);
-            if (nuevaSeccion) {
-                nuevaSeccion.classList.add("activa");
-                boton.classList.add("activo");
-            }
+            seccionesApp.forEach(seccion => seccion.classList.toggle("activa", seccion === nuevaSeccion));
+            botonesMenu.forEach(item => item.classList.toggle("activo", nuevaSeccion !== null && item === boton));
         }
 
         // Actualizar Pagos al entrar a la sección
@@ -1289,6 +1285,7 @@ if (botonBusquedaAnterior) {
 
 let busquedaCambioSeccion;
 function programarBusquedaSeccion() {
+    if (!buscadorPalabra?.value.trim()) return;
     clearTimeout(busquedaCambioSeccion);
     busquedaCambioSeccion = setTimeout(buscarPalabraEnSeccion, 50);
 }

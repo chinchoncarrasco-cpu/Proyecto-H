@@ -16,6 +16,7 @@
     let enCurso = false;
     let solicitudEnCurso = null;
     let inicioProgramado = false;
+    let aperturaProgramada = false;
     let ultimoPerfil = null;
     const historialGeneraciones = [];
     const solicitudesCoalescidas = [];
@@ -86,7 +87,7 @@
 
     function estadoCarga(mensaje = "") {
         const estado = document.getElementById("resumen-refresh-estado");
-        if (estado) estado.textContent = mensaje;
+        if (estado && estado.textContent !== mensaje) estado.textContent = mensaje;
     }
 
     function estadoError(detalles = []) {
@@ -105,6 +106,25 @@
                 categoria: "primera carga", evento: "fuentes completas / inicio"
             });
         });
+    }
+
+    function actualizarAlAbrir() {
+        if (!inicioListo) return false;
+        if (aperturaProgramada) return true;
+        aperturaProgramada = true;
+        const fecha = fechaActiva();
+        const usuario = usuarioActual();
+        const publicada = ultimo;
+        // La sección se muestra con el último estado válido antes del refresco.
+        requestAnimationFrame(() => setTimeout(() => {
+            aperturaProgramada = false;
+            const resumen = document.getElementById("seccion-resumen");
+            if (!usuario || usuario !== usuarioActual() || fecha !== fechaActiva() ||
+                !resumen?.classList.contains("activa") || resumen.hidden) return;
+            if (ultimo !== publicada && ultimo?.fecha === fecha && ultimo.usuario === usuario) return;
+            void solicitar(fecha, { categoria: "resumen", evento: "abrir Resumen", tipo: "interno_derivado" });
+        }, 0));
+        return true;
     }
 
     function registrar(nombre, fuente) {
@@ -368,7 +388,7 @@
     }
 
     window.HAIKU_RESUMEN_REFRESH_V1 = Object.freeze({
-        registrar, solicitar,
+        registrar, solicitar, actualizarAlAbrir,
         activo: () => inicioListo,
         enCurso: () => enCurso,
         publicando: () => publicando,

@@ -309,6 +309,7 @@
 
     document.addEventListener("click", evento => {
         if (!evento.target?.closest?.('.menu-item[data-seccion="resumen"]')) return;
+        if (window.HAIKU_RESUMEN_REFRESH_V1?.actualizarAlAbrir?.()) return;
         requestAnimationFrame(() => sincronizarDesdeSupabase({ regenerarCalendario: true,
             origen: { evento: "abrir Resumen", tipo: "interno_derivado" }
         }));

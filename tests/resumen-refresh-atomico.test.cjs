@@ -17,6 +17,7 @@ const diferida = () => {
 function entorno({ dependientes = [], omitidas = [], sesionInicial = false } = {}) {
     const clases = new Set(['haiku-resumen-pendiente']);
     const nodos = new Map([
+        ['seccion-resumen', { classList: { contains: nombre => nombre === 'activa' }, hidden: false }],
         ['resumen-refresh-estado', { textContent: 'Cargando Resumen…' }],
         ['fecha-actual', { textContent: 'Cargando fecha operativa…' }]
     ]);
@@ -35,7 +36,10 @@ function entorno({ dependientes = [], omitidas = [], sesionInicial = false } = {
         haikuSesion: sesionInicial ? { auth: { id: 'usuario-a' } } : null,
         addEventListener: (nombre, fn) => listeners.set(nombre, fn)
     };
+    const cuadros = [];
+    const tareas = [];
     const contexto = vm.createContext({ window, document, console, queueMicrotask,
+        requestAnimationFrame: fn => cuadros.push(fn), setTimeout: fn => tareas.push(fn),
         Date, Intl, fechaSeleccionada: '2026-09-12' });
     vm.runInContext(codigo, contexto);
     const api = window.HAIKU_RESUMEN_REFRESH_V1;
@@ -64,7 +68,7 @@ function entorno({ dependientes = [], omitidas = [], sesionInicial = false } = {
         publicar: snapshot => { visible[nombre] = snapshot.datos[nombre]; }
     }));
     if (!sesionInicial) window.haikuSesion = { auth: { id: 'usuario-a' } };
-    return { api, contexto, document, window, clases, nodos, visible, lecturasDe,
+    return { api, contexto, document, window, clases, nodos, visible, lecturasDe, cuadros, tareas,
         complementoDe, complementos, lecturas, emitir: nombre => listeners.get(nombre)?.() };
 }
 
@@ -101,6 +105,33 @@ test('el arranque con sesión activa programa una sola generación inicial', asy
     await resolverTodas(h, 1, 'A');
     await new Promise(resolve => setImmediate(resolve));
     assert.equal(h.api.publicaciones(), 1);
+});
+
+test('el menú conserva el Resumen visible y agrupa las lecturas de la misma apertura', async () => {
+    const h = entorno();
+    const primera = h.api.solicitar();
+    await resolverTodas(h, 1, 'visible');
+    assert.equal(await primera, true);
+
+    for (let i = 0; i < 5; i++) assert.equal(h.api.actualizarAlAbrir(), true);
+    assert.equal(h.cuadros.length, 1);
+    assert.equal(h.api.historialGeneraciones().length, 1);
+    h.cuadros.shift()();
+    assert.equal(h.tareas.length, 1);
+    assert.equal(h.api.historialGeneraciones().length, 1);
+    h.tareas.shift()();
+    assert.equal(h.api.historialGeneraciones().length, 2);
+    assert.equal(h.api.historialGeneraciones().at(-1).evento, 'abrir Resumen');
+    assert.equal(h.visible.operacion, 'visible-operacion');
+    await resolverTodas(h, 2, 'nueva');
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(h.visible.operacion, 'nueva-operacion');
+
+    h.api.actualizarAlAbrir();
+    h.contexto.fechaSeleccionada = '2026-09-13';
+    h.cuadros.shift()();
+    h.tareas.shift()();
+    assert.equal(h.api.historialGeneraciones().length, 2);
 });
 
 test('primera carga fallida conserva el shell y muestra un error controlado', async () => {

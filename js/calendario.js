@@ -314,7 +314,8 @@ function generarCalendario() {
 
     const año = fechaCalendario.getFullYear();
     const mes = fechaCalendario.getMonth();
-    if (esCalendarioMovil() &&
+    const movil = esCalendarioMovil();
+    if (movil &&
         !fechaCalendarioSeleccionadaMovil.startsWith(`${año}-${String(mes + 1).padStart(2, "0")}-`)) {
         fechaCalendarioSeleccionadaMovil = `${año}-${String(mes + 1).padStart(2, "0")}-01`;
     }
@@ -362,6 +363,9 @@ function generarCalendario() {
     const totalCeldas = Math.ceil(
         (posicionPrimerDia + cantidadDias) / 7
     ) * 7;
+    const formatoDia = new Intl.DateTimeFormat("es-CL", {
+        weekday: "long", day: "numeric", month: "long", year: "numeric"
+    });
 
     for (let indice = 0; indice < totalCeldas; indice++) {
         const fechaCelda = new Date(
@@ -378,15 +382,7 @@ function generarCalendario() {
         elementoDia.type = "button";
         elementoDia.classList.add("dia-calendario");
         elementoDia.dataset.fecha = fechaDia;
-        elementoDia.setAttribute(
-            "aria-label",
-            new Intl.DateTimeFormat("es-CL", {
-                weekday: "long",
-                day: "numeric",
-                month: "long",
-                year: "numeric"
-            }).format(fechaCelda)
-        );
+        elementoDia.setAttribute("aria-label", formatoDia.format(fechaCelda));
 
         if (mesDia !== mes) {
             elementoDia.classList.add("dia-vacio");
@@ -398,7 +394,7 @@ function generarCalendario() {
         ) {
             elementoDia.classList.add("hoy");
         }
-        if (esCalendarioMovil()) {
+        if (movil) {
             const seleccionada = fechaDia === fechaCalendarioSeleccionadaMovil;
             elementoDia.classList.toggle("seleccionado", seleccionada);
             elementoDia.setAttribute("aria-pressed", String(seleccionada));
