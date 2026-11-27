@@ -94,7 +94,7 @@ begin
         where prev.cabana_id = o.cabana_id and prev.fecha < v_fecha
           and prev.completado_en is not null and prev.estado in ('completado', 'verificado')
           and not exists (
-              select 1 from public.estadias e
+              select 1 from public.reserva_estadias e
               where e.cabana_id = prev.cabana_id and
                 (e.checkin_realizado_en >= prev.completado_en or e.checkout_realizado_en >= prev.completado_en)
           )
@@ -107,7 +107,7 @@ begin
         select coalesce(jsonb_agg(jsonb_build_object('id', i.id, 'reserva_id', i.reserva_id,
             'nombre', concat_ws(' ', nullif(btrim(i.nombre), ''), nullif(btrim(i.apellido), '')),
             'rol', i.rol, 'hospedado', exists (
-                select 1 from public.estadias e
+                select 1 from public.reserva_estadias e
                 where e.reserva_id = i.reserva_id and e.estado_estadia = 'hospedada'
                     and e.fecha_ingreso <= v_fecha and e.fecha_salida >= v_fecha
                     and e.checkout_realizado_en is null
@@ -136,7 +136,7 @@ begin
         ) order by s.hora_inicio, s.id), '[]') into v_agenda
         from public.servicios s
         join public.catalogo_servicios c on c.id = s.catalogo_servicio_id
-        left join public.estadias e on e.id = s.estadia_id
+        left join public.reserva_estadias e on e.id = s.estadia_id
         left join public.cabanas b on b.id = e.cabana_id
         where s.fecha_servicio = v_fecha and s.estado_servicio not in ('cancelado', 'no_show')
           and (c.codigo in ('tinajaTonel', 'tinajaJacuzzi') or c.codigo ilike 'masaje%');
@@ -170,7 +170,7 @@ begin
             from public.haiku_mapa_elementos m
             where (m.dia is null or m.dia = v_fecha)
               and (m.tipo <> 'persona' or exists (
-                  select 1 from public.estadias e
+                  select 1 from public.reserva_estadias e
                   where e.reserva_id = m.reserva_id and e.estado_estadia = 'hospedada'
                     and e.fecha_ingreso <= v_fecha and e.fecha_salida >= v_fecha
                     and e.checkout_realizado_en is null
@@ -257,7 +257,7 @@ begin
                 raise exception 'Revisa el puesto, el tipo de vehículo y la patente.' using errcode = '22023';
             end if;
             if v_reserva is not null and not exists (
-                select 1 from public.estadias e where e.reserva_id = v_reserva
+                select 1 from public.reserva_estadias e where e.reserva_id = v_reserva
                   and e.fecha_ingreso <= v_fecha and e.fecha_salida >= v_fecha
                   and e.estado_estadia in ('confirmada', 'hospedada')
             ) and v_reserva is distinct from v_actual.reserva_id then
@@ -300,7 +300,7 @@ begin
                     select 1 from public.haiku_huesped_integrantes_v1 i
                     where i.id = v_persona and i.reserva_id = v_reserva and i.rol in ('titular', 'acompanante')
                 ) or not exists (
-                    select 1 from public.estadias e where e.reserva_id = v_reserva
+                    select 1 from public.reserva_estadias e where e.reserva_id = v_reserva
                       and e.estado_estadia = 'hospedada' and e.fecha_ingreso <= v_fecha
                       and e.fecha_salida >= v_fecha and e.checkout_realizado_en is null
                 ) then
