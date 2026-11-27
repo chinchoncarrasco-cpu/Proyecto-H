@@ -29,6 +29,10 @@
   --ready: #318051;
   --working: #bd5e26;
   --waiting: #986d0d;
+  --vehicle-body: #d399aa;
+  --vehicle-outline: var(--accent);
+  --vehicle-windows: #f9f0f3;
+  --vehicle-wheel: #584551;
 }
 :root[data-theme="dark"] {
   color-scheme: dark;
@@ -53,7 +57,12 @@
   --ready: #8ed2a6;
   --working: #efa976;
   --waiting: #edc96f;
+  --vehicle-body: #9c4d65;
+  --vehicle-outline: #f0adbf;
+  --vehicle-windows: #392a38;
+  --vehicle-wheel: #2c2530;
 }
+[data-vehicle-color] {--vehicle-outline:var(--sub); --vehicle-windows:#49515c}
 * {box-sizing: border-box}
 [hidden] {display: none !important}
 html, body {height:100%; margin:0; overflow:hidden}
@@ -842,11 +851,6 @@ footer .web-help {margin-left:auto}
 </template>
 <script type="application/json" id="geometry">{"cabins":{"c1":{"title":"CAB 1","corners":[[431.79620361328125,770.4944085562101],[498.23352505610535,755.985107421875],[511.2155303955078,818.6041965279528],[450.1237405630258,827.0043182373047]],"center":[472.8422499069801,793.0220076858357],"dot":[489.854404256894,768.207284508982],"number":1},"c2":{"title":"CAB 2","corners":[[409.650390625,723.9118763913391],[474.56042592278845,699.4751586914062],[498.2334976196289,755.9850683725008],[431.7961673736572,770.4943695068359]],"center":[453.56012038526865,737.4666182405206],"dot":[467.63032509540693,712.012340342614],"number":2},"c3":{"title":"CAB 3","corners":[[389.7955627441406,662.0564690747308],[445.54182337855434,645.2562255859375],[474.5604248046875,699.4751932088611],[409.6503952988633,723.9119110107422]],"center":[429.88705155656146,682.6749497200678],"dot":[440.3757486772967,657.6044045502006],"number":3},"c4":{"title":"CAB 4","corners":[[368.4134216308594,615.4739253011982],[431.7961558729115,594.091796875],[445.54180908203125,645.2561756091171],[389.79554884504563,662.0564193725586]],"center":[408.886733857712,629.2195792894685],"dot":[424.2360466078957,605.6839650717745],"number":4},"c5":{"title":"CAB 5","corners":[[337.1039123535156,550.5639519868074],[399.7230031413417,533.0000610351562],[431.7961959838867,594.0918556495949],[368.41345774742865,615.4739837646484]],"center":[384.25914230654314,573.2824631090517],"dot":[394.6199290658582,546.2932537195418],"number":5},"c6":{"title":"CAB 6","corners":[[335.4262390136719,333.2234997326815],[396.5219790140788,319.4769592285156],[408.74112701416016,356.8980972676338],[349.1727805137634,379.80899810791016]],"center":[372.4655313889186,347.3518885841853],"dot":[388.58335129777595,328.6756859158866],"number":6},"c7":{"title":"CAB 7","corners":[[322.4433898925781,289.69279164281386],[380.4843413362798,266.7818908691406],[396.52197265625,319.47696264858905],[335.42623429445877,333.22350311279297]],"center":[358.71898454489167,302.29378706833415],"dot":[373.30177359512174,278.5008166148745],"number":7},"c8":{"title":"CAB 8","corners":[[309.4605407714844,246.1621060914631],[371.31997606831214,229.36077880859375],[380.48433685302734,266.7819168477119],[322.44338521649763,289.6928176879883]],"center":[345.9270597273304,257.9994048589393],"dot":[362.94031367578816,238.8115254052078],"number":8},"c9":{"title":"CAB 9","corners":[[290.3681335449219,194.2307100084093],[356.0460564955226,177.42938232421875],[371.3199920654297,229.36075880262587],[309.4605530073058,246.1620864868164]],"center":[331.798683778295,211.79573440551758],"dot":[348.0444234988375,188.77027851104737],"number":9},"c10":{"title":"CAB 10","corners":[[279.06671142578125,460.453515625],[318.01272890165257,453.5806884765625],[337.86756134033203,507.799658203125],[299.6851912659484,522.3089599609375]],"center":[308.65804823342853,486.03570556640625],"dot":[314.9256842811387,464.290844116211],"number":10}},"parking":{"p1":{"number":"1","corners":[[807.517,854.014],[828.88,849.518],[843.914,890.19],[823.383,894.514]],"center":[825.9235,872.0590000000001],"placement":{"car":[824.7647499999999,869.0150500000001],"label":[831.74815,887.3599220000001],"w":18.238957356436345,"h":33.0047087175391,"angle":-20.840484977363626}},"p2":{"number":"2","corners":[[783.513,859.068],[804.875,854.571],[820.741,895.071],[800.209,899.395]],"center":[802.3344999999999,877.02625],"placement":{"car":[801.1134249999999,873.9952375],"label":[808.4724369999999,892.2621395],"w":18.181168984723538,"h":33.1129997798628,"angle":-21.94255496706634}},"p3":{"number":"3","corners":[[759.508,864.121],[780.871,859.624],[797.567,899.951],[777.036,904.275]],"center":[778.7455,881.99275],"placement":{"car":[777.4621,878.9747125],"label":[785.196724,897.1634185],"w":18.115478735533557,"h":33.23310967608669,"angle":-23.037294699450204}},"p4":{"number":"4","corners":[[735.503,869.174],[756.866,864.677],[774.394,904.831],[753.863,909.155]],"center":[755.1565,886.95925],"placement":{"car":[753.8107000000001,883.9541875],"label":[761.921388,902.0646975],"w":18.04447550210385,"h":33.36557269767138,"angle":-24.12494761935565}},"p5":{"number":"5","corners":[[697.513,995.781],[704.745,1020.374],[748.485,1005.146],[741.836,981.789]],"center":[723.1447499999999,1000.7725],"placement":{"car":[719.8423875,1001.86825],"label":[739.7446254999999,995.26453],"w":21.350958137012608,"h":35.257980845244056,"angle":-108.35625258448464}},"p6":{"number":"6","corners":[[689.52,968.598],[696.751,993.19],[741.096,979.192],[734.447,955.835]],"center":[715.4535000000001,974.20375],"placement":{"car":[712.1058,975.2072875],"label":[732.2812720000001,969.1593015],"w":21.368685103741043,"h":35.41477905567115,"angle":-106.68711381877047}},"p7":{"number":"7","corners":[[834.311,1024.387],[856.074,1016.875],[871.454,1068.326],[851.13,1075.885]],"center":[853.24225,1046.36825],"placement":{"car":[854.4497125,1050.2288375],"label":[847.1727385,1026.9623635],"w":19.05533606711004,"h":40.989429197889635,"angle":162.63206476821037}},"p8":{"number":"8","corners":[[809.996,1032.781],[831.759,1025.268],[848.6,1076.826],[828.276,1084.385]],"center":[829.6577500000001,1054.815],"placement":{"car":[830.9747875,1058.683575],"label":[823.0374415000001,1035.368963],"w":19.074629530705014,"h":41.41107929762283,"angle":161.1991088254982}},"p9":{"number":"9","corners":[[785.68,1041.174],[807.443,1033.662],[825.746,1085.326],[805.422,1092.885]],"center":[806.07275,1063.2617500000001],"placement":{"car":[807.4994375,1067.1383125000002],"label":[798.9012675,1043.7755625000002],"w":19.081962199194702,"h":41.85836292379338,"angle":159.7949204097926}},"p10":{"number":"10","corners":[[681.526,941.414],[688.758,966.007],[733.708,953.238],[727.059,929.882]],"center":[707.76275,947.6352499999999],"placement":{"car":[704.3696375,948.5465374999999],"label":[724.8187955,943.0545115],"w":21.367513979933985,"h":35.60198866518543,"angle":-105.03317038013643}},"p11":{"number":"11","corners":[[673.533,914.231],[680.765,938.824],[726.32,927.285],[719.67,903.928]],"center":[700.072,921.067],"placement":{"car":[696.63355,921.886075],"label":[717.355942,916.949783],"w":21.350759480511886,"h":35.81788935103797,"angle":-103.39874899494103}}},"places":{"masajes":{"title":"Sala de masajes","center":[383,94],"w":134,"kind":"Recinto Haku","service":true,"shape":"M284.26 72.04L313.28 63.64L330.84 111.75L301.82 125.5L284.26 72.04Z"},"muelle":{"title":"Muelle","center":[65,180],"w":64,"kind":"Recinto Haku","shape":"M32.1001 167.5L80.9801 149.17L97.0201 189.65L48.1401 211.03L32.1001 167.5Z"},"recepcion":{"title":"Recepción","center":[613,870],"w":91,"kind":"Recinto Haku"},"lavanderia":{"title":"Lavandería","center":[522,959],"w":99,"kind":"Recinto Haku"},"porton":{"title":"Portón","center":[900,840],"w":64,"kind":"Recinto Haku"},"piscina":{"title":"Piscina","center":[765,1274],"w":72,"kind":"Recinto Haku","shape":"M694.03 1232.98L736.02 1223.81C739.08 1223.3 741.12 1224.83 742.13 1228.39L758.17 1299.41C759.19 1302.97 757.91 1305.26 754.35 1306.28L714.64 1315.44C711.59 1315.95 709.55 1314.68 708.54 1311.63L690.97 1238.32C690.46 1235.78 691.48 1233.99 694.03 1232.98Z"},"verde":{"title":"Áreas verdes","center":[612,1268],"w":102,"kind":"Recinto Haku"},"tonel":{"title":"Tinaja Tonel de Madera","center":[487,1391],"w":156,"kind":"Recinto Haku","service":true},"jacuzzi":{"title":"Tinaja Jacuzzi","center":[647,1499],"w":117,"kind":"Recinto Haku","service":true},"cocina":{"title":"Cocina","center":[846,1258],"w":67,"kind":"Recinto Haku","shape":"M770.39 1228.39L797.11 1225.34L809.33 1284.9L782.6 1294.06L770.39 1228.39Z"},"camarines":{"title":"Camarines y baños","center":[927,1386],"w":131,"kind":"Recinto Haku"},"galpon":{"title":"Galpón","center":[824,1168],"w":63,"kind":"Recinto Haku"},"bodega":{"title":"Bodega Sra. Naifi","center":[893,1450],"w":124,"kind":"Recinto Haku","shape":"M787.95 1421.58L823.08 1420.06L833 1463.58L803.22 1471.98L787.95 1421.58Z"},"casa":{"title":"Casa Sra. Naifi","center":[588,1073],"w":112,"kind":"Recinto Haku","shape":"M543.6 1012.3L681.05 1048.95L657.38 1146.69L520.69 1108.51L543.6 1012.3Z"},"torreon":{"title":"Torreón","center":[511,850],"w":68,"kind":"Recinto Haku"},"escalera":{"title":"Escalera al río","center":[420,1115],"w":107,"kind":"Recinto Haku"},"escalera-norte":{"title":"Escalera norte","center":[312,562],"w":104,"kind":"Recinto Haku"},"orilla":{"title":"Orilla del río","center":[306,1222],"w":92,"kind":"Recinto Haku"}}}</script>
 <script>
-const paints = {
-  dark: { border:'#766B76', accent:'#F0ADBF', pick:'#402631', sub:'#BAADB5', ink:'#F4ECEF', green:'#8ED2A6', orange:'#EFA976', yellow:'#EDC96F', body:'#9C4D65', windows:'#392A38', truck:'#4F7593', truckLine:'#A6CCEF', muted:'#776770', wheel:'#2C2530' },
-  light: { border:'#958990', accent:'#78263F', pick:'#F3E4E9', sub:'#665962', ink:'#2C2329', green:'#347B55', orange:'#B66024', yellow:'#9B761A', body:'#D399AA', windows:'#F9F0F3', truck:'#A2BCD0', truckLine:'#315E81', muted:'#A3939D', wheel:'#584551' },
-};
-
 const artShapes = {
   'Sedán':['M7 3Q12 1 17 3Q20 5 20 11L19.5 47Q19.5 53 16.5 54H7.5Q4.5 53 4.5 47L4 11Q4 5 7 3Z','M6.8 14L17.2 14L18 20L6 20ZM6.6 38H17.4L17 44H7Z'],
   'Hatchback':['M7 3H17Q20 4 20 11L19.5 49Q19 54 16.5 54H7Q4 53 4 48V11Q4 5 7 3Z','M6.6 14H17.4L18 20H6ZM6.4 41H17.6V47H6.4Z'],
@@ -858,14 +862,31 @@ const artShapes = {
   'Minibús':['M6 3H18Q21 3 21 9V52Q21 54 18 54H6Q3 54 3 52V9Q3 3 6 3Z','M5.5 7H18.5L19 13H5ZM5.5 43H18.5V50H5.5Z'],
   'Otro':['M6 3H18Q20.2 4 20.2 9V49Q20 54 17 54H7Q4 54 4 49V9Q4 4 6 3Z','M6.5 13H17.5L18 19H6ZM6.5 40H17.5V46H6.5Z'],
 };
-function vehicleArt(type,t,away){
-  const outline=away?t.sub:type==='Camioneta'?t.truckLine:t.accent;
-  const body=away?t.muted:type==='Camioneta'?t.truck:t.body;
-  if(type==='Moto')return '<rect x="10" y="1" width="4" height="14" rx="2" fill="'+t.wheel+'"/><rect x="10" y="42" width="4" height="13" rx="2" fill="'+t.wheel+'"/><path d="M8 13H16L16.7 28L14.5 45H9.5L7.3 28Z" fill="'+body+'" stroke="'+outline+'" stroke-width="1.2"/><path d="M5.5 15H18.5M9.5 29H14.5V40H9.5Z" fill="'+t.windows+'" stroke="'+outline+'" stroke-width="1.2"/>';
-  const [shell,windows]=artShapes[type];
-  const wheels=[[1.3,11],[19.2,11],[1.3,41],[19.2,41]].map(([x,y])=>'<rect x="'+x+'" y="'+y+'" width="3.5" height="8" rx="1.2" fill="'+t.wheel+'"/>').join('');
-  const details=type==='Camioneta'?'<path d="M9 32V48M12 32V48M15 32V48" fill="none" stroke="'+outline+'" stroke-width=".7" opacity=".55"/>':type==='Minibús'?'<path d="M6 19V39M18 19V39" fill="none" stroke="'+outline+'" stroke-width=".85" opacity=".7"/>':'';
-  return wheels+'<path d="'+shell+'" fill="'+body+'" stroke="'+outline+'" stroke-width="1.35" stroke-linejoin="round"/><path d="'+windows+'" fill="'+t.windows+'" stroke="'+outline+'" stroke-width=".8"/>'+details+'<path d="M7 7H9.5M14.5 7H17" fill="none" stroke="'+outline+'" stroke-width="1.35" stroke-linecap="round"/>';
+function vehicleArt(type) {
+  const body = 'var(--vehicle-color, var(--vehicle-body))';
+  const outline = 'var(--vehicle-outline)';
+  const glass = 'var(--vehicle-windows)';
+  const wheel = 'var(--vehicle-wheel)';
+  if (type === 'Moto') return [
+    `<rect x="10" y="1" width="4" height="14" rx="2" fill="${wheel}"/>`,
+    `<rect x="10" y="42" width="4" height="13" rx="2" fill="${wheel}"/>`,
+    `<path d="M8 13H16L16.7 28L14.5 45H9.5L7.3 28Z" fill="${body}" stroke="${outline}" stroke-width="1.2"/>`,
+    `<path d="M5.5 15H18.5M9.5 29H14.5V40H9.5Z" fill="${glass}" stroke="${outline}" stroke-width="1.2"/>`,
+  ].join('');
+  const [shell, windows] = artShapes[type];
+  const wheels = [[1.3,11], [19.2,11], [1.3,41], [19.2,41]].map(([x,y]) =>
+    `<rect x="${x}" y="${y}" width="3.5" height="8" rx="1.2" fill="${wheel}"/>`).join('');
+  const detail = {
+    Camioneta: `<path d="M9 32V48M12 32V48M15 32V48" fill="none" stroke="${outline}" stroke-width=".7" opacity=".55"/>`,
+    Minibús: `<path d="M6 19V39M18 19V39" fill="none" stroke="${outline}" stroke-width=".85" opacity=".7"/>`,
+  };
+  return [
+    wheels,
+    `<path d="${shell}" fill="${body}" stroke="${outline}" stroke-width="1.35" stroke-linejoin="round"/>`,
+    `<path d="${windows}" fill="${glass}" stroke="${outline}" stroke-width=".8"/>`,
+    detail[type] || '',
+    `<path d="M7 7H9.5M14.5 7H17" fill="none" stroke="${outline}" stroke-width="1.35" stroke-linecap="round"/>`,
+  ].join('');
 }
 'use strict';
 
@@ -894,6 +915,24 @@ const states = {
 const categories = { mantencion:'Mantención', aseo:'Aseo', peligro:'Peligro', areas_verdes:'Áreas verdes', general:'Tarea general' };
 const taskStates = { pendiente:'Pendiente', en_curso:'En curso', lista:'Lista' };
 const vehicleTypes = ['Sedán', 'Hatchback', 'SUV', 'Camioneta', 'Station wagon', 'Van', 'Furgón', 'Minibús', 'Moto', 'Otro'];
+const vehicleColors = new Map([
+  ['blanco', '#f4f4f2'], ['blanco perla', '#eee6d4'], ['blanco aperlado', '#eee6d4'],
+  ['perla', '#eee6d4'], ['marfil', '#eee1c8'],
+  ['negro', '#202125'], ['gris', '#818891'], ['gris claro', '#adb5bf'], ['gris oscuro', '#484e56'],
+  ['plomo', '#737983'], ['grafito', '#444851'], ['gris grafito', '#444851'],
+  ['plata', '#bbc3cd'], ['plateado', '#bbc3cd'], ['gris plata', '#bbc3cd'],
+  ['azul', '#3b77bc'], ['azul marino', '#263960'], ['azul oscuro', '#263960'],
+  ['azul petroleo', '#286776'], ['celeste', '#7db7dc'],
+  ['rojo', '#c53a43'], ['burdeo', '#732c42'], ['burdeos', '#732c42'], ['bordo', '#732c42'], ['granate', '#732c42'],
+  ['rojo burdeo', '#732c42'],
+  ['cereza', '#9c4d65'], ['rojo cereza', '#9c4d65'], ['vino', '#692936'],
+  ['verde', '#51845b'], ['verde oliva', '#717650'], ['verde oscuro', '#305644'],
+  ['amarillo', '#e6bb40'], ['dorado', '#c9a659'], ['champan', '#cabe9f'],
+  ['beige', '#c9b497'], ['crema', '#e8d7b6'], ['cafe', '#835b47'], ['marron', '#835b47'],
+  ['naranjo', '#d77a35'], ['naranja', '#d77a35'], ['cobre', '#aa694f'], ['bronce', '#917450'],
+  ['morado', '#78558f'], ['purpura', '#78558f'], ['violeta', '#8664a1'], ['rosa', '#d884a1'], ['rosado', '#d884a1'],
+  ['turquesa', '#449f9e'],
+]);
 const markerGlyphs = {
   persona:'M0 -4a2.4 2.4 0 1 0 0 -4.8a2.4 2.4 0 0 0 0 4.8ZM-5 6V4a5 5 0 0 1 10 0v2Z',
   mantencion:'M-2.6 -7l2.2 2.2l3.4-.8l.6-3.3a5 5 0 0 1-3 8.4l-5 5a1.8 1.8 0 0 1-2.5-2.5l5-5A5 5 0 0 1-2.6 -7Z',
@@ -1047,7 +1086,6 @@ function applyTheme(theme) {
   document.documentElement.dataset.theme = theme;
   byId('base').replaceChildren(byId('art-' + theme).content.cloneNode(true));
   draw();
-  for (const icon of detailBody.querySelectorAll('.vehicle-type-art')) paintVehicle(icon, icon.dataset.type);
 }
 function draw() {
   const definitions = createSvg('defs');
@@ -1117,13 +1155,24 @@ function drawCar(g, bay, row) {
     transform:'translate(' + p.car.join(' ') + ') rotate(' + p.angle + ') scale(' + p.w / 24 + ' ' + p.h / 56 + ') translate(-12 -28)',
     opacity:outside ? .42 : 1, 'pointer-events':'none',
   });
-  paintVehicle(drawing, row.datos.vehiculo, outside);
+  paintVehicle(drawing, row.datos.vehiculo);
+  setVehicleColor(drawing, row.datos.color);
   g.append(drawing);
 }
-function paintVehicle(node, type, outside = false) {
+function paintVehicle(node, type) {
   const vehicle = vehicleTypes.includes(type) ? type : 'Otro';
   // Both controls use the same static vector shapes as the parking markers.
-  node.innerHTML = vehicleArt(vehicle, paints[useTheme()], outside);
+  node.innerHTML = vehicleArt(vehicle);
+}
+function setVehicleColor(node, description) {
+  const name = typeof description === 'string'
+    ? description.trim().toLowerCase().normalize('NFD').replace(/\p{M}/gu, '').replace(/\s+/g, ' ')
+    : '';
+  const [base, tone = ''] = name.split(' ', 2);
+  const color = /^#(?:[\da-f]{3}|[\da-f]{6})$/.test(name)
+    ? name : (vehicleColors.get(base + ' ' + tone) ?? vehicleColors.get(base) ?? '');
+  node.style.setProperty('--vehicle-color', color);
+  node.toggleAttribute('data-vehicle-color', Boolean(color));
 }
 function markSelection() {
   for (const g of regions.querySelectorAll('[data-ref]')) g.setAttribute('aria-current', String(g.dataset.ref === state.selection));
@@ -1332,7 +1381,7 @@ function selectField(name, label, values, selected = '', required = false) {
   control.value = selected;
   return field(label, control);
 }
-function vehicleTypeField(selected) {
+function vehicleTypeField(selected, colorInput) {
   const wrapper = el('div', '', 'vehicle-type');
   const label = el('label', 'Tipo de vehículo');
   label.id = 'vehicle-type-label';
@@ -1343,6 +1392,9 @@ function vehicleTypeField(selected) {
   value.value = vehicleTypes.includes(selected) ? selected : 'Otro';
   const trigger = button('', () => list.hidden ? open() : close(), 'vehicle-type-trigger');
   const icon = vehicleTypeIcon(value.value);
+  const updateColor = () => setVehicleColor(icon, colorInput.value);
+  updateColor();
+  colorInput.addEventListener('input', updateColor);
   const caption = el('span', value.value, 'vehicle-type-value');
   caption.id = 'vehicle-type-value';
   trigger.id = 'vehicle-type-trigger';
@@ -1418,7 +1470,6 @@ function vehicleTypeField(selected) {
     options[index].setAttribute('aria-selected', 'true');
     value.value = vehicleTypes[index];
     caption.textContent = value.value;
-    icon.dataset.type = value.value;
     paintVehicle(icon, value.value);
     close();
   }
@@ -1449,7 +1500,6 @@ function vehicleTypeField(selected) {
 }
 function vehicleTypeIcon(type) {
   const icon = createSvg('svg', { class:'vehicle-type-art', viewBox:'0 0 24 56', 'aria-hidden':'true' });
-  icon.dataset.type = type;
   paintVehicle(icon, type);
   return icon;
 }
@@ -1536,16 +1586,17 @@ function confirmChange(entry, action, back, title) {
 function vehicleForm(number, entry) {
   const values = entry?.datos || {};
   const change = changes('vehiculo', entry);
+  const color = input('color','Color',values.color,{limit:45});
   const slots = Object.keys(geometry.parking).map(k => Number(k.slice(1))).sort((a,b) => a-b)
     .filter(n => n === number || !bayRecord(n)).map(n => [String(n), 'Puesto ' + n]);
   const linked = new Map(data().personas.filter(p => p.rol === 'titular').map(p => [p.reserva_id, p.nombre]));
   if (entry?.reserva_id && !linked.has(entry.reserva_id)) linked.set(entry.reserva_id, 'Estadía vinculada');
   form(entry ? 'Editar vehículo' : 'Registrar vehículo', 'Puesto ' + number, [
     selectField('puesto', 'Puesto', slots, String(number), true),
-    vehicleTypeField(values.vehiculo || 'Sedán'),
+    vehicleTypeField(values.vehiculo || 'Sedán', color.querySelector('input')),
     input('patente','Patente',values.patente,{limit:14,required:true}),
     input('modelo','Modelo',values.modelo,{limit:80}),
-    input('color','Color',values.color,{limit:45}),
+    color,
     selectField('reserva_id', 'Estadía', [['','Sin vínculo'], ...linked], entry?.reserva_id || ''),
     ...(!entry ? [selectField('estacionado','Presencia',[['true','Estacionado'],['false','Fuera del recinto']],'true')] : []),
     input('hora','Hora de llegada (Chile)','',{type:'time'}),
