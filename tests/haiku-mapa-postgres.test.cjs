@@ -156,13 +156,14 @@ test('Mapa y Huéspedes comparten vehículos y conservan las reglas de estadías
         await db.exec('reset role');
         await db.exec(read('supabase/migrations/20261127223323_haiku_mapa_ocupacion_estadias.sql'));
         await db.exec(read('supabase/migrations/20261127223413_haiku_mapa_puestos_adicionales.sql'));
+        await db.exec(read('supabase/migrations/20261127230425_haiku_mapa_hospedaje_estacionamientos.sql'));
         await db.exec('set role authenticated');
         const {ocupacion_estadias, ...sameMap} = await snapshot();
         assert.deepEqual(sameMap, beforeOccupancy);
         assert.deepEqual(ocupacion_estadias, {
-            [confirmedStay]: {huespedes:2,noches:1,por_llegar:true},
-            [stay]: {huespedes:3,noches:2,por_llegar:false},
-            [fullDay]: {huespedes:2,noches:0,por_llegar:true},
+            [confirmedStay]: {huespedes:2,noches:1,por_llegar:true,hospedada:false},
+            [stay]: {huespedes:3,noches:2,por_llegar:false,hospedada:true},
+            [fullDay]: {huespedes:2,noches:0,por_llegar:true,hospedada:false},
         });
         await db.query("select set_config('request.jwt.claim.sub',$1,false)", [cleaningUser]);
         assert.deepEqual((await snapshot()).ocupacion_estadias,{});
@@ -184,6 +185,7 @@ test('Mapa y Huéspedes comparten vehículos y conservan las reglas de estadías
         park = await parked(8);
         await save(car,'vehiculo',{},uuid(44),park.revision,'salida');
         assert.deepEqual((await profile()).vehiculos.find(v => v.id === fromMap.id).estacionamiento,{puesto:8,estacionado:false});
+        assert.equal((await snapshot()).ocupacion_estadias[stay].hospedada,true);
         park = await parked(8);
         await save(car,'vehiculo',{},uuid(45),park.revision,'retirar');
         assert.equal(await parked(8),undefined);
@@ -231,6 +233,7 @@ test('Mapa y Huéspedes comparten vehículos y conservan las reglas de estadías
         await db.query("update public.reserva_estadias set estado_estadia='checked_out',checkout_realizado_en=now() where id=$1", [stay]);
         await db.exec('set role authenticated');
         assert.equal((await snapshot()).personas.find(p => p.id === member).hospedado, false);
+        assert.equal((await snapshot()).ocupacion_estadias[stay].hospedada,false);
         assert.equal((await snapshot()).elementos.some(e => e.id === marker), false);
         await assert.rejects(() => save(uuid(10), 'persona', person, uuid(11)), { code: '22023' });
     } finally {
