@@ -6,6 +6,7 @@
     const container = section?.querySelector(".haiku-mapa-viewport");
     const client = window.haikuSupabase;
     if (!container || !menu || !client) return;
+    const root = document.documentElement;
 
     const channel = "haiku:mapa:v1";
     const rpc = Object.freeze({
@@ -17,35 +18,50 @@
     });
     const identity = () => window.haikuSesion?.auth?.id;
     const allowed = () => Boolean(identity() && window.haikuTienePermiso?.("cabanas.ver"));
-    const isPrivate = () => document.documentElement.classList.contains("haiku-privacidad-bloqueada");
-    const isOpen = () => Boolean(section.getClientRects().length && !document.hidden);
-    const theme = () => document.documentElement.dataset.haikuTema === "oscuro" ? "dark" : "light";
+    const isPrivate = () => root.classList.contains("haiku-privacidad-bloqueada")
+        || root.classList.contains("haiku-privacidad-arranque");
+    const isOpen = () => !document.hidden && section.getClientRects().length > 0;
+    const theme = () => root.dataset.haikuTema === "oscuro" ? "dark" : "light";
     const uuid = value => typeof value === "string" && /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(value);
-    let frame = null, user = null, ready = false;
+    let frame = null, user = null, ready = false, initialSnapshot = null;
 
     function post(message) {
         frame?.contentWindow?.postMessage({channel, ...message}, "*");
     }
 
-    function sync() {
-        menu.hidden = !allowed();
-        if (!allowed() || isPrivate() || identity() !== user) {
-            frame?.remove();
-            frame = null;
-            ready = false;
-            user = null;
-            empty.hidden = false;
+    function clearFrame() {
+        frame?.remove();
+        frame = null;
+        ready = false;
+        user = null;
+        initialSnapshot = null;
+        empty.hidden = false;
+    }
+
+    async function query(method, args) {
+        try {
+            return await client.rpc(rpc[method], args);
+        } catch {
+            return {error:{message:"Revisa la conexión con Haku e inténtalo nuevamente."}};
         }
-        if (!allowed() || isPrivate() || !isOpen() || frame) return;
+    }
+
+    function sync() {
+        const permitted = allowed(), unlocked = !isPrivate(), open = isOpen();
+        menu.hidden = !permitted;
+        if (frame && (!permitted || !unlocked || identity() !== user || (!ready && !open))) clearFrame();
+        if (!permitted || !unlocked || !open || frame) return;
         frame = document.createElement("iframe");
         frame.title = "Mapa interactivo del recinto";
         frame.setAttribute("data-haiku-mapa-interno", "");
         frame.setAttribute("sandbox", "allow-scripts allow-forms");
         frame.referrerPolicy = "no-referrer";
         frame.src = "assets/mapa/recinto.html?v=3";
+        user = identity();
+        // Read today's map while the sandboxed document loads.
+        initialSnapshot = query("snapshot", {});
         container.append(frame);
         empty.hidden = true;
-        user = identity();
     }
 
     function refresh() {
@@ -77,6 +93,7 @@
             return;
         }
         if (msg.type === "ready") {
+            if (!isOpen()) { clearFrame(); return; }
             ready = true;
             post({type:"init", theme:theme()});
             return;
@@ -87,12 +104,9 @@
         }
         if (msg.type !== "request" || !Number.isSafeInteger(msg.id) || !Object.hasOwn(rpc,msg.method)
             || !msg.args || typeof msg.args !== "object" || !isOpen()) return;
-        let result;
-        try {
-            result = await client.rpc(rpc[msg.method], msg.args);
-        } catch {
-            result = {error:{message:"Revisa la conexión con Haku e inténtalo nuevamente."}};
-        }
+        const first = msg.method === "snapshot" ? initialSnapshot : null;
+        if (first) initialSnapshot = null;
+        const result = await (first || query(msg.method, msg.args));
         if (source !== frame || user !== identity() || !allowed() || isPrivate()) return;
         const {data,error} = result;
         post({type:"reply",id:msg.id,data,error:error ? {message:error.message,code:error.code} : null});
@@ -106,18 +120,22 @@
     window.addEventListener("haiku:privacidad-cambio", sync);
     client.auth.onAuthStateChange(event => {
         if (event !== "SIGNED_OUT") return;
-        frame?.remove();
-        frame = null;
-        user = null;
-        ready = false;
+        clearFrame();
         menu.hidden = true;
-        empty.hidden = false;
     });
+    if (root.classList.contains("haiku-privacidad-arranque")) {
+        const startup = new MutationObserver(() => {
+            if (root.classList.contains("haiku-privacidad-arranque")) return;
+            startup.disconnect();
+            sync();
+        });
+        startup.observe(root, {attributes:true, attributeFilter:["class"]});
+    }
     const observer = new MutationObserver(() => { sync(); refresh(); });
     observer.observe(section, {attributes:true,attributeFilter:["class","hidden"]});
     new MutationObserver(() => {
         if (ready) post({type:"theme", theme:theme()});
-    }).observe(document.documentElement,{attributes:true,attributeFilter:["data-haiku-tema"]});
+    }).observe(root,{attributes:true,attributeFilter:["data-haiku-tema"]});
     document.addEventListener("visibilitychange", () => { sync(); refresh(); });
     document.addEventListener("haiku:resumen-datos-actualizados", refresh);
     window.setInterval(refresh, 45000);

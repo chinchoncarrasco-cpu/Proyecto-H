@@ -11,6 +11,8 @@ test('Mapa lee estadías del esquema de Haku, filtra huéspedes tras check-out y
     const db = new PGlite();
     const [actor, member, reservation, stay, cabin, car, action, marker, markerAction] =
         [1, 2, 3, 4, 5, 6, 7, 8, 9].map(uuid);
+    const [companion, stayCompanion, reservationWithoutProfile, confirmedStay, cleaningUser] =
+        [12, 13, 14, 15, 16].map(uuid);
     try {
         await db.exec(read('tests/fixtures/huespedes-schema.sql'));
         await db.exec(read('supabase/migrations/20261120205010_haku_huespedes_v1_1.sql'));
@@ -34,12 +36,15 @@ test('Mapa lee estadías del esquema de Haku, filtra huéspedes tras check-out y
                     select b.id, b.numero, 'continua', s.checkin_realizado_en, null::text, null::uuid,
                         s.reserva_id, null::uuid, null::uuid, null::uuid
                     from public.cabanas b join public.reserva_estadias s on s.cabana_id=b.id
+                    where s.fecha_ingreso <= $1 and s.fecha_salida >= $1
                 $$;
         `);
         await db.exec(read('supabase/migrations/20261127054554_haiku_mapa_recinto_v1.sql'));
         await db.query('insert into public.usuarios(id,nombre) values($1,\'Recepción de prueba\')', [actor]);
         await db.query('insert into private.permisos select $1::uuid, unnest($2::text[])',
             [actor, ['cabanas.ver', 'reservas.ver', 'huespedes.ver', 'huespedes.gestionar', 'servicios.ver']]);
+        await db.query("insert into public.usuarios(id,nombre) values($1,'Aseo de prueba')", [cleaningUser]);
+        await db.query("insert into private.permisos values($1,'cabanas.ver')", [cleaningUser]);
         await db.query('insert into public.huespedes(id,nombre) values($1,\'Huésped ficticio\')', [member]);
         await db.query('insert into public.reservas(id,titular_huesped_id,titular_nombre) values($1,$2,\'Huésped ficticio\')', [reservation, member]);
         await db.query('insert into public.cabanas(id,numero) values($1,5)', [cabin]);
@@ -48,6 +53,15 @@ test('Mapa lee estadías del esquema de Haku, filtra huéspedes tras check-out y
                 adultos,estado_estadia,checkin_realizado_en)
             values($1,$2,$3,current_date - 1,current_date + 1,1,'hospedada',now() - interval '1 day')
         `, [stay, reservation, cabin]);
+        await db.query("insert into public.huespedes(id,nombre,apellido) values ($1,'  Primera  ',' Acompañante '), ($2,'Segunda','Acompañante')",
+            [companion, stayCompanion]);
+        await db.query('insert into public.reserva_huespedes values ($1,$2)', [reservation, companion]);
+        await db.query('insert into public.estadia_huespedes values ($1,$2), ($1,$3)', [stay, companion, stayCompanion]);
+        await db.query("insert into public.reservas(id,titular_nombre) values ($1,'Titular de registro anterior')", [reservationWithoutProfile]);
+        await db.query(`
+            insert into public.reserva_estadias(id,reserva_id,cabana_id,fecha_ingreso,fecha_salida,adultos)
+            values ($1,$2,$3,current_date,current_date+1,2)
+        `, [confirmedStay, reservationWithoutProfile, cabin]);
         await db.exec('set role anon');
         const snapshot = async () => (await db.query('select public.haiku_mapa_dia_v1() as mapa')).rows[0].mapa;
         await assert.rejects(snapshot, { code: '42501' });
@@ -55,9 +69,23 @@ test('Mapa lee estadías del esquema de Haku, filtra huéspedes tras check-out y
         await db.query("select set_config('request.jwt.claim.sub',$1,false)", [actor]);
         const initial = await snapshot();
         assert.equal(initial.cabanas[0].numero, 5);
-        assert.equal(initial.personas[0].id, member);
-        assert.equal(initial.personas[0].hospedado, true);
+        assert.equal(initial.personas.find(p => p.id === member).hospedado, true);
+        assert.equal(initial.personas.filter(p => p.id === companion).length, 1);
+        assert.equal(initial.personas.find(p => p.id === companion).nombre, 'Primera Acompañante');
+        assert.equal(initial.personas.find(p => p.id === stayCompanion).rol, 'acompanante');
+        assert.equal(initial.personas.find(p => p.reserva_id === reservationWithoutProfile).hospedado, false);
+        assert.equal(initial.personas.length, 4);
         assert.deepEqual(initial.elementos, []);
+
+        await db.exec('reset role');
+        await db.exec(read('supabase/migrations/20261127175631_haiku_mapa_carga_agil.sql'));
+        await db.exec('set role anon');
+        await assert.rejects(snapshot, { code: '42501' });
+        await db.exec('set role authenticated');
+        assert.deepEqual(await snapshot(), initial);
+        await db.query("select set_config('request.jwt.claim.sub',$1,false)", [cleaningUser]);
+        assert.deepEqual((await snapshot()).personas, []);
+        await db.query("select set_config('request.jwt.claim.sub',$1,false)", [actor]);
 
         const save = async (id, kind, data, request) => (await db.query(
             "select public.haiku_mapa_guardar_v1($1,$2,0,'guardar',$3,$4) as cambio",
@@ -74,7 +102,7 @@ test('Mapa lee estadías del esquema de Haku, filtra huéspedes tras check-out y
         await db.exec('reset role');
         await db.query("update public.reserva_estadias set estado_estadia='checked_out',checkout_realizado_en=now() where id=$1", [stay]);
         await db.exec('set role authenticated');
-        assert.equal((await snapshot()).personas[0].hospedado, false);
+        assert.equal((await snapshot()).personas.find(p => p.id === member).hospedado, false);
         assert.equal((await snapshot()).elementos.some(e => e.id === marker), false);
         await assert.rejects(() => save(uuid(10), 'persona', person, uuid(11)), { code: '22023' });
     } finally {
