@@ -1910,8 +1910,9 @@ function vehicleTypeField(selected, colorInput, {name = 'vehiculo', disabled = f
     const below = innerHeight - rect.bottom - 2 * gap;
     const above = rect.top - 2 * gap;
     const upward = below < Math.min(above, 352);
-    list.style.left = rect.left + 'px';
-    list.style.width = rect.width + 'px';
+    const width = Math.min(Math.max(rect.width, name === 'tipo' ? 185 : 0), innerWidth - 2 * gap);
+    list.style.left = Math.min(rect.left, innerWidth - width - gap) + 'px';
+    list.style.width = width + 'px';
     list.style.top = upward ? 'auto' : rect.bottom + gap + 'px';
     list.style.bottom = upward ? innerHeight - rect.top + gap + 'px' : 'auto';
     list.style.setProperty('--vehicle-options-room', Math.max(0, upward ? above : below) + 'px');
