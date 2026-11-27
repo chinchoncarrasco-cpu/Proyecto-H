@@ -600,11 +600,14 @@
         SERVICIO_DESCARTADO: "SERVICIO_DESCARTADO", AMBIGUO: "AMBIGUO"
     });
     const INTENCION_FINANCIERA = Object.freeze({ CORTESIA: "CORTESIA", COBRABLE: "COBRABLE", NO_DETERMINADA: "NO_DETERMINADA" });
+    // El Libro también usa los nombres del catálogo escritos juntos.
+    const PATRON_JACUZZI = /\b(?:tinaja)?(?:jacuzzi|jacussi|jacusi)\b/;
+    const PATRON_TONEL = /\b(?:tinaja)?tonel(?:es)?\b|\btinajas?\b[^.;]{0,28}\bmadera\b/;
 
     function conceptosDeServicio(texto) {
         const t = normalizar(texto), hallados = [];
-        if (/\b(?:jacuzzi|jacussi|jacusi)\b/.test(t)) hallados.push("jacuzzi");
-        if (/\btonel(?:es)?\b|\btinajas?\b[^.;]{0,28}\bmadera\b/.test(t)) hallados.push("tonel");
+        if (PATRON_JACUZZI.test(t)) hallados.push("jacuzzi");
+        if (PATRON_TONEL.test(t)) hallados.push("tonel");
         if (/\btinajas?\b/.test(t) && !hallados.some(x => x === "jacuzzi" || x === "tonel")) hallados.push("tinaja");
         if (/\blate[\s-]*(?:check[\s-]*)?out\b/.test(t)) hallados.push("lateout");
         if (/\bcama\s*adicional\b|\bcamaadicional\b/.test(t)) hallados.push("cama_adicional");
@@ -633,7 +636,7 @@
             // Se conservan las horas explícitas: «a la 1 HR» y «1:00».
             if (m[1] === '1' && m[2] == null && /^(?:hra?s?|hs|h)$/.test(m[3] || '') &&
                 !esHoraProgramada(sinFechas,m.index) &&
-                /^\s*(?:de\s+)?(?:tinaja|tonel|jacuzzi|jacussi|jacusi|masaje)\b/.test(sinFechas.slice(m.index+m[0].length))) continue;
+                /^\s*(?:de\s+)?(?:(?:tinaja)?(?:tonel|jacuzzi|jacussi|jacusi)|tinaja|masaje)\b/.test(sinFechas.slice(m.index+m[0].length))) continue;
             let hora = Number(m[1]);
             const minuto = Number(m[2] || 0), meridiano = m[3] === 'am' || m[3] === 'pm';
             if (minuto > 59 || (meridiano ? hora < 1 || hora > 12 : hora > 23)) continue;
@@ -1068,7 +1071,7 @@
     function ocurrenciasDeServicio(texto) {
         const t = normalizar(texto), ocurrencias = [];
         const agregar = (concepto, indice) => { if (indice >= 0) ocurrencias.push({ concepto, indice }); };
-        const jacuzzi = t.search(/\b(?:jacuzzi|jacussi|jacusi)\b/), tonel = t.search(/\btonel(?:es)?\b|\btinajas?\b[^.;]{0,28}\bmadera\b/), tinaja = t.search(/\btinajas?\b/);
+        const jacuzzi = t.search(PATRON_JACUZZI), tonel = t.search(PATRON_TONEL), tinaja = t.search(/\btinajas?\b/);
         if (jacuzzi >= 0) agregar("jacuzzi", tinaja >= 0 ? Math.min(tinaja, jacuzzi) : jacuzzi);
         if (tonel >= 0 && jacuzzi < 0) agregar("tonel", tinaja >= 0 ? Math.min(tinaja, tonel) : tonel);
         if (tinaja >= 0 && jacuzzi < 0 && tonel < 0) agregar("tinaja", tinaja);
@@ -1143,7 +1146,7 @@
             evidencias.push('solicitud de cuna para preparar el alojamiento; nota sin cargo');
             return base(SEMANTICA_SERVICIO.NO_SERVICIO);
         }
-        const mencionAislada = /^(?:cama\s*adicional|camaadicional|cuna|tinaja|jacuzzi|tonel|masaje)$/i.test(t);
+        const mencionAislada = /^(?:cama\s*adicional|camaadicional|cuna|tinaja|(?:tinaja)?(?:jacuzzi|tonel)|masaje)$/i.test(t);
         if (mencionAislada && contextoReserva?.origen_campo !== "servicios") {
             evidencias.push("mención aislada sin intención de prestación"); return base(SEMANTICA_SERVICIO.NO_SERVICIO);
         }
@@ -2031,8 +2034,8 @@
         if (concepto === "lateout") return { codigo: "lateCheckout", nombre: "Late Check-out", requiereHorario: true, requierePersonas: false, permiteCortesia: false };
         if (concepto === "jacuzzi") return { codigo: "tinajaJacuzzi", nombre: "Tinaja Jacuzzi", requiereHorario: true, requierePersonas: true, permiteCortesia: true };
         if (concepto === "tonel") return { codigo: "tinajaTonel", nombre: "Tinaja Tonel de Madera", requiereHorario: true, requierePersonas: true, permiteCortesia: true };
-        if (/\bjacuzzi\b/.test(t)) return { codigo: "tinajaJacuzzi", nombre: "Tinaja Jacuzzi", requiereHorario: true, requierePersonas: true, permiteCortesia: true };
-        if (/\btonel\b|tinaja\s+de\s+madera/.test(t)) return { codigo: "tinajaTonel", nombre: "Tinaja Tonel de Madera", requiereHorario: true, requierePersonas: true, permiteCortesia: true };
+        if (PATRON_JACUZZI.test(t)) return { codigo: "tinajaJacuzzi", nombre: "Tinaja Jacuzzi", requiereHorario: true, requierePersonas: true, permiteCortesia: true };
+        if (PATRON_TONEL.test(t)) return { codigo: "tinajaTonel", nombre: "Tinaja Tonel de Madera", requiereHorario: true, requierePersonas: true, permiteCortesia: true };
         if (concepto === "masaje") {
             const tipoFuente = servicio?.tipo ?? servicio?.unidad_servicio?.tipo ?? null;
             const tipoNormalizado = normalizar(tipoFuente);
