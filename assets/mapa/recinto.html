@@ -117,6 +117,19 @@ dd {margin:0; text-align:right; overflow-wrap:anywhere}
 form {display:grid; gap:7px}
 form label {display:grid; gap:3px; color:var(--sub); font-size:12px}
 form :is(input,select,textarea) {width:100%; min-width:0; min-height:37px; padding:6px 7px; font-size:15px; color:var(--ink)}
+.vehicle-type {display:grid; gap:3px}
+.vehicle-type-trigger, .vehicle-type-option {display:flex; align-items:center; gap:8px; padding:3px 8px; text-align:left; font-size:15px; font-weight:500}
+.vehicle-type-trigger {width:100%; min-height:37px}
+.vehicle-type-trigger[aria-expanded="true"] {border-color:var(--accent)}
+.vehicle-type-value {flex:1}
+.vehicle-type-art {display:block; width:16px; height:27px; flex:none}
+.vehicle-type-arrow, .vehicle-type-check {width:14px; height:14px; flex:none}
+.vehicle-type-options {position:fixed; z-index:4; max-height:min(22rem, var(--vehicle-options-room)); overflow-y:auto; overscroll-behavior:contain; padding:3px; border:1px solid var(--line); border-radius:8px; background:var(--paper); box-shadow:0 5px 18px #1610182c}
+.vehicle-type-option {min-height:33px; border-radius:5px; cursor:pointer}
+.vehicle-type-option[data-active], .vehicle-type-option:hover {background:var(--tint)}
+.vehicle-type-option[aria-selected="true"] {font-weight:650}
+.vehicle-type-check {margin-left:auto; visibility:hidden}
+.vehicle-type-option[aria-selected="true"] .vehicle-type-check {visibility:visible}
 textarea {min-height:59px; resize:vertical}
 .form-note, .subtle {color:var(--sub); font-size:12px}
 .form-error {color:var(--working); font-size:12px}
@@ -137,6 +150,9 @@ footer .web-help {margin-left:auto}
   #detail-body {padding:8px 10px 10px; gap:7px}
   #detail-body button, .detail-head button, .viewport-tools button {min-height:42px}
   #detail-body form :is(input,select,textarea) {font-size:16px}
+  .vehicle-type-trigger, .vehicle-type-option {font-size:16px}
+  .vehicle-type-options {max-height:min(16rem, var(--vehicle-options-room))}
+  .vehicle-type-option {min-height:40px}
   footer .web-help {display:none}
 }
 @media (pointer:coarse) {#tooltip, footer .web-help {display:none !important}}
@@ -1030,6 +1046,7 @@ function applyTheme(theme) {
   document.documentElement.dataset.theme = theme;
   byId('base').replaceChildren(byId('art-' + theme).content.cloneNode(true));
   draw();
+  for (const icon of detailBody.querySelectorAll('.vehicle-type-art')) paintVehicle(icon, icon.dataset.type);
 }
 function draw() {
   const definitions = createSvg('defs');
@@ -1099,10 +1116,13 @@ function drawCar(g, bay, row) {
     transform:'translate(' + p.car.join(' ') + ') rotate(' + p.angle + ') scale(' + p.w / 24 + ' ' + p.h / 56 + ') translate(-12 -28)',
     opacity:outside ? .42 : 1, 'pointer-events':'none',
   });
-  const vehicle = vehicleTypes.includes(row.datos.vehiculo) ? row.datos.vehiculo : 'Otro';
-  // The approved vector icon library is static. Guest-entered values never form SVG markup.
-  drawing.innerHTML = vehicleArt(vehicle, paints[useTheme()], outside);
+  paintVehicle(drawing, row.datos.vehiculo, outside);
   g.append(drawing);
+}
+function paintVehicle(node, type, outside = false) {
+  const vehicle = vehicleTypes.includes(type) ? type : 'Otro';
+  // Both controls use the same static vector shapes as the parking markers.
+  node.innerHTML = vehicleArt(vehicle, paints[useTheme()], outside);
 }
 function markSelection() {
   for (const g of regions.querySelectorAll('[data-ref]')) g.setAttribute('aria-current', String(g.dataset.ref === state.selection));
@@ -1311,6 +1331,127 @@ function selectField(name, label, values, selected = '', required = false) {
   control.value = selected;
   return field(label, control);
 }
+function vehicleTypeField(selected) {
+  const wrapper = el('div', '', 'vehicle-type');
+  const label = el('label', 'Tipo de vehículo');
+  label.id = 'vehicle-type-label';
+  label.htmlFor = 'vehicle-type-trigger';
+  const value = el('input');
+  value.type = 'hidden';
+  value.name = 'vehiculo';
+  value.value = vehicleTypes.includes(selected) ? selected : 'Otro';
+  const trigger = button('', () => list.hidden ? open() : close(), 'vehicle-type-trigger');
+  const icon = vehicleTypeIcon(value.value);
+  const caption = el('span', value.value, 'vehicle-type-value');
+  caption.id = 'vehicle-type-value';
+  trigger.id = 'vehicle-type-trigger';
+  trigger.setAttribute('role', 'combobox');
+  trigger.setAttribute('aria-labelledby', label.id + ' ' + caption.id);
+  trigger.setAttribute('aria-expanded', 'false');
+  const list = el('div', '', 'vehicle-type-options');
+  list.id = 'vehicle-type-options';
+  list.hidden = true;
+  list.setAttribute('role', 'listbox');
+  list.setAttribute('aria-labelledby', label.id);
+  trigger.setAttribute('aria-controls', list.id);
+  trigger.append(icon, caption, indicator('M3 5l4 4 4-4', 'vehicle-type-arrow'));
+  let active = 0, openEvents;
+  const options = vehicleTypes.map((type, index) => {
+    const option = el('div', '', 'vehicle-type-option');
+    option.id = list.id + '-' + index;
+    option.setAttribute('role', 'option');
+    option.setAttribute('aria-selected', String(type === value.value));
+    option.append(vehicleTypeIcon(type), el('span', type), indicator('M2.5 7l3 3 6-6', 'vehicle-type-check'));
+    option.addEventListener('click', () => choose(index));
+    return option;
+  });
+  list.append(...options);
+  wrapper.append(label, value, trigger, list);
+
+  function indicator(path, cls) {
+    const svg = createSvg('svg', { class:cls, viewBox:'0 0 14 14', 'aria-hidden':'true' });
+    svg.append(createSvg('path', { d:path, fill:'none', stroke:'currentColor', 'stroke-width':1.5, 'stroke-linecap':'round', 'stroke-linejoin':'round' }));
+    return svg;
+  }
+  function highlight(index) {
+    delete options[active].dataset.active;
+    active = Math.max(0, Math.min(index, options.length - 1));
+    const option = options[active];
+    option.dataset.active = '';
+    trigger.setAttribute('aria-activedescendant', option.id);
+    const top = option.offsetTop, bottom = top + option.offsetHeight;
+    if (top < list.scrollTop) list.scrollTop = top;
+    else if (bottom > list.scrollTop + list.clientHeight) list.scrollTop = bottom - list.clientHeight;
+  }
+  function close() {
+    if (list.hidden) return;
+    list.hidden = true;
+    trigger.setAttribute('aria-expanded', 'false');
+    trigger.removeAttribute('aria-activedescendant');
+    openEvents.abort();
+  }
+  function open() {
+    if (state.saving) return;
+    const rect = trigger.getBoundingClientRect();
+    const gap = 4;
+    const below = innerHeight - rect.bottom - 2 * gap;
+    const above = rect.top - 2 * gap;
+    const upward = below < Math.min(above, 352);
+    list.style.left = rect.left + 'px';
+    list.style.width = rect.width + 'px';
+    list.style.top = upward ? 'auto' : rect.bottom + gap + 'px';
+    list.style.bottom = upward ? innerHeight - rect.top + gap + 'px' : 'auto';
+    list.style.setProperty('--vehicle-options-room', Math.max(0, upward ? above : below) + 'px');
+    openEvents = new AbortController();
+    const events = { signal:openEvents.signal };
+    document.addEventListener('pointerdown', event => { if (!wrapper.contains(event.target)) close(); }, events);
+    details.addEventListener('scroll', close, events);
+    window.addEventListener('resize', close, events);
+    list.hidden = false;
+    trigger.setAttribute('aria-expanded', 'true');
+    trigger.focus({ preventScroll:true });
+    highlight(vehicleTypes.indexOf(value.value));
+  }
+  function choose(index) {
+    options[vehicleTypes.indexOf(value.value)].setAttribute('aria-selected', 'false');
+    options[index].setAttribute('aria-selected', 'true');
+    value.value = vehicleTypes[index];
+    caption.textContent = value.value;
+    icon.dataset.type = value.value;
+    paintVehicle(icon, value.value);
+    close();
+  }
+  list.addEventListener('mousedown', event => { if (event.target.closest('[role="option"]')) event.preventDefault(); });
+  trigger.addEventListener('blur', close);
+  trigger.addEventListener('keydown', event => {
+    if (state.saving) return;
+    const key = event.key;
+    if (key === 'Tab') {
+      if (!list.hidden) choose(active);
+      return;
+    }
+    if (key === 'Escape') {
+      if (list.hidden) return;
+      event.stopPropagation();
+      close();
+    } else if (key === 'Enter' || key === ' ') {
+      if (list.hidden) open(); else choose(active);
+    } else if (key === 'ArrowDown' || key === 'ArrowUp') {
+      if (list.hidden) open(); else highlight(active + (key === 'ArrowDown' ? 1 : -1));
+    } else if (key === 'Home' || key === 'End') {
+      if (list.hidden) open();
+      highlight(key === 'Home' ? 0 : options.length - 1);
+    } else return;
+    event.preventDefault();
+  });
+  return wrapper;
+}
+function vehicleTypeIcon(type) {
+  const icon = createSvg('svg', { class:'vehicle-type-art', viewBox:'0 0 24 56', 'aria-hidden':'true' });
+  icon.dataset.type = type;
+  paintVehicle(icon, type);
+  return icon;
+}
 function field(label, control) {
   const wrapper = el('label', label);
   control.setAttribute('aria-label', label);
@@ -1400,7 +1541,7 @@ function vehicleForm(number, entry) {
   if (entry?.reserva_id && !linked.has(entry.reserva_id)) linked.set(entry.reserva_id, 'Estadía vinculada');
   form(entry ? 'Editar vehículo' : 'Registrar vehículo', 'Puesto ' + number, [
     selectField('puesto', 'Puesto', slots, String(number), true),
-    selectField('vehiculo', 'Tipo de vehículo', vehicleTypes, values.vehiculo || 'Sedán', true),
+    vehicleTypeField(values.vehiculo || 'Sedán'),
     input('patente','Patente',values.patente,{limit:14,required:true}),
     input('modelo','Modelo',values.modelo,{limit:80}),
     input('color','Color',values.color,{limit:45}),
