@@ -78,7 +78,7 @@ test('Mapa lee estadías del esquema de Haku, filtra huéspedes tras check-out y
         assert.deepEqual(initial.elementos, []);
 
         await db.exec('reset role');
-        await db.exec(read('supabase/migrations/20261127175631_haiku_mapa_carga_agil.sql'));
+        await db.exec(read('supabase/migrations/20261127183314_haiku_mapa_carga_agil.sql'));
         await db.exec('set role anon');
         await assert.rejects(snapshot, { code: '42501' });
         await db.exec('set role authenticated');

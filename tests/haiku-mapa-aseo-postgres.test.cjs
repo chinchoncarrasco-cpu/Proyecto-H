@@ -45,7 +45,7 @@ test('El mapa guarda el aseo diario con las mismas filas y permisos que Cabañas
                     from public.cabanas where activa
                 $$;
         `);
-        await db.exec(read('supabase/migrations/20261127180820_haiku_mapa_aseo_inline.sql'));
+        await db.exec(read('supabase/migrations/20261127183332_haiku_mapa_aseo_inline.sql'));
         for (const [id, permissions] of [
             [manager, ['cabanas.ver','reservas.ver','aseos.ver_todos','aseos.gestionar_todos']],
             [reader, ['cabanas.ver','aseos.ver_todos']],
