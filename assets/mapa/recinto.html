@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:; form-action 'none'; base-uri 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline' 'self'; script-src 'unsafe-inline' 'self'; img-src 'self' data: blob: https://zqfegylkylxsuoejomow.supabase.co/storage/v1/; font-src 'self'; form-action 'none'; base-uri 'none'">
 <title>Mapa del recinto · Haku</title>
 <style>
 :root {
@@ -143,9 +143,9 @@ form :is(input,select,textarea) {width:100%; min-width:0; min-height:37px; paddi
 textarea {min-height:59px; resize:vertical}
 .form-note, .subtle {color:var(--sub); font-size:12px}
 .form-error {color:var(--working); font-size:12px}
-footer {display:flex; gap:10px; align-items:center; padding:6px 10px; border-top:1px solid var(--line); color:var(--sub); font-size:11px}
-footer span {display:inline-flex; align-items:center; gap:5px; white-space:nowrap}
-footer .web-help {margin-left:auto}
+.workspace > footer {display:flex; gap:10px; align-items:center; padding:6px 10px; border-top:1px solid var(--line); color:var(--sub); font-size:11px}
+.workspace > footer span {display:inline-flex; align-items:center; gap:5px; white-space:nowrap}
+.workspace > footer .web-help {margin-left:auto}
 .aura {width:6px; height:6px; border-radius:50%; background:var(--tone); box-shadow:0 0 0 3px color-mix(in srgb, var(--tone) 24%, transparent)}
 .ready {--tone:var(--ready)}
 .working {--tone:var(--working)}
@@ -177,12 +177,56 @@ footer .web-help {margin-left:auto}
 .cabin-fields {display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px}
 .cabin-extra .check {display:flex; align-items:center; gap:7px; width:fit-content}
 .cabin-extra .check input {width:16px; min-height:0; accent-color:var(--accent)}
-.guest-tags {display:flex; flex-wrap:wrap; gap:4px}
-.guest-tags span {padding:2px 7px; border-radius:5px; background:var(--tint); font-size:12px; overflow-wrap:anywhere}
+#seccion-huespedes.hu-en-mapa {
+  --guest-bg:var(--paper);
+  --guest-surface:var(--paper);
+  --guest-soft:var(--page);
+  --guest-selected:var(--tint);
+  --guest-border:var(--line);
+  --guest-ink:var(--ink);
+  --guest-muted:var(--sub);
+  --guest-accent:#78263f;
+  --guest-link:#285675;
+  --guest-warn:#f4e7ce;
+  --guest-warn-text:#73511e;
+  --cereza-primario:var(--accent);
+  --cereza-sobre-primario:var(--accent-ink);
+  padding:0!important;
+  font-family:inherit;
+  min-width:0;
+}
+[data-theme="dark"] #seccion-huespedes.hu-en-mapa {
+  --guest-accent:#f0adbf;
+  --guest-link:#b2d8f2;
+  --guest-warn:#443727;
+  --guest-warn-text:#efd099;
+}
+#seccion-huespedes .hu-ficha {border:0; padding:0; gap:7px}
+#detail-body #seccion-huespedes .hu-ficha h3 {font-size:18px; line-height:1.2; margin:0}
+#seccion-huespedes .hu-perfil-identidad {min-height:0; gap:5px}
+#seccion-huespedes .hu-perfil-identidad .hu-identidad {gap:7px}
+#seccion-huespedes .hu-perfil-identidad > .hu-boton {flex:none; padding-inline:5px}
+#seccion-huespedes .hu-avatar.hu-avatar-perfil {width:35px; height:35px}
+#seccion-huespedes .hu-integrante {min-height:0; gap:6px}
+#seccion-huespedes .hu-integrante .hu-identidad {gap:7px}
+#seccion-huespedes .hu-integrante > .hu-boton {flex:none; min-width:0; padding-inline:7px}
+#seccion-huespedes .hu-boton {white-space:normal; overflow-wrap:anywhere}
+#seccion-huespedes :is(button,summary) {-webkit-tap-highlight-color:#a64f6d24}
+#seccion-huespedes .hu-base dd {text-align:left}
+#seccion-huespedes .hu-base dt {min-width:0}
+#seccion-huespedes .hu-empty {padding:8px 0}
+#seccion-huespedes .hu-dialogo {overscroll-behavior:contain}
+#detail-body #seccion-huespedes .hu-dialogo h3 {font-size:19px; line-height:1.25; margin:0}
+.cabin-extra:has(.hu-en-mapa:not([hidden])) ~ .guest-notes,
+.cabin-actions:has([data-guest-view][aria-expanded="true"]) .primary {display:none}
 @media (max-width:740px) {
   .cabin-extra {padding-top:6px}
   .cabin-staff {grid-template-columns:1fr}
   .cabin-extra .check {min-height:34px}
+  #details:has([data-guest-view][aria-expanded="true"]) {max-height:min(83%,550px)}
+  #detail-body #seccion-huespedes .hu-boton {min-height:38px}
+  #detail-body #seccion-huespedes .hu-contexto .hu-boton,
+  #detail-body #seccion-huespedes .hu-subtitulo .hu-boton {min-height:33px}
 }
 </style>
 </head>
@@ -915,6 +959,7 @@ const view = { x: 0, y: 0, scale: 1 };
 const state = { data: null, filter: 'all', selection: '', formOpen: false, placing: null, saving: false };
 const pending = new Map();
 let nextRequest = 0, frame = 0, measure = null, gesture = null, snapshotRequest = null;
+let guestAssets, disposeGuest;
 const pointsDown = new Map();
 
 const states = {
@@ -1105,6 +1150,7 @@ function cleaning(row) {
 }
 function applyTheme(theme) {
   document.documentElement.dataset.theme = theme;
+  document.documentElement.dataset.haikuTema = theme === 'dark' ? 'oscuro' : 'claro';
   byId('base').replaceChildren(byId('art-' + theme).content.cloneNode(true));
   draw();
 }
@@ -1230,6 +1276,7 @@ function showPanel(title, caption = '', focus = true) {
   byId('detail-title').textContent = title;
   byId('detail-caption').textContent = caption;
   byId('detail-caption').hidden = !caption;
+  clearGuest();
   detailBody.replaceChildren();
   details.hidden = false;
   details.scrollTop = 0;
@@ -1237,6 +1284,7 @@ function showPanel(title, caption = '', focus = true) {
 }
 function closeDetail() {
   details.hidden = true;
+  clearGuest();
   detailBody.replaceChildren();
   state.formOpen = false;
   state.selection = '';
@@ -1264,6 +1312,10 @@ function cabinContext(n) {
 }
 function openGuest(person, reserve, stayId) {
   send({ type:'navigate', method:'guest', args:{ id:person.id, reserva:reserve, estadia:stayId } });
+}
+function clearGuest() {
+  disposeGuest?.();
+  disposeGuest = null;
 }
 function notesPanel(person, reserve) {
   const section = el('details', '', 'guest-notes');
@@ -1306,29 +1358,30 @@ function showCabin(n, focus) {
   pane.hidden = true;
   pane.dataset.context = cabinContext(n);
   const controls = el('div', '', 'actions cabin-actions');
-  function disclosure(label, title, render) {
+  function disclosure(label, title, render, guestView = false) {
     const trigger = button(label, () => {
       if (state.saving) return;
       const open = trigger.getAttribute('aria-expanded') !== 'true';
       for (const peer of controls.querySelectorAll('[aria-expanded]')) peer.setAttribute('aria-expanded','false');
       trigger.setAttribute('aria-expanded', String(open));
       pane.hidden = !open;
+      clearGuest();
       pane.replaceChildren();
       if (!open) return;
-      const body = el('div'), heading = el('h3', title);
-      heading.id = 'cabin-extra-title';
-      body.append(heading);
-      pane.setAttribute('aria-labelledby', heading.id);
+      const body = el('div');
+      pane.setAttribute('aria-label', title);
+      if (!guestView) body.append(el('h3', title));
       pane.append(body);
       render(body);
       if (innerWidth <= 740) pane.scrollIntoView({block:'nearest'});
     });
+    if (guestView) trigger.dataset.guestView = '';
     trigger.setAttribute('aria-expanded', 'false');
     trigger.setAttribute('aria-controls', pane.id);
     controls.append(trigger);
   }
   if (row) disclosure('Gestionar aseo', 'Aseo de la cabaña', body => cabinCleaning(body, n, data().fecha));
-  if (guest) disclosure('Ver huésped', 'Ficha del huésped', body => cabinProfile(body, guest, ref));
+  if (guest) disclosure('Ver huésped', 'Ficha del huésped', body => cabinProfile(body, guest, ref), true);
   if (guest && data().permisos.huesped) controls.append(button('Nota o preferencia', () => guestForm(guest, ref.reserve, 'c' + n), 'primary'));
   if (controls.childElementCount) detailBody.append(controls, pane);
   if (guest) notesPanel(guest, ref.reserve);
@@ -1417,43 +1470,77 @@ function cabinCleaning(body, n, date) {
   }
   void load();
 }
-async function cabinProfile(body, guest, ref) {
-  const slot = el('div', '', 'cabin-extra-content');
-  const full = button('Abrir ficha completa', () => openGuest(guest, ref.reserve, ref.stay));
-  body.append(el('strong', guest.nombre), slot, full);
-  async function load() {
-    const loading = el('p','Cargando ficha…','subtle');
-    loading.setAttribute('role','status');
-    slot.replaceChildren(loading);
-    try {
-      const profile = await request('guestDetail', {p_id:guest.id,p_reserva:ref.reserve,p_historial:false});
-      if (!slot.isConnected) return;
-      const person = profile.persona || {}, visit = profile.visita || {};
-      const exact = list(profile.estadias).find(stay => stay.id === ref.stay);
-      const date = day => /^\d{4}-\d{2}-\d{2}$/.test(day || '') ? simpleDate.format(new Date(day + 'T12:00:00Z')) : '';
-      const tags = list(profile.etiquetas).filter(tag => tag.nombre);
-      const others = list(profile.integrantes).filter(p => p.id !== guest.id && p.rol !== 'borrador' && p.nombre);
-      slot.replaceChildren(lines([
-        ['Ingreso', date(exact?.fecha_ingreso || visit.ingreso)], ['Salida', date(exact?.fecha_salida || visit.salida)],
-        ['Teléfono', person.telefono], ['Correo', person.correo], ['País', person.nacionalidad], ['Idioma', person.idioma],
-      ]));
-      if (tags.length) {
-        const badges = el('div','','guest-tags');
-        badges.append(...tags.map(tag => el('span',tag.nombre)));
-        slot.append(badges);
-      }
-      if (person.descripcion) slot.append(el('p',person.descripcion,'subtle'));
-      if (others.length) {
-        const members = el('ul','','compact-list');
-        members.append(...others.map(p => el('li',[p.nombre,p.apellido].filter(Boolean).join(' '))));
-        slot.append(el('h3','Acompañantes'), members);
-      }
-      if (!slot.textContent.trim()) slot.replaceChildren(el('p','Sin datos adicionales en esta ficha.','subtle'));
-    } catch (error) {
-      if (slot.isConnected) slot.replaceChildren(el('p',error.message,'form-error'), button('Reintentar',load));
-    }
+function loadGuestAssets() {
+  if (window.HAIKU_ICONOS_FICHA_MAPA_V1) return Promise.resolve();
+  if (guestAssets) return guestAssets;
+  function load(node) {
+    return new Promise((resolve, reject) => {
+      node.onload = resolve;
+      node.onerror = () => reject(new Error('No se pudo cargar la ficha.'));
+      document.head.append(node);
+    });
   }
-  await load();
+  const assets = [
+    ...['haiku-huespedes-v1', 'haiku-huespedes-figma-v1'].map(name => {
+      const sheet = el('link');
+      sheet.rel = 'stylesheet';
+      sheet.href = '../../css/' + name + '.css?v=mapa1';
+      return sheet;
+    }),
+    Object.assign(el('script'), {src:'../../js/haiku-huespedes-v1.js?v=mapa1'}),
+  ];
+  guestAssets = Promise.all(assets.map(load)).catch(error => {
+    assets.forEach(node => node.remove());
+    guestAssets = null;
+    throw error;
+  });
+  return guestAssets;
+}
+function encodePhoto(photo) {
+  if (typeof photo === 'string' || photo === null) return Promise.resolve(photo);
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve({jpeg:reader.result.split(',')[1]});
+    reader.onerror = () => reject(new Error('No se pudo preparar la foto.'));
+    reader.readAsDataURL(photo);
+  });
+}
+const guestApi = {
+  rpc: (name, args) => request({perfil:'guestDetail', guardar:'guest', directorio:'guestSearch'}[name], args),
+  tags: () => request('guestTags'),
+  signed: path => request('guestSigned', {path}),
+  photo: async (profile, target, image) => request('guestPhoto', {
+    id: profile.persona.id, reserva: profile.visita?.reserva_id ?? null,
+    target, image: await encodePhoto(image),
+  }),
+  vehiclePhotos: async (args, {primary, additional, positionY, expected}) => request('guestVehiclePhotos', {
+    args, primary: await encodePhoto(primary), additional: await Promise.all(additional.map(encodePhoto)), positionY, expected,
+  }),
+};
+async function cabinProfile(body, guest, ref) {
+  const status = el('div', 'Cargando ficha…', 'subtle');
+  status.setAttribute('role','status');
+  body.replaceChildren(status);
+  try {
+    await loadGuestAssets();
+    if (!body.isConnected) return;
+    const section = el('section', '', 'hu-en-mapa');
+    section.id = 'seccion-huespedes';
+    const dialog = el('dialog', '', 'hu-dialogo');
+    dialog.setAttribute('aria-label', 'Ficha del huésped');
+    section.append(el('div', '', 'hu-ficha'), dialog);
+    body.replaceChildren(section, button('Abrir en Huéspedes', () => openGuest(guest, ref.reserve, ref.stay)));
+    disposeGuest = window.HAIKU_FICHA_HUESPED_V1.mount(section, guestApi, {
+      anchor:{id:guest.id,res:ref.reserve,stay:ref.stay}, createId:newId,
+      iconUrl:file => window.HAIKU_ICONOS_FICHA_MAPA_V1?.[file] || '../../assets/huespedes/' + file,
+      openReservation:(visit, _trigger, holder) => send({type:'navigate',method:'reservation',args:{
+        id:visit.reserva_id, holder, number:visit.numero, arrival:visit.ingreso, departure:visit.salida,
+      }}),
+      changed:() => void refresh(true),
+    });
+  } catch (error) {
+    if (body.isConnected) body.replaceChildren(el('p',error.message,'form-error'), button('Reintentar',()=>cabinProfile(body,guest,ref)));
+  }
 }
 function showBay(number, focus) {
   const car = bayRecord(number), values = car?.datos || {};

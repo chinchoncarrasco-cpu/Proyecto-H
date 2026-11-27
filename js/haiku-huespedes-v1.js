@@ -1,11 +1,9 @@
+"use strict";
 
-(() => {
-    "use strict";
-    const root = document.getElementById("seccion-huespedes");
-    const menu = document.querySelector('.menu-item[data-seccion="huespedes"]');
-    const api = window.HAIKU_HUESPEDES_API;
-    if (!root || !menu || !api) return;
-
+window.HAIKU_FICHA_HUESPED_V1 = Object.freeze({mount: function (
+    root, api, {menu, anchor, iconUrl, openReservation, changed, createId = () => crypto.randomUUID()},
+) {
+    const embedded = !menu;
     const tabs = root.querySelector(".hu-tabs");
     const filters = root.querySelector(".hu-filtros");
     const totals = root.querySelector(".hu-resumen");
@@ -44,7 +42,8 @@
         const fragment = document.createDocumentFragment();
         for (const suffix of dualIcons.includes(key) ? ["-light",""] : [""]) {
             const img = el("img","hu-icono"+(dualIcons.includes(key) ? suffix ? " hu-icono-claro" : " hu-icono-oscuro" : ""));
-            img.src = "assets/huespedes/"+key+suffix+".svg";
+            const file = key+suffix+".svg";
+            img.src = iconUrl ? iconUrl(file) : "assets/huespedes/"+file;
             img.alt = "";
             fragment.append(img);
         }
@@ -114,6 +113,7 @@
     }
     function message(text,retry) { return box("hu-empty",el("p","",text),retry&&btn("Reintentar",retry)); }
     function allowed() {
+        if (embedded) return root.isConnected && Boolean(sessionKey) && !privacyBlocked();
         const ok = Boolean(window.haikuSesion && window.haikuTienePermiso?.("huespedes.ver"));
         menu.hidden = !ok;
         return ok;
@@ -246,11 +246,11 @@
             profile=undefined;
             historyOpen=baseOpen=false;
             root.dataset.ficha="true";
-            directory.querySelectorAll(".hu-estadia-titular").forEach(button=>{
+            directory?.querySelectorAll(".hu-estadia-titular").forEach(button=>{
                 button.setAttribute("aria-current",String(button.closest("[data-estadia-id]").dataset.estadiaId===activeStay));
             });
             detail.replaceChildren(message("Cargando perfil…"));
-            if (matchMedia("(max-width:760px)").matches) detail.scrollIntoView({block:"start"});
+            if (!embedded && matchMedia("(max-width:760px)").matches) detail.scrollIntoView({block:"start"});
         }
         try {
             const next = await api.rpc("perfil",{p_id:id,p_reserva:res??null});
@@ -261,7 +261,10 @@
         } catch(error) {
             if (call !== detailRequest) return;
             if (keep) detail.querySelector("[data-save]").textContent=errorText(error);
-            else detail.replaceChildren(btn("Huéspedes",back,{cls:"hu-movil",glyph:"back"}),message(errorText(error),()=>openProfile(id,res)));
+            else detail.replaceChildren(...[
+                embedded ? titularBack() : btn("Huéspedes",back,{cls:"hu-movil",glyph:"back"}),
+                message(errorText(error),()=>openProfile(id,res,false,stayId)),
+            ].filter(Boolean));
         }
     }
 
@@ -322,8 +325,18 @@
                 btn("Ver estadía",()=>openProfile(ctx.id,v.reserva_id)))) : [muted("Sin estadías anteriores.")]));
         } catch(error) {target.replaceChildren(message(errorText(error),()=>history(true,target)));}
     }
+    function titularBack() {
+        if (!anchor || (selected?.id === anchor.id && selected?.res === anchor.res)) return null;
+        return btn("Volver al titular",()=>openProfile(anchor.id,anchor.res,false,anchor.stay),{cls:"hu-plano",glyph:"back"});
+    }
+    function currentVisit() {
+        const visit = profile.visita;
+        const stay = embedded && visit && profile.estadias.find(e=>e.id===activeStay);
+        return stay ? {...visit, numero:stay.numero, tipo:stay.tipo, ingreso:stay.fecha_ingreso, salida:stay.fecha_salida,
+            adultos:stay.adultos, ninos:stay.ninos, hospedada:stay.estado_estadia==="hospedada"} : visit;
+    }
     function renderProfile() {
-        const {persona:p,visita:v,integrantes,registros,puede_editar:edit}=profile;
+        const {persona:p,integrantes,registros,puede_editar:edit}=profile, v=currentVisit();
         const options=edit&&el("details","hu-opciones",el("summary","","···"),box("",
             btn("Agregar vehículo",()=>editEntity("vehiculo"),{cls:"hu-plano"}),btn("Agregar mascota",()=>editEntity("mascota"),{cls:"hu-plano"}),
             btn("Editar contacto e idioma",editBase,{cls:"hu-plano"})));
@@ -331,7 +344,7 @@
         const header=box("hu-linea hu-perfil-identidad",box("hu-identidad",avatar(p,true),box("",el("h3","",name(p)),muted([quantity(profile.visitas,"estadía","estadías"),profile.tipos_visitados?.join(" y ")||v?.tipo].filter(Boolean).join(" · ")),el("span","hu-rol",v?.rol==="titular"?"Titular de la reserva":roles[v?.rol]||""))),
             edit&&btn(p.foto?"Cambiar foto":"Agregar foto",()=>editPhoto({kind:"persona",path:p.foto}),{cls:"hu-plano",glyph:"camera",iconOnly:true}),options);
         const visits=v&&box("hu-contexto",box("hu-linea",muted(v.hospedada?"ESTADÍA ACTUAL":"ESTADÍA"),
-            btn("Ver reserva",e=>window.HAIKU_RESUMEN_RESERVA_SITES_V1?.abrirPorId(v.reserva_id,e.currentTarget),{cls:"hu-plano hu-link"})),
+            btn("Ver reserva",e=>openReservation(v,e.currentTarget,name(integrantes.find(x=>x.rol==="titular")||p)),{cls:"hu-plano hu-link"})),
             el("strong","",cabin(v)),
             muted([dates(v),v.adultos!==null&&(v.adultos+v.ninos)+" personas"].filter(Boolean).join(" · ")),
             el("span","hu-estadia-info",integrantes.filter(x=>x.rol!=="borrador").length+" identificados · "+integrantes.filter(x=>x.rol==="borrador"&&!x.excedente).length+" pendiente de identificar"),
@@ -357,7 +370,7 @@
             ...profile.vehiculos.map(x=>row(x.modelo||x.tipo,["Vehículo",x.tipo,x.color].filter(Boolean).join(" · "),
                 btn("Ver perfil",()=>editEntity("vehiculo",x)),vehicleVisual(x))),
             ...profile.mascotas.map(x=>row(x.nombre,["Mascota",x.especie,x.tamano].filter(Boolean).join(" · "),btn("Ver perfil",()=>editEntity("mascota",x)),"pet")));
-        const content=[header,
+        const content=[titularBack(),header,
             box("hu-linea",muted(p.numero_documento?(p.tipo_documento==="rut"?"RUT ":"Documento ")+"••••"+p.numero_documento.slice(-4):"Sin documento"),
                 muted([p.nacionalidad,p.idioma].filter(Boolean).join(" · "))),visits,draft,
             companions.length&&group((v.rol==="titular"?"Acompañantes":"Integrantes de la reserva")+" · "+companions.length,muted(quantity(integrantes.filter(x=>x.rol==="borrador"&&!x.excedente).length,"por identificar","por identificar")),...companions),
@@ -369,6 +382,7 @@
             accordion("Historial de estadías · "+profile.visitas,historyOpen,history,box("hu-bloque")),
             save,edit&&btn("Registrar información",()=>editRecord({}),{primary:true,cls:"hu-ancho"})];
         detail.replaceChildren(...content.filter(Boolean));
+        if (embedded) return;
         let backControl=root.querySelector(".hu-volver");
         if(!backControl){backControl=btn("Huéspedes",back,{cls:"hu-volver hu-movil hu-plano hu-icono-boton",glyph:"back"});detail.before(backControl);}
     }
@@ -451,8 +465,11 @@
         return form;
     }
     function write(action,payload,ctx) {
+        return api.rpc("guardar",writeArgs(action,payload,ctx));
+    }
+    function writeArgs(action,payload,ctx) {
         if(ctx&&ctx.session!==sessionKey) throw new Error("La sesión cambió. Vuelve a abrir la ficha.");
-        return api.rpc("guardar",{p_id:ctx?.id??null,p_reserva:ctx?.res??null,p_accion:action,p_datos:payload});
+        return {p_id:ctx?.id??null,p_reserva:ctx?.res??null,p_accion:action,p_datos:payload};
     }
     async function refresh(ctx,form,id=ctx.id) {
         if(dialog.firstElementChild===form) {
@@ -468,8 +485,11 @@
         if(revision!==detailRequest) return;
         const status=detail.querySelector("[data-save]");
         if(status&&!status.textContent) status.textContent="Guardado.";
-        filtersState.p_desde=0;
-        void list(true);
+        if (embedded) changed?.();
+        else {
+            filtersState.p_desde=0;
+            void list(true);
+        }
     }
     async function save(action,payload,ctx,form) {
         const ack=await write(action,payload,ctx);
@@ -496,8 +516,8 @@
             if(values.texto.trim()) await write("registro",{id:form.dataset.note,categoria:"preferencia",texto:values.texto,fuente:"Observación"},ctx);
             if(values.nombre.trim()) await save("identificar",values,ctx,form);
             else await refresh(ctx,form);
-        },"Guardar",cabin(profile.visita));
-        form.dataset.note=crypto.randomUUID();
+        },"Guardar",cabin(currentVisit()));
+        form.dataset.note=createId();
     }
 
 
@@ -525,12 +545,25 @@
             },230);
         };
     }
-    function editTags() {
+    async function editTags() {
+        let catalog = data?.etiquetas || [];
+        if (embedded) {
+            const loading = formDialog("Etiquetas del huésped",[muted("Cargando etiquetas…")]);
+            try {
+                catalog = await api.tags();
+                if (dialog.firstElementChild !== loading || !dialog.open || !allowed()) return;
+            } catch (error) {
+                if (dialog.firstElementChild === loading && dialog.open) {
+                    formDialog("Etiquetas del huésped",[message(errorText(error),editTags)]);
+                }
+                return;
+            }
+        }
         const picked=new Set(profile.etiquetas.map(x=>x.id));
         const search=field("Buscar o crear etiqueta","buscar_etiqueta","");
         const groupTitles={Motivo:"Motivo de la estadía",Compañía:"Forma de viajar",Intereses:"Intereses",Atención:"Cómo prefiere la atención"};
         const sections=groups.map(group=>{
-            const options=(data?.etiquetas||[]).filter(x=>x.grupo===group).map(e=>{
+            const options=catalog.filter(x=>x.grupo===group).map(e=>{
                 const input=el("input","");
                 input.type="checkbox";
                 input.checked=picked.has(e.id);
@@ -548,7 +581,7 @@
         formDialog("Nueva etiqueta",[field("Grupo","grupo","Motivo",groups.map(g=>[g,g])),field("Nombre","nombre","","text",true)],async v=>{
             await write("crear_etiqueta",v,null);
             dialog.close();
-            await list(true);
+            if (!embedded) await list(true);
             if(profile?.puede_editar) editTags();
         });
     }
@@ -569,7 +602,7 @@
             el("strong","","¿Dónde conservarlo?"),scope,storage,choices("Fuente","fuente",record.fuente||sources[0],sources.map(s=>[s,s]),true)
         ],(values,f,ctx)=>save("registro",{...values,id:record.id||f.dataset.id,
             ...(record.modificado_en?{version:record.modificado_en}:{})},ctx,f),"Guardar",[name(profile.persona),profile.visita?.numero&&"Cabaña "+profile.visita.numero].filter(Boolean).join(" · "));
-        form.dataset.id=crypto.randomUUID();
+        form.dataset.id=createId();
         const type=cat.querySelector("input");
         function adjust(){
             if(!hasStay||type.value!=="nota")scope.querySelector("input").checked=false;
@@ -599,7 +632,8 @@
     }
     function editEntity(kind,item={}) {
         const vehicle=kind==="vehiculo", edit=profile.puede_editar;
-        const id=item.id||crypto.randomUUID();
+        const visit=currentVisit();
+        const id=item.id||createId();
         const entries=vehicle?[["Tipo de vehículo","tipo",true],["Marca y modelo","modelo"],["Color","color"],["Patente (opcional)","patente"]]
             :[["Nombre","nombre",true],["Especie","especie",true],["Raza (opcional)","raza"],["Tamaño","tamano"],["Color","color"]];
         const fields=entries.map(([label,key,needed])=>field(label,key,item[key],key==="cuidados"?"textarea":"text",needed));
@@ -608,7 +642,7 @@
         const photo=photoEditor({kind,id,path:item.foto,positionY:expected.posicion_y},vehicle?"hu-vehicle-photo":"hu-pet-photo",vehicle?"vehicle":"pet",edit);
         const gallery=vehicle?vehicleGallery(expected.adicionales,edit):null;
         const context=box("hu-media-copy",el("span","hu-media-context",vehicle?"Vehículo de esta estadía":"Mascota del huésped"),
-            el("span","",[name(profile.persona),profile.visita?.numero&&"Cabaña "+profile.visita.numero].filter(Boolean).join(" · ")),muted(dates(profile.visita)),
+            el("span","",[name(profile.persona),visit?.numero&&"Cabaña "+visit.numero].filter(Boolean).join(" · ")),muted(dates(visit)),
             edit&&btn(item.foto?"Cambiar foto":"Cargar foto",photo.choose));
         const media=box("hu-media"+(!vehicle?" hu-pet-media":""),photo.preview,context);
         const formFields=box("hu-form-grid",...fields);
@@ -629,7 +663,8 @@
                             additional.length===expected.adicionales.length&&additional.every((p,i)=>p===expected.adicionales[i])) {
                             await write(kind,data,ctx);
                         } else {
-                            await api.vehiclePhotos(fotos=>write(kind,{...data,fotos},ctx),{primary,additional,positionY,expected});
+                            const save = embedded ? writeArgs(kind,data,ctx) : fotos=>write(kind,{...data,fotos},ctx);
+                            await api.vehiclePhotos(save,{primary,additional,positionY,expected});
                         }
                     } finally {vehicleLayout.inert=false;}
                 } else {
@@ -814,12 +849,13 @@
         }};
     }
     function editPhoto(target) {
+        const visit=currentVisit();
         const clothing=target.kind==="persona"&&profile.registros.find(x=>x.reserva_id&&x.categoria==="vestimenta");
         const photo=photoEditor(target);
         const grid=box("hu-form-grid",field("Prenda superior","superior",clothing?.superior),field("Prenda inferior","inferior",clothing?.inferior));
         const other=field("Otros detalles","texto",clothing?.texto);
         const initial=[clothing?.superior||"",clothing?.inferior||"",clothing?.texto||""];
-        const clothingId=clothing?.id||crypto.randomUUID();
+        const clothingId=clothing?.id||createId();
         const fields=[box("hu-media hu-person-media",photo.preview,box("hu-media-copy",el("strong","","Foto del huésped"),muted("Puedes subir una imagen guardada de WhatsApp."),photo.controls))];
         if(target.kind==="persona"&&profile.visita)fields.push(el("strong","","Vestimenta de hoy"),muted(clothing?day(clothing.fecha)+" · Solo para esta estadía":"Solo para esta estadía"),grid,other);
         formDialog("Foto y reconocimiento",fields,async(v,form,ctx)=>{
@@ -828,7 +864,17 @@
                 await write("registro",{id:clothingId,categoria:"vestimenta",superior:v.superior,inferior:v.inferior,texto:v.texto,fuente:clothing?.fuente||"Observación",...(clothing?.modificado_en?{version:clothing.modificado_en}:{})},ctx);
             }
             await refresh(ctx,form);
-        },"Guardar cambios",[name(profile.persona),profile.visita?.numero&&"Cabaña "+profile.visita.numero].filter(Boolean).join(" · "));
+        },"Guardar cambios",[name(profile.persona),visit?.numero&&"Cabaña "+visit.numero].filter(Boolean).join(" · "));
+    }
+    dialog.addEventListener("close",()=>{if(!dialog.open&&!suspendedForm)clearForm();});
+    if (embedded) {
+        sessionKey=Symbol();
+        void openProfile(anchor.id,anchor.res,false,anchor.stay);
+        return () => {
+            sessionKey=null;
+            ++detailRequest;
+            dismissDialogs();
+        };
     }
     const searchIcon=root.querySelector("[data-hu-search-icon]");
     searchIcon.append(icon("search"));
@@ -845,7 +891,6 @@
     root.querySelector("[data-hu-registrar]").onclick=()=>{
         if(profile?.puede_editar) editRecord({});
     };
-    dialog.addEventListener("close",()=>{if(!dialog.open&&!suspendedForm)clearForm();});
     window.addEventListener("haiku:privacidad-cambio",syncPrivacy);
     new MutationObserver(syncPrivacy).observe(document.documentElement,{attributes:true,attributeFilter:["class"]});
     menu.addEventListener("click",()=>{if(allowed()) void list(Boolean(data));});
@@ -887,4 +932,13 @@
         }
     });
     if(window.haikuSesion) session();
+}});
+
+(() => {
+    const root = document.getElementById("seccion-huespedes");
+    const menu = document.querySelector('.menu-item[data-seccion="huespedes"]');
+    const api = window.HAIKU_HUESPEDES_API;
+    if (root && menu && api) window.HAIKU_FICHA_HUESPED_V1.mount(root, api, {
+        menu, openReservation:(visit,trigger)=>window.HAIKU_RESUMEN_RESERVA_SITES_V1?.abrirPorId(visit.reserva_id,trigger),
+    });
 })();
