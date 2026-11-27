@@ -29,7 +29,7 @@
                     titulo.insertAdjacentElement("afterend", fecha);
                 }
 
-                fecha.textContent = textoFecha;
+                if (fecha.textContent !== textoFecha) fecha.textContent = textoFecha;
             });
     }
 

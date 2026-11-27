@@ -463,6 +463,7 @@
         }
 
         if (evento.target?.closest?.('[data-seccion="resumen"]')) {
+            if (window.HAIKU_RESUMEN_REFRESH_V1?.actualizarAlAbrir?.()) return;
             requestAnimationFrame(() => consultarOperacion(fechaActual()));
         }
     });

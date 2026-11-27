@@ -8,6 +8,9 @@ on:
       - "js/supabase-auth.js"
       - "tests/supabase-auth.test.cjs"
       - "tests/haiku-cereza-browser-check.cjs"
+      - "js/haiku-vista-dividida-v1.js"
+      - "css/haiku-vista-dividida-v1.css"
+      - "tests/haku-vista-dividida-browser-check.cjs"
       - "panel.html"
       - "assets/haku-cordillera*.svg"
       - "assets/pestana-anonima.svg"
@@ -85,6 +88,7 @@ jobs:
         run: |
           node --test tests/supabase-auth.test.cjs
           node tests/haiku-cereza-browser-check.cjs
+          node tests/haku-vista-dividida-browser-check.cjs
 
       - name: Insumos y salidas con contexto de estadía
         env:

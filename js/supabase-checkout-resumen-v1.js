@@ -409,6 +409,7 @@
     document.addEventListener("click", evento => {
         const resumen = evento.target?.closest?.('.menu-item[data-seccion="resumen"]');
         if (!resumen) return;
+        if (window.HAIKU_RESUMEN_REFRESH_V1?.actualizarAlAbrir?.()) return;
         requestAnimationFrame(() => refrescar({ sincronizar: true, origen: {
             evento: "abrir Resumen", tipo: "interno_derivado"
         } }));

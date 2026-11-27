@@ -152,24 +152,45 @@ async function escritorio(browser) {
     });
     const visor = libro.locator("#libro-reserva-visor");
     await comprobarRueda(page, resumen, libro, visor);
+    await page.evaluate(() => {
+        window.__opcionesModificadas = 0;
+        const observer = new MutationObserver(cambios => { window.__opcionesModificadas += cambios.length; });
+        for (const selector of document.querySelectorAll("#haiku-vista-controles select")) {
+            observer.observe(selector, { attributes: true, childList: true, subtree: true });
+        }
+    });
+    await izquierda.click();
+    await page.keyboard.press("Escape");
+    assert.equal(await page.evaluate(() => window.__opcionesModificadas), 0,
+        "abrir el desplegable no modifica las opciones ni cambia el panel en foco");
+    assert.equal(await page.evaluate(() => window.HAIKU_VISTA_DIVIDIDA_V1.seccionEnFoco().id), "seccion-libro-reserva");
+
     const divisor = await separador.boundingBox();
     await page.mouse.move(divisor.x + divisor.width / 2, divisor.y + divisor.height / 2);
     await page.mouse.down();
     await page.mouse.move(930, divisor.y + divisor.height / 2, { steps: 8 });
-    await page.waitForFunction(() => document.getElementById("haiku-vista-separador").style.transform !== "");
+    await page.waitForFunction(x => {
+        const rect = document.getElementById("haiku-vista-separador").getBoundingClientRect();
+        return Math.abs(rect.x + rect.width / 2 - x) <= 1;
+    }, 930);
     const guia = await separador.boundingBox();
+    const izquierdaDurante = await resumen.boundingBox();
+    const derechaDurante = await libro.boundingBox();
     assert.ok(Math.abs(guia.x + guia.width / 2 - 930) <= 1, "la guía sigue al puntero");
-    assert.equal((await resumen.boundingBox()).width, ri.width, "no se recalcula Resumen durante el arrastre");
-    assert.equal((await libro.boundingBox()).width, ld.width, "no se recalcula el Libro durante el arrastre");
+    assert.ok(izquierdaDurante.width > ri.width && derechaDurante.width < ld.width,
+        "las ventanas cambian de tamaño mientras se arrastra");
+    assert.ok(Math.abs(izquierdaDurante.x + izquierdaDurante.width - guia.x) <= 1);
+    assert.ok(Math.abs(derechaDurante.x - guia.x - guia.width) <= 1);
     await page.mouse.up();
     assert.ok(Math.abs((await separador.boundingBox()).x - guia.x) <= 1, "los paneles conservan el ancho elegido");
+    assert.equal((await resumen.boundingBox()).width, izquierdaDurante.width, "soltar no reajusta el panel");
     assert.ok(Number(await separador.getAttribute("aria-valuenow")) > 60);
 
     const anchoConfirmado = await resumen.boundingBox();
     await page.mouse.move(guia.x + guia.width / 2, guia.y + guia.height / 2);
     await page.mouse.down();
     await page.mouse.move(700, guia.y + guia.height / 2, { steps: 4 });
-    await page.waitForFunction(() => document.getElementById("haiku-vista-separador").style.transform !== "");
+    await page.waitForFunction(() => Number(document.getElementById("haiku-vista-separador").getAttribute("aria-valuenow")) < 50);
     await page.keyboard.press("Escape");
     await page.mouse.up();
     assert.equal((await resumen.boundingBox()).width, anchoConfirmado.width, "cancelar conserva el último ancho");
@@ -225,7 +246,10 @@ async function escritorio(browser) {
     await page.mouse.move(xOscuro, yOscuro);
     await page.mouse.down();
     await page.mouse.move(xOscuro + 80, yOscuro);
-    await page.waitForFunction(() => document.getElementById("haiku-vista-separador").style.transform !== "");
+    await page.waitForFunction(x => {
+        const rect = document.getElementById("haiku-vista-separador").getBoundingClientRect();
+        return Math.abs(rect.x + rect.width / 2 - x) <= 1;
+    }, xOscuro + 80);
     await page.setViewportSize({ width: 850, height: 800 });
     await page.getByRole("button", { name: "Ver Cabañas", exact: true }).waitFor();
     await page.mouse.up();

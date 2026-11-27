@@ -45,7 +45,7 @@ html[data-haiku-tema="oscuro"] #haiku-area-trabajo[data-haiku-vista] {
 }
 
 body > #haiku-area-trabajo[data-haiku-vista="doble"] {
-    grid-template-columns: minmax(0, var(--haiku-vista-izquierda, 1fr)) 12px minmax(0, var(--haiku-vista-derecha, 1fr));
+    grid-template-columns: minmax(0, 1fr) 12px minmax(0, 1fr);
 }
 
 #haiku-area-trabajo[data-haiku-vista] > .seccion-app[data-haiku-vista-lado] {
@@ -99,10 +99,10 @@ body > #haiku-area-trabajo[data-haiku-vista="doble"] {
     display: grid;
     grid-column: 1 / -1;
     grid-row: 1;
-    grid-template-columns: minmax(0, var(--haiku-vista-izquierda, 1fr)) 32px minmax(0, var(--haiku-vista-derecha, 1fr));
+    grid-template-columns: minmax(0, 1fr) 32px minmax(0, 1fr);
+    grid-template-columns: subgrid;
     align-items: center;
-    gap: 6px;
-    padding: 5px 10px;
+    padding-block: 5px;
     border-bottom: 1px solid var(--cereza-linea);
     background: var(--cereza-cabecera);
 }
@@ -124,6 +124,11 @@ body > #haiku-area-trabajo[data-haiku-vista="doble"] {
     width: min(100%, 215px);
 }
 
+[data-haiku-vista="doble"] .haiku-vista-controles select {
+    width: min(215px, calc(100% - 20px));
+    margin-inline-start: 10px;
+}
+
 .haiku-vista-controles :is(select[data-haiku-vista-foco], button:hover) {
     background: var(--cereza-seleccion);
     color: var(--cereza-acento);
@@ -138,6 +143,8 @@ body > #haiku-area-trabajo[data-haiku-vista="doble"] {
 #haiku-vista-intercambiar {
     display: grid;
     place-items: center;
+    justify-self: center;
+    width: 32px;
     padding: 0;
 }
 
@@ -150,6 +157,7 @@ body > #haiku-area-trabajo[data-haiku-vista="doble"] {
     background: var(--cereza-relieve);
     cursor: col-resize;
     touch-action: none;
+    user-select: none;
 }
 
 #haiku-vista-separador::after {
@@ -165,19 +173,11 @@ body > #haiku-area-trabajo[data-haiku-vista="doble"] {
     background: var(--cereza-acento);
 }
 
-[data-haiku-vista-arrastre] {
-    cursor: col-resize;
-    user-select: none;
-}
-
-[data-haiku-vista-arrastre] #haiku-vista-separador {
-    z-index: 7;
-    will-change: transform;
-}
-
 [data-haiku-vista="alternada"] .haiku-vista-controles {
     display: flex;
     justify-content: space-between;
+    gap: 6px;
+    padding-inline: 10px;
 }
 
 [data-haiku-vista="alternada"] .haiku-vista-controles select {
@@ -207,6 +207,10 @@ body > #haiku-area-trabajo[data-haiku-vista="doble"] {
 [data-haiku-vista="doble"] > .seccion-app[data-haiku-vista-lado] {
     container: haiku-vista-panel / inline-size;
     padding-inline: clamp(10px, 1.25vw, 20px);
+}
+
+#haiku-area-trabajo[data-haiku-vista="doble"] #libro-reserva-visor {
+    contain: size layout paint;
 }
 
 [data-haiku-vista="doble"] :is(.resumen-estado-cabecera, .sites-calendario-encabezado, .sites-libro-heading, .sv-section-top) {

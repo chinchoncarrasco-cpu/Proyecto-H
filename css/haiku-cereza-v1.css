@@ -73,6 +73,7 @@ html .sites-shell-topbar.haiku-cereza-cabecera {
     font: 600 13px/1.25 var(--sites-shell-font);
     list-style: none;
     transform: none;
+    transition: none;
     white-space: nowrap;
 }
 .haiku-cereza-navegacion .menu-item[hidden] { display: none !important; }

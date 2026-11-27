@@ -4,21 +4,15 @@
     const navegacion = document.querySelector(".haiku-cereza-navegacion");
     if (!navegacion) return;
 
-    const grupos = [...navegacion.querySelectorAll(".haiku-cereza-grupo")];
-    for (const grupo of grupos) {
-        grupo.addEventListener("toggle", () => {
-            if (grupo.open) grupos.filter(otro => otro !== grupo).forEach(otro => { otro.open = false; });
-        });
-    }
-
     document.addEventListener("click", evento => {
-        for (const grupo of grupos) {
-            if (grupo.open && (!grupo.contains(evento.target) || evento.target.closest(".menu-item[data-seccion]"))) {
-                grupo.open = false;
-                if (grupo.contains(document.activeElement)) grupo.querySelector("summary").focus();
-            }
-        }
-    });
+        const grupo = navegacion.querySelector(".haiku-cereza-grupo[open]");
+        if (!grupo) return;
+        const interno = grupo.contains(evento.target);
+        if (interno && !evento.target.closest(".menu-item[data-seccion]")) return;
+        const devolverFoco = interno && grupo.contains(document.activeElement);
+        grupo.open = false;
+        if (devolverFoco) grupo.querySelector("summary").focus({ preventScroll: true });
+    }, true);
 
     navegacion.addEventListener("keydown", evento => {
         const grupo = evento.target.closest(".haiku-cereza-grupo[open]");
@@ -26,7 +20,7 @@
         evento.preventDefault();
         evento.stopPropagation();
         grupo.open = false;
-        grupo.querySelector("summary").focus();
+        grupo.querySelector("summary").focus({ preventScroll: true });
     });
 
     document.querySelector(".haiku-cereza-marca")?.addEventListener("click", evento => {

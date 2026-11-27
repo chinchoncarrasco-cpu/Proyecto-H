@@ -383,6 +383,11 @@ body:has(#seccion-libro-reserva.activa) > main.contenido.sites-shell-main {
     scrollbar-color: #aebcaf #eff3f0;
     background: var(--cereza-superficie);
 }
+
+#seccion-libro-reserva .libro-reserva-tabla--fiel tbody tr {
+    transition: none;
+}
+
 /* Encabezados propios del visor: se fijan sin alterar los estilos de las celdas XLSX. */
 #seccion-libro-reserva .libro-reserva-tabla--fiel th.sites-libro-colhead {
     position: sticky;

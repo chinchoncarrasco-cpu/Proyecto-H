@@ -332,8 +332,10 @@
     window.addEventListener("haiku:auth-ready", () => programar(20, "haiku:auth-ready"));
 
     document.addEventListener("click", evento => {
+        const resumen = evento.target.closest('[data-seccion="resumen"]');
+        if (resumen && window.HAIKU_RESUMEN_REFRESH_V1?.actualizarAlAbrir?.()) return;
         if (
-            evento.target.closest('[data-seccion="resumen"]') ||
+            resumen ||
             evento.target.closest('[data-seccion="servicios"]') ||
             evento.target.closest('[data-ir-seccion="servicios"]')
         ) programar(0, "click sección resumen/servicios");

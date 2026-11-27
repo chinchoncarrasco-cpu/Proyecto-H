@@ -26,6 +26,10 @@
     let paneles = [];
     let ladoEnFoco = 0;
     let proporcion = 50;
+    let proporcionVisible;
+    let anchoArea = 0;
+    let altoCabecera = 0;
+    let minimo = 25;
     let visibles = [];
     let panelSinRueda;
     let arrastre;
@@ -56,73 +60,81 @@
         panelSinRueda = panel;
     }
 
-    function modo() {
-        return area.clientWidth >= ANCHO_DOBLE ? "doble" : "alternada";
-    }
-
-    function minimoPanel(espacio) {
-        return Math.max(25, Math.ceil(ANCHO_MINIMO_PANEL * 100 / espacio));
-    }
-
-    function limitarProporcion(valor, minimo) {
+    function limitarProporcion(valor) {
         return Math.max(minimo, Math.min(100 - minimo, valor));
     }
 
-    function actualizarAncho() {
+    function aplicarAncho(valor = proporcion) {
         if (area.dataset.haikuVista !== "doble") return;
-        const minimo = minimoPanel(area.clientWidth - ANCHO_SEPARADOR);
-        const valor = limitarProporcion(proporcion, minimo);
-        const porcentaje = Math.round(valor);
-        area.style.setProperty("--haiku-vista-izquierda", valor + "fr");
-        area.style.setProperty("--haiku-vista-derecha", (100 - valor) + "fr");
-        separador.setAttribute("aria-valuemin", minimo);
-        separador.setAttribute("aria-valuemax", 100 - minimo);
-        separador.setAttribute("aria-valuenow", porcentaje);
-        separador.setAttribute("aria-valuetext", porcentaje + " % para el panel izquierdo");
+        const acotado = limitarProporcion(valor);
+        if (acotado === proporcionVisible) return;
+        proporcionVisible = acotado;
+        area.style.gridTemplateColumns = `minmax(0, ${acotado}fr) ${ANCHO_SEPARADOR}px minmax(0, ${100 - acotado}fr)`;
+        const porcentaje = String(Math.round(acotado));
+        if (separador.getAttribute("aria-valuenow") !== porcentaje || !separador.hasAttribute("aria-valuetext")) {
+            separador.setAttribute("aria-valuenow", porcentaje);
+            separador.setAttribute("aria-valuetext", porcentaje + " % para el panel izquierdo");
+        }
     }
 
-    function pintar() {
+    function pintar(modoVista = area.dataset.haikuVista) {
         const focoAnterior = area.querySelector(".seccion-app[data-haiku-vista-foco]");
         const foco = seccionEnFoco();
-        const modoVista = modo();
         const compacto = modoVista === "alternada";
+        const siguientes = compacto ? [paneles[ladoEnFoco]] : paneles.slice();
         for (const id of visibles) {
+            if (siguientes.includes(id)) continue;
             const { seccion } = rutas.get(id);
-            posiciones.set(id, { top: seccion.scrollTop, left: seccion.scrollLeft });
+            const { scrollTop: top, scrollLeft: left } = seccion;
+            if (top || left) posiciones.set(id, { top, left });
+            else posiciones.delete(id);
         }
 
-        area.dataset.haikuVista = modoVista;
+        if (area.dataset.haikuVista !== modoVista) {
+            area.dataset.haikuVista = modoVista;
+            if (compacto) {
+                area.style.removeProperty("grid-template-columns");
+                proporcionVisible = undefined;
+            }
+            controles.hidden = false;
+            separador.hidden = intercambiar.hidden = compacto;
+            alternar.hidden = !compacto;
+            dividir.setAttribute("aria-pressed", "true");
+            dividir.title = "Volver a una sola sección";
+        }
         sincronizarRueda(compacto ? undefined : rutas.get(paneles[1 - ladoEnFoco]).seccion);
-        area.style.setProperty("--haiku-vista-cabecera", cabecera.offsetHeight + "px");
-        controles.hidden = false;
-        separador.hidden = intercambiar.hidden = compacto;
-        alternar.hidden = !compacto;
-        alternar.textContent = "Ver " + nombre(paneles[1 - ladoEnFoco]);
-        dividir.setAttribute("aria-pressed", "true");
-        dividir.title = "Volver a una sola sección";
+        if (compacto) {
+            const texto = "Ver " + nombre(paneles[1 - ladoEnFoco]);
+            if (alternar.textContent !== texto) alternar.textContent = texto;
+        }
 
         for (const [id, { boton, seccion }] of rutas) {
             const lado = paneles.indexOf(id);
             seccion.classList.toggle("activa", lado !== -1);
             if (lado === -1) delete seccion.dataset.haikuVistaLado;
-            else seccion.dataset.haikuVistaLado = lado;
+            else if (seccion.dataset.haikuVistaLado !== String(lado)) seccion.dataset.haikuVistaLado = lado;
             seccion.toggleAttribute("data-haiku-vista-foco", seccion === foco);
             boton.classList.toggle("activo", seccion === foco);
         }
         selectores.forEach((selector, lado) => {
-            selector.hidden = compacto && lado !== ladoEnFoco;
+            const oculto = compacto && lado !== ladoEnFoco;
+            if (selector.hidden !== oculto) selector.hidden = oculto;
             selector.toggleAttribute("data-haiku-vista-foco", lado === ladoEnFoco);
-            selector.setAttribute("aria-label", compacto ? "Sección mostrada" :
-                (lado === 0 ? "Sección del panel izquierdo" : "Sección del panel derecho"));
-            for (const opcion of selector.options) opcion.disabled = opcion.value === paneles[1 - lado];
-            selector.value = paneles[lado];
+            const etiqueta = compacto ? "Sección mostrada" :
+                (lado === 0 ? "Sección del panel izquierdo" : "Sección del panel derecho");
+            if (selector.getAttribute("aria-label") !== etiqueta) selector.setAttribute("aria-label", etiqueta);
+            for (const opcion of selector.options) {
+                const ocupada = opcion.value === paneles[1 - lado];
+                if (opcion.disabled !== ocupada) opcion.disabled = ocupada;
+            }
+            if (selector.value !== paneles[lado]) selector.value = paneles[lado];
         });
 
-        separador.setAttribute("aria-controls", rutas.get(paneles[0]).seccion.id);
-        actualizarAncho();
-        const siguientes = compacto ? [paneles[ladoEnFoco]] : paneles.slice();
+        const izquierdo = rutas.get(paneles[0]).seccion.id;
+        if (separador.getAttribute("aria-controls") !== izquierdo) separador.setAttribute("aria-controls", izquierdo);
         for (const id of siguientes) {
-            if (!visibles.includes(id) && posiciones.has(id)) rutas.get(id).seccion.scrollTo(posiciones.get(id));
+            if (visibles.includes(id) || !posiciones.has(id)) continue;
+            rutas.get(id).seccion.scrollTo({ ...posiciones.get(id), behavior: "instant" });
         }
         visibles = siguientes;
         if (foco !== focoAnterior) window.dispatchEvent(new Event("haiku:vista-dividida-foco"));
@@ -134,9 +146,11 @@
         paneles = [];
         visibles = [];
         posiciones.clear();
-        limpiarArrastre();
+        terminarArrastre();
         sincronizarRueda();
         delete area.dataset.haikuVista;
+        area.style.removeProperty("grid-template-columns");
+        proporcionVisible = undefined;
         controles.hidden = separador.hidden = true;
         dividir.setAttribute("aria-pressed", "false");
         dividir.title = "Dividir pantalla";
@@ -163,9 +177,12 @@
         const libres = opciones.filter(id => !paneles.includes(id));
         paneles = paneles.map(id => opciones.includes(id) ? id : libres.shift());
         for (const selector of selectores) {
-            selector.replaceChildren(...opciones.map(id => new Option(nombre(id), id)));
+            if (selector.length !== opciones.length || opciones.some((id, i) => selector.options[i].value !== id)) {
+                selector.replaceChildren(...opciones.map(id => new Option(nombre(id), id)));
+            }
         }
-        pintar();
+        if (area.dataset.haikuVista) pintar();
+        else medirVista();
     }
 
     function abrir() {
@@ -176,7 +193,7 @@
         paneles = [actual, opciones.includes(sugerida) ? sugerida : opciones.find(id => id !== actual)];
         ladoEnFoco = 0;
         proporcion = 50;
-        posiciones.set(actual, { top: window.scrollY, left: 0 });
+        if (window.scrollY) posiciones.set(actual, { top: window.scrollY, left: 0 });
         actualizarOpciones();
     }
 
@@ -207,11 +224,11 @@
     });
     alternar.addEventListener("click", () => enfocar(1 - ladoEnFoco));
     selectores.forEach((selector, lado) => {
-        selector.addEventListener("focus", () => enfocar(lado));
         selector.addEventListener("change", () => {
             const id = selector.value;
-            enfocar(lado);
-            if (disponible(id)) rutas.get(id).boton.click();
+            if (!disponible(id)) return;
+            ladoEnFoco = lado;
+            rutas.get(id).boton.click();
         });
     });
     function elegirPanel(evento) {
@@ -223,15 +240,16 @@
 
     function proporcionArrastrada(clientX) {
         const delta = (clientX - arrastre.inicioX) * 100 / arrastre.espacio;
-        return limitarProporcion(arrastre.inicial + delta, arrastre.minimo);
+        return limitarProporcion(arrastre.inicial + delta);
     }
 
-    function limpiarArrastre() {
+    function terminarArrastre(confirmar = false) {
         if (!arrastre) return;
-        const { puntero, cuadro } = arrastre;
+        const { puntero, cuadro, inicial, valor } = arrastre;
         arrastre = undefined;
         if (cuadro) cancelAnimationFrame(cuadro);
-        separador.style.removeProperty("transform");
+        if (confirmar && valor !== inicial) proporcion = valor;
+        aplicarAncho();
         delete area.dataset.haikuVistaArrastre;
         if (separador.hasPointerCapture(puntero)) separador.releasePointerCapture(puntero);
     }
@@ -241,49 +259,43 @@
         evento.preventDefault();
         separador.focus({ preventScroll: true });
         separador.setPointerCapture(evento.pointerId);
-        const ancho = area.clientWidth;
-        const espacio = ancho - ANCHO_SEPARADOR;
-        const minimo = minimoPanel(espacio);
-        const inicial = limitarProporcion(proporcion, minimo);
+        const espacio = anchoArea - ANCHO_SEPARADOR;
+        const inicial = limitarProporcion(proporcion);
         arrastre = {
-            puntero: evento.pointerId, inicioX: evento.clientX, ancho, espacio, minimo,
-            inicial, vistaPrevia: inicial, cuadro: 0
+            puntero: evento.pointerId, inicioX: evento.clientX, espacio,
+            inicial, valor: inicial, cuadro: 0
         };
         area.dataset.haikuVistaArrastre = "";
     });
     separador.addEventListener("pointermove", evento => {
         if (arrastre?.puntero !== evento.pointerId) return;
-        arrastre.vistaPrevia = proporcionArrastrada(evento.clientX);
+        arrastre.valor = proporcionArrastrada(evento.clientX);
         if (arrastre.cuadro) return;
-        // Mover solo el separador durante el gesto evita recalcular la planilla.
+        // Una sola escritura por cuadro ajusta a la vez los dos paneles y el divisor.
         arrastre.cuadro = requestAnimationFrame(() => {
-            const { vistaPrevia, inicial, espacio } = arrastre;
-            separador.style.transform = `translateX(${(vistaPrevia - inicial) * espacio / 100}px)`;
             arrastre.cuadro = 0;
+            aplicarAncho(arrastre.valor);
         });
     });
     separador.addEventListener("pointerup", evento => {
         if (arrastre?.puntero !== evento.pointerId) return;
-        const valor = proporcionArrastrada(evento.clientX);
-        const cambio = valor !== arrastre.inicial;
-        limpiarArrastre();
-        if (!cambio) return;
-        proporcion = valor;
-        actualizarAncho();
+        arrastre.valor = proporcionArrastrada(evento.clientX);
+        terminarArrastre(true);
     });
     for (const evento of ["pointercancel", "lostpointercapture"]) {
         separador.addEventListener(evento, e => {
-            if (arrastre?.puntero === e.pointerId) limpiarArrastre();
+            if (arrastre?.puntero === e.pointerId) terminarArrastre();
         });
     }
+    window.addEventListener("blur", () => terminarArrastre());
     separador.addEventListener("dblclick", () => {
         proporcion = 50;
-        actualizarAncho();
+        aplicarAncho();
     });
     separador.addEventListener("keydown", evento => {
         if (evento.key === "Escape" && arrastre) {
             evento.preventDefault();
-            limpiarArrastre();
+            terminarArrastre();
             return;
         }
         const actual = Number(separador.getAttribute("aria-valuenow"));
@@ -296,19 +308,38 @@
         };
         if (!Object.hasOwn(valores, evento.key)) return;
         evento.preventDefault();
-        limpiarArrastre();
+        terminarArrastre();
         proporcion = valores[evento.key];
-        actualizarAncho();
+        aplicarAncho();
     });
 
-    const ajustarAlEspacio = new ResizeObserver(() => {
-        if (!paneles.length) return;
-        if (arrastre && area.clientWidth !== arrastre.ancho) limpiarArrastre();
-        if (modo() !== area.dataset.haikuVista) pintar();
-        else {
-            area.style.setProperty("--haiku-vista-cabecera", cabecera.offsetHeight + "px");
-            actualizarAncho();
+    function medirVista() {
+        const ancho = area.clientWidth;
+        const alto = cabecera.offsetHeight;
+        const vista = ancho >= ANCHO_DOBLE ? "doble" : "alternada";
+        const cambiaModo = vista !== area.dataset.haikuVista;
+        if (ancho !== anchoArea) {
+            terminarArrastre();
+            anchoArea = ancho;
         }
+        if (alto !== altoCabecera) {
+            altoCabecera = alto;
+            area.style.setProperty("--haiku-vista-cabecera", alto + "px");
+        }
+        if (cambiaModo) pintar(vista);
+        if (vista === "doble") {
+            const limite = Math.max(25, Math.ceil(ANCHO_MINIMO_PANEL * 100 / (ancho - ANCHO_SEPARADOR)));
+            if (limite !== minimo) {
+                minimo = limite;
+                separador.setAttribute("aria-valuemin", minimo);
+                separador.setAttribute("aria-valuemax", 100 - minimo);
+            }
+            if (!arrastre) aplicarAncho();
+        }
+    }
+
+    const ajustarAlEspacio = new ResizeObserver(() => {
+        if (paneles.length) medirVista();
     });
     ajustarAlEspacio.observe(area);
     ajustarAlEspacio.observe(cabecera);
