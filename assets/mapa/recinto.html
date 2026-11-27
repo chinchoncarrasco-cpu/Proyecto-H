@@ -1589,8 +1589,16 @@ function vehicleForm(number, entry) {
   const color = input('color','Color',values.color,{limit:45});
   const slots = Object.keys(geometry.parking).map(k => Number(k.slice(1))).sort((a,b) => a-b)
     .filter(n => n === number || !bayRecord(n)).map(n => [String(n), 'Puesto ' + n]);
-  const linked = new Map(data().personas.filter(p => p.rol === 'titular').map(p => [p.reserva_id, p.nombre]));
-  if (entry?.reserva_id && !linked.has(entry.reserva_id)) linked.set(entry.reserva_id, 'Estadía vinculada');
+  const stays = getTargets();
+  function stayLabel(reserve, name) {
+    const numbers = [...new Set(stays.filter(stay => stay.reserve === reserve).map(stay => stay.row.numero))];
+    return numbers.length ? 'CAB ' + numbers.sort((a, b) => a - b).join(', ') + ' · ' + name : name;
+  }
+  const linked = new Map(data().personas.filter(p => p.rol === 'titular')
+    .map(p => [p.reserva_id, stayLabel(p.reserva_id, p.nombre)]));
+  if (entry?.reserva_id && !linked.has(entry.reserva_id)) {
+    linked.set(entry.reserva_id, stayLabel(entry.reserva_id, 'Estadía vinculada'));
+  }
   form(entry ? 'Editar vehículo' : 'Registrar vehículo', 'Puesto ' + number, [
     selectField('puesto', 'Puesto', slots, String(number), true),
     vehicleTypeField(values.vehiculo || 'Sedán', color.querySelector('input')),
