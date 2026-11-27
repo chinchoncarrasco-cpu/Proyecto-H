@@ -18,6 +18,8 @@
         guestSearch: "haiku_huesped_directorio_v1",
         cleaning: "haiku_mapa_aseo_v1",
         service: "haiku_registrar_servicio",
+        reservationState: "haiku_mapa_reservas_cabana_v1",
+        reservationChange: "haiku_cambiar_estado_reserva_manual_v1",
     });
     const identity = () => window.haikuSesion?.auth?.id;
     const allowed = () => Boolean(identity() && window.haikuTienePermiso?.("cabanas.ver"));
@@ -104,7 +106,7 @@
         frame.setAttribute("data-haiku-mapa-interno", "");
         frame.setAttribute("sandbox", "allow-scripts allow-forms");
         frame.referrerPolicy = "no-referrer";
-        frame.src = "assets/mapa/recinto.html?v=6";
+        frame.src = "assets/mapa/recinto.html?v=7";
         user = identity();
         // Read today's map while the sandboxed document loads.
         initialSnapshot = query("snapshot", {});
@@ -159,6 +161,10 @@
             post({type:"reply",id:msg.id,error:{message:"Esta ficha requiere permiso para ver Huéspedes.",code:"42501"}});
             return;
         }
+        if (["reservationState","reservationChange"].includes(msg.method) && !window.haikuTienePermiso?.("reservas.ver")) {
+            post({type:"reply",id:msg.id,error:{message:"Esta ficha requiere permiso para ver Reservas.",code:"42501"}});
+            return;
+        }
         const first = msg.method === "snapshot" ? initialSnapshot : null;
         if (first) initialSnapshot = null;
         const result = await (first || (guestMethod ? guestQuery(msg.method, msg.args) : query(msg.method, msg.args)));
@@ -169,6 +175,9 @@
             : msg.method === "cleaning" && msg.args.p_cambios ? msg.args.p_fecha : null;
         if (!error && fecha) {
             document.dispatchEvent(new CustomEvent("haiku:resumen-datos-actualizados", {detail:{fecha}}));
+        }
+        if (!error && data?.ok && msg.method === "reservationChange") {
+            void window.HAIKU_RESUMEN_RESERVA_SITES_V1?.refrescarTrasEstado?.();
         }
     });
 

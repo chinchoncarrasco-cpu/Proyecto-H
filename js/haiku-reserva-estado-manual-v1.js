@@ -41,10 +41,11 @@
             })).sort((a, b) => a.id.localeCompare(b.id))
         };
     }
-    function abono(ficha) {
+    function tieneAbono(ficha) {
+        if (typeof ficha.tiene_abono_confirmado === "boolean") return ficha.tiene_abono_confirmado;
         return (ficha.pagos || []).filter(p => p.estado === "confirmado" &&
             p.tipo_movimiento === "pago" && p.etapa_operativa === "abono")
-            .reduce((total, p) => total + Number(p.monto || 0), 0);
+            .reduce((total, p) => total + Number(p.monto || 0), 0) > 0;
     }
     function opciones(ficha, estadia, permiso, ahora = new Date()) {
         const estado = actual(ficha, estadia);
@@ -66,12 +67,12 @@
                     motivo = "La reactivación de varias estadías requiere revisión.";
                 else if (ficha.estadias.some(s => s.checkin_realizado_en || s.checkout_realizado_en))
                     motivo = "Tiene movimientos de check-in/check-out; no admite reactivación por esta vía.";
-                else if (e.valor !== (abono(ficha) > 0 ? "confirmada" : "pendiente"))
-                    motivo = abono(ficha) > 0 ? "Tiene abono confirmado: debe volver a Confirmada." :
+                else if (e.valor !== (tieneAbono(ficha) ? "confirmada" : "pendiente"))
+                    motivo = tieneAbono(ficha) ? "Tiene abono confirmado: debe volver a Confirmada." :
                         "Sin abono confirmado: debe volver a Confirmación Pendiente.";
             } else if (estado === "no_show" && e.valor !== "cancelada")
                 motivo = "No existe una ruta segura de reactivación de No Show; requiere revisión.";
-            else if (e.valor === "pendiente" && abono(ficha) > 0)
+            else if (e.valor === "pendiente" && tieneAbono(ficha))
                 motivo = "Tiene abono confirmado; no puede quedar pendiente.";
             else if (e.valor === "no_show") {
                 if (ficha.estadias.some(s => s.checkin_realizado_en || s.checkout_realizado_en ||

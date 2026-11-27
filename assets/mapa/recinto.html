@@ -177,6 +177,29 @@ textarea {min-height:59px; resize:vertical}
 .cabin-fields {display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px}
 .cabin-extra .check {display:flex; align-items:center; gap:7px; width:fit-content}
 .cabin-extra .check input {width:16px; min-height:0; accent-color:var(--accent)}
+.cabin-reservations {display:grid; gap:5px; min-width:0}
+.cabin-reservations:not(:has(> .reservation-list:not([hidden]), > p:not([hidden]))) {display:none}
+.reservation-list {display:grid; gap:5px}
+.reservation-picker summary, .reservation-readonly {display:flex; align-items:center; justify-content:space-between; gap:6px; min-height:30px; list-style:none}
+.reservation-picker summary {cursor:pointer}
+.reservation-picker summary::-webkit-details-marker {display:none}
+.reservation-picker[open] {display:grid; gap:5px}
+.reservation-label {min-width:0; overflow-wrap:anywhere; font-size:12px; color:var(--sub)}
+.reservation-tag {display:inline-flex; align-items:center; gap:5px; flex:none; max-width:65%; border-radius:5px; padding:4px 7px; background:var(--tag,var(--free)); color:var(--ink); font-size:11px; font-weight:700}
+.reservation-tag[data-state="pendiente"] {--tag:var(--departure)}
+.reservation-tag[data-state="confirmada"] {--tag:var(--arrival)}
+.reservation-tag[data-state="hospedada"] {--tag:var(--continuing)}
+.reservation-tag[data-state="checked_out"] {--tag:var(--checkout)}
+.reservation-tag[data-state="cancelada"], .reservation-tag[data-state="no_show"] {--tag:var(--blocked)}
+.reservation-picker summary .reservation-tag::after {content:"⌄"; flex:none}
+.reservation-options {display:grid; padding:3px; gap:1px; border:1px solid var(--line); border-radius:8px; background:var(--page)}
+.reservation-options button {display:grid; gap:2px; padding:5px 7px; min-height:30px; text-align:left; border-color:transparent; background:transparent; font-size:12px}
+.reservation-options button:not(:disabled):is(:hover,:focus-visible), .reservation-options [aria-current="true"] {background:var(--tint)}
+.reservation-options small {font-size:11px; font-weight:400; color:var(--sub)}
+.reservation-confirm {display:grid; gap:6px; padding:6px 4px}
+.reservation-confirm p, .cabin-reservations > p {font-size:12px}
+.cabin-summary:has(+ .cabin-reservations[data-multiple]) .cabin-outgoing {display:none}
+.reservation-list[aria-busy="true"] {opacity:.68}
 #seccion-huespedes.hu-en-mapa {
   --guest-bg:var(--paper);
   --guest-surface:var(--paper);
@@ -216,6 +239,7 @@ textarea {min-height:59px; resize:vertical}
 #seccion-huespedes .hu-base dt {min-width:0}
 #seccion-huespedes .hu-empty {padding:8px 0}
 #seccion-huespedes .hu-dialogo {overscroll-behavior:contain}
+#seccion-huespedes .vehicle-type-trigger {text-align:left; background:var(--guest-soft)}
 #detail-body #seccion-huespedes .hu-dialogo h3 {font-size:19px; line-height:1.25; margin:0}
 .cabin-extra:has(.hu-en-mapa:not([hidden])) ~ .guest-notes,
 .cabin-actions:has([data-guest-view][aria-expanded="true"]) .primary {display:none}
@@ -223,6 +247,8 @@ textarea {min-height:59px; resize:vertical}
   .cabin-extra {padding-top:6px}
   .cabin-staff {grid-template-columns:1fr}
   .cabin-extra .check {min-height:34px}
+  .reservation-picker summary, .reservation-readonly {min-height:40px}
+  .reservation-tag {padding-block:6px}
   #details:has([data-guest-view][aria-expanded="true"]) {max-height:min(83%,550px)}
   #detail-body #seccion-huespedes .hu-boton {min-height:38px}
   #detail-body #seccion-huespedes .hu-contexto .hu-boton,
@@ -959,7 +985,7 @@ const view = { x: 0, y: 0, scale: 1 };
 const state = { data: null, filter: 'all', selection: '', formOpen: false, placing: null, saving: false };
 const pending = new Map();
 let nextRequest = 0, frame = 0, measure = null, gesture = null, snapshotRequest = null;
-let guestAssets, disposeGuest;
+let guestAssets, disposeGuest, reservationRules;
 const pointsDown = new Map();
 
 const states = {
@@ -1093,8 +1119,11 @@ async function fetchSnapshot() {
       const summary = detailBody.querySelector('.cabin-summary');
       const pane = detailBody.querySelector('.cabin-extra');
       const number = Number(state.selection.slice(1));
-      if (summary && pane?.dataset.context === cabinContext(number) && (!pane.hidden || details.querySelector('.guest-notes[open]'))) {
+      const reservations = detailBody.querySelector('.cabin-reservations');
+      const editingStatus = state.saving || reservations?.querySelector('details[open]');
+      if (summary && pane?.dataset.context === cabinContext(number) && (!pane.hidden || editingStatus || details.querySelector('.guest-notes[open]'))) {
         summary.replaceWith(cabinSummary(number));
+        if (!editingStatus) void reservations?.reload();
       } else {
         showDetail(state.selection, false);
       }
@@ -1307,8 +1336,8 @@ function cabinGuest(ref) {
   return data().personas.find(p => p.reserva_id === ref?.reserve && p.rol === 'titular');
 }
 function cabinContext(n) {
-  const ref = stay(cabinRow(n));
-  return [data().fecha, ref?.reserve, ref?.stay, cabinGuest(ref)?.id].join('/');
+  const row = cabinRow(n), ref = stay(row);
+  return [data().fecha, ref?.reserve, ref?.stay, row?.salida_estadia_id, cabinGuest(ref)?.id].join('/');
 }
 function openGuest(person, reserve, stayId) {
   send({ type:'navigate', method:'guest', args:{ id:person.id, reserva:reserve, estadia:stayId } });
@@ -1340,19 +1369,180 @@ function cabinSummary(n) {
   const [reservation] = cabinState(row), [clean] = cleaning(row), guest = cabinGuest(ref);
   const summary = el('div', '', 'cabin-summary');
   summary.append(lines([
-    ['Reserva', reservation], ['Huésped', ref?.title || guest?.nombre], ['Aseo', clean],
+    ['Operación', reservation], ['Huésped', ref?.title || guest?.nombre], ['Aseo', clean],
     ['Asignada a', row?.aseo_asignado_nombre], ['Inicio del aseo', formatTime(row?.aseo_inicio)],
     ['Aseo listo', formatTime(row?.aseo_fin || row?.aseo_ultimo_listo)], ['Observación', row?.aseo_nota],
   ]));
   if (row?.salida_reserva_id && row?.ingreso_reserva_id) {
-    summary.append(el('p', (row.salida_checkout_en ? 'Check-out' : 'Sale') + ' · ' + (row.salida_titular || 'Reserva anterior'), 'subtle'));
+    summary.append(el('p', (row.salida_checkout_en ? 'Check-out' : 'Sale') + ' · ' + (row.salida_titular || 'Reserva anterior'), 'subtle cabin-outgoing'));
   }
   return summary;
+}
+function loadReservationRules() {
+  if (window.HAIKU_RESERVA_ESTADO_MANUAL_V1) return Promise.resolve(window.HAIKU_RESERVA_ESTADO_MANUAL_V1);
+  reservationRules ??= new Promise((resolve,reject) => {
+    const script = el('script');
+    script.src = '../../js/haiku-reserva-estado-manual-v1.js?v=mapa1';
+    script.onload = () => resolve(window.HAIKU_RESERVA_ESTADO_MANUAL_V1);
+    script.onerror = () => {
+      script.remove();
+      reservationRules = null;
+      reject(new Error('No se pudieron cargar las opciones de estado.'));
+    };
+    document.head.append(script);
+  });
+  return reservationRules;
+}
+function cabinReservations(n, row) {
+  const panel = el('section','','cabin-reservations');
+  panel.setAttribute('aria-label','Estado de la reserva');
+  const list = el('div','','reservation-list');
+  const feedback = el('p','','subtle');
+  feedback.dataset.reservationFeedback = '';
+  feedback.hidden = list.hidden = true;
+  panel.append(list,feedback);
+  const requestArgs = {p_numero:n,p_fecha:data().fecha,p_estadias:[...new Set([
+    stay(row)?.stay, row.salida_estadia_id,
+  ].filter(Boolean))]};
+  let manual, loadVersion = 0;
+
+  function message(text, error = false) {
+    const target = panel.isConnected ? feedback
+      : state.selection === 'c' + n ? detailBody.querySelector('[data-reservation-feedback]') : null;
+    if (!target) return;
+    target.setAttribute('role',error?'alert':'status');
+    target.className = error?'form-error':'subtle';
+    target.textContent = text;
+    target.hidden = !text;
+  }
+  function render(value) {
+    const fichas = value.fichas.map(ficha => ({
+      ficha, estadia:ficha.estadias?.find(stay => stay.id === ficha.estadia_id),
+    })).filter(({estadia}) => estadia?.cabana_numero === n);
+    const permiso = key => key === 'reservas.cancelar' ? value.puede_cancelar : value.puede_editar;
+    panel.toggleAttribute('data-multiple',fichas.length > 1);
+    list.hidden = !fichas.length;
+    list.replaceChildren(...fichas.map(({ficha,estadia}) => {
+      const current = manual.actual(ficha,estadia);
+      const tag = el('span',manual.etiqueta(current),'reservation-tag');
+      tag.dataset.state = current;
+      const arrival = estadia.id === row.ingreso_estadia_id;
+      const prefix = arrival ? 'Ingreso' : estadia.id === row.salida_estadia_id || current === 'checked_out' ? 'Salida' : 'Estadía';
+      const label = el('span',fichas.length > 1 ? prefix + ' · ' + ficha.reserva.titular_nombre : 'Estado de reserva','reservation-label');
+      const options = manual.opciones(ficha,estadia,permiso);
+      if (!options.some(option => !option.motivo)) {
+        const info = el('div','','reservation-readonly');
+        info.append(label,tag);
+        return info;
+      }
+      const picker = el('details','','reservation-picker');
+      picker.name = 'estado-reserva-cabana';
+      picker.dataset.stay = estadia.id;
+      const summary = el('summary');
+      summary.setAttribute('aria-label','Cambiar estado de la reserva: ' + ficha.reserva.titular_nombre + ', ' + tag.textContent);
+      summary.append(label,tag);
+      const menu = el('div','','reservation-options'), confirm = el('div','','reservation-confirm');
+      confirm.hidden = true;
+      function reset() { confirm.hidden = true; menu.hidden = false; }
+      function choose(option) {
+        if (state.saving) return;
+        message('');
+        if (['hospedada','checked_out'].includes(option.valor)) {
+          void save(ficha,estadia,option.valor,picker);
+          return;
+        }
+        const cancel = button('Volver', () => { reset(); menu.querySelector('button:not(:disabled)')?.focus(); });
+        const commit = button('Confirmar cambio', () => void save(ficha,estadia,option.valor,picker),'primary');
+        const buttons = el('div','','actions');
+        buttons.append(cancel,commit);
+        confirm.replaceChildren(el('strong',tag.textContent + ' → ' + option.etiqueta),
+          el('p',manual.aviso(ficha,estadia,option.valor),'subtle'),buttons);
+        menu.hidden = true;
+        confirm.hidden = false;
+        cancel.focus();
+      }
+      for (const option of options) {
+        const action = button(option.etiqueta, () => choose(option));
+        action.disabled = Boolean(option.motivo);
+        if (option.actual) action.setAttribute('aria-current','true');
+        if (option.motivo) action.append(el('small',option.motivo));
+        menu.append(action);
+      }
+      summary.addEventListener('click',event => { if (state.saving) event.preventDefault(); });
+      picker.addEventListener('toggle', () => { if (!picker.open && !state.saving) reset(); });
+      picker.append(summary,menu,confirm);
+      return picker;
+    }));
+  }
+  async function load(reconcile = false) {
+    const version = ++loadVersion;
+    try {
+      const [rules,value] = await Promise.all([loadReservationRules(),request('reservationState',requestArgs)]);
+      if (!panel.isConnected || version !== loadVersion) return false;
+      if (!reconcile && list.querySelector('details[open]')) return false;
+      manual = rules;
+      render(value);
+      return true;
+    } catch (error) {
+      if (!panel.isConnected || version !== loadVersion) return false;
+      list.hidden = true;
+      if (reconcile || (requestArgs.p_estadias.length && !['42501','PGRST202'].includes(error.code))) {
+        message('No se pudo consultar el estado. Actualiza el mapa.',true);
+      }
+      return false;
+    }
+  }
+  async function save(ficha, estadia, to, picker) {
+    if (state.saving || !panel.isConnected || data().fecha !== requestArgs.p_fecha) return;
+    state.saving = true;
+    byId('close').disabled = true;
+    const restoreFocus = picker.contains(document.activeElement);
+    list.inert = true;
+    list.setAttribute('aria-busy','true');
+    message('Guardando estado…');
+    let accepted = false;
+    try {
+      const result = await request('reservationChange',{p_reserva_id:ficha.reserva.id,p_estadia_id:estadia.id,
+        p_estado:to,p_esperado:manual.esperado(ficha)});
+      if (!result?.ok || result.estado !== to) throw new Error('El servidor no confirmó el estado. Actualiza el mapa.');
+      accepted = true;
+      const value = await request('reservationState',requestArgs);
+      const fresh = value.fichas.find(item => item.estadia_id === estadia.id && item.reserva?.id === ficha.reserva.id);
+      const freshStay = fresh?.estadias.find(item => item.id === estadia.id && item.cabana_numero === n);
+      if (!freshStay || manual.actual(fresh,freshStay) !== to) throw new Error('No se pudo verificar el estado nuevo. Actualiza el mapa.');
+      if (panel.isConnected) render(value);
+      await refresh(true);
+      message(manual.etiqueta(to) + ' guardado.');
+    } catch (error) {
+      if (error.code === '40001') {
+        const ok = await load(true);
+        message(ok ? 'La reserva cambió. Revisa el estado actual antes de volver a intentar.'
+          : 'La reserva cambió. Actualiza el mapa antes de intentar de nuevo.',true);
+      } else {
+        message(error.message,true);
+        if (accepted) void refresh(true);
+      }
+    } finally {
+      state.saving = false;
+      byId('close').disabled = false;
+      list.inert = false;
+      list.removeAttribute('aria-busy');
+      if (restoreFocus && (document.activeElement === document.body || !document.activeElement?.isConnected)) {
+        const restored = picker.isConnected ? picker : [...detailBody.querySelectorAll('.reservation-picker')]
+          .find(candidate => candidate.dataset.stay === estadia.id);
+        restored?.querySelector('summary')?.focus({preventScroll:true});
+      }
+    }
+  }
+  panel.reload = load;
+  queueMicrotask(load);
+  return panel;
 }
 function showCabin(n, focus) {
   const row = cabinRow(n), ref = stay(row), guest = cabinGuest(ref);
   showPanel('CAB ' + n, row?.nombre || '', focus);
   detailBody.append(cabinSummary(n));
+  if (row && data().fecha) detailBody.append(cabinReservations(n,row));
   const pane = el('section', '', 'cabin-extra');
   pane.id = 'cabin-extra';
   pane.hidden = true;
@@ -1487,7 +1677,7 @@ function loadGuestAssets() {
       sheet.href = '../../css/' + name + '.css?v=mapa1';
       return sheet;
     }),
-    Object.assign(el('script'), {src:'../../js/haiku-huespedes-v1.js?v=mapa2'}),
+    Object.assign(el('script'), {src:'../../js/haiku-huespedes-v1.js?v=mapa3'}),
   ];
   guestAssets = Promise.all(assets.map(load)).catch(error => {
     assets.forEach(node => node.remove());
@@ -1532,6 +1722,9 @@ async function cabinProfile(body, guest, ref) {
     body.replaceChildren(section, button('Abrir en Huéspedes', () => openGuest(guest, ref.reserve, ref.stay)));
     disposeGuest = window.HAIKU_FICHA_HUESPED_V1.mount(section, guestApi, {
       anchor:{id:guest.id,res:ref.reserve,stay:ref.stay}, createId:newId,
+      vehiclePicker:(type,color,editable) => vehicleTypeField(type || 'Sedán', color, {
+        name:'tipo', disabled:!editable, preserveLegacy:true,
+      }).element,
       iconUrl:file => window.HAIKU_ICONOS_FICHA_MAPA_V1?.[file] || '../../assets/huespedes/' + file,
       openReservation:(visit, _trigger, holder) => send({type:'navigate',method:'reservation',args:{
         id:visit.reserva_id, holder, number:visit.numero, arrival:visit.ingreso, departure:visit.salida,
@@ -1645,35 +1838,38 @@ function selectField(name, label, values, selected = '', required = false) {
   control.value = selected;
   return field(label, control);
 }
-function vehicleTypeField(selected, colorInput) {
+function vehicleTypeField(selected, colorInput, {name = 'vehiculo', disabled = false, preserveLegacy = false} = {}) {
+  const types = preserveLegacy && selected && !vehicleTypes.includes(selected) ? [selected, ...vehicleTypes] : vehicleTypes;
+  const suffix = name === 'vehiculo' ? '' : '-' + name;
   const wrapper = el('div', '', 'vehicle-type');
   const label = el('label', 'Tipo de vehículo');
-  label.id = 'vehicle-type-label';
-  label.htmlFor = 'vehicle-type-trigger';
+  label.id = 'vehicle-type-label' + suffix;
+  label.htmlFor = 'vehicle-type-trigger' + suffix;
   const value = el('input');
   value.type = 'hidden';
-  value.name = 'vehiculo';
-  value.value = vehicleTypes.includes(selected) ? selected : 'Otro';
+  value.name = name;
+  value.value = types.includes(selected) ? selected : 'Otro';
   const trigger = button('', () => list.hidden ? open() : close(), 'vehicle-type-trigger');
+  trigger.disabled = disabled;
   const icon = vehicleTypeIcon(value.value);
   const updateColor = () => setVehicleColor(icon, colorInput.value);
   updateColor();
   colorInput.addEventListener('input', updateColor);
   const caption = el('span', value.value, 'vehicle-type-value');
-  caption.id = 'vehicle-type-value';
-  trigger.id = 'vehicle-type-trigger';
+  caption.id = 'vehicle-type-value' + suffix;
+  trigger.id = label.htmlFor;
   trigger.setAttribute('role', 'combobox');
   trigger.setAttribute('aria-labelledby', label.id + ' ' + caption.id);
   trigger.setAttribute('aria-expanded', 'false');
   const list = el('div', '', 'vehicle-type-options');
-  list.id = 'vehicle-type-options';
+  list.id = 'vehicle-type-options' + suffix;
   list.hidden = true;
   list.setAttribute('role', 'listbox');
   list.setAttribute('aria-labelledby', label.id);
   trigger.setAttribute('aria-controls', list.id);
   trigger.append(icon, caption, indicator('M3 5l4 4 4-4', 'vehicle-type-arrow'));
   let active = 0, openEvents;
-  const options = vehicleTypes.map((type, index) => {
+  const options = types.map((type, index) => {
     const option = el('div', '', 'vehicle-type-option');
     option.id = list.id + '-' + index;
     option.setAttribute('role', 'option');
@@ -1722,17 +1918,17 @@ function vehicleTypeField(selected, colorInput) {
     openEvents = new AbortController();
     const events = { signal:openEvents.signal };
     document.addEventListener('pointerdown', event => { if (!wrapper.contains(event.target)) close(); }, events);
-    details.addEventListener('scroll', close, events);
+    document.addEventListener('scroll', event => { if (!list.contains(event.target)) close(); }, {...events,capture:true});
     window.addEventListener('resize', close, events);
     list.hidden = false;
     trigger.setAttribute('aria-expanded', 'true');
     trigger.focus({ preventScroll:true });
-    highlight(vehicleTypes.indexOf(value.value));
+    highlight(types.indexOf(value.value));
   }
   function choose(index) {
-    options[vehicleTypes.indexOf(value.value)].setAttribute('aria-selected', 'false');
+    options[types.indexOf(value.value)].setAttribute('aria-selected', 'false');
     options[index].setAttribute('aria-selected', 'true');
-    value.value = vehicleTypes[index];
+    value.value = types[index];
     caption.textContent = value.value;
     paintVehicle(icon, value.value);
     close();
@@ -1763,8 +1959,8 @@ function vehicleTypeField(selected, colorInput) {
   return {
     element:wrapper,
     select(type) {
-      const index = vehicleTypes.indexOf(type);
-      choose(index < 0 ? vehicleTypes.indexOf('Otro') : index);
+      const index = types.indexOf(type);
+      choose(index < 0 ? types.indexOf('Otro') : index);
     },
   };
 }

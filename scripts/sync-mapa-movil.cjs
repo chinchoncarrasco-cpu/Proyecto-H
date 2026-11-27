@@ -18,8 +18,10 @@ const styles = ['haiku-huespedes-v1', 'haiku-huespedes-figma-v1']
     .map(name => read('css/' + name + '.css').replace(/^@font-face[^\n]+\n/gm, ''))
     .join('\n');
 const script = read('js/haiku-huespedes-v1.js');
-if (/<\/script/i.test(script) || /<\/style/i.test(styles)) throw new Error('Revisa los recursos antes de insertarlos en el mapa.');
+const reservationState = read('js/haiku-reserva-estado-manual-v1.js');
+if (/<\/script/i.test(script + reservationState) || /<\/style/i.test(styles)) throw new Error('Revisa los recursos antes de insertarlos en el mapa.');
 
 write('recintoDocument', read('assets/mapa/recinto.html'));
+write('estadoReservaScript', '<script>' + reservationState + '</script>\n');
 write('guestPanelAssets', '<style>' + styles + '</style>\n<script>window.HAIKU_ICONOS_FICHA_MAPA_V1 = '
     + JSON.stringify(icons) + ';</script>\n<script>' + script + '</script>\n');
