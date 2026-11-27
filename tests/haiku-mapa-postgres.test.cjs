@@ -33,10 +33,19 @@ test('Mapa y Huéspedes comparten vehículos y conservan las reglas de estadías
             create function public.haiku_operacion_dia(date)
                 returns table(cabana_id uuid, numero smallint, estado_operativo text, ingreso_checkin_en timestamptz,
                     aseo_estado text, aseo_id uuid, continua_reserva_id uuid, ingreso_reserva_id uuid,
-                    fullday_reserva_id uuid, salida_reserva_id uuid)
+                    fullday_reserva_id uuid, salida_reserva_id uuid, continua_estadia_id uuid, ingreso_estadia_id uuid,
+                    fullday_estadia_id uuid, salida_estadia_id uuid)
                 language sql stable as $$
-                    select b.id, b.numero, 'continua', s.checkin_realizado_en, null::text, null::uuid,
-                        s.reserva_id, null::uuid, null::uuid, null::uuid
+                    select b.id, b.numero,
+                        case when s.fecha_ingreso=s.fecha_salida then 'fullday'
+                            when s.fecha_ingreso=$1 then 'libre-ingresa' else 'continua' end,
+                        s.checkin_realizado_en, null::text, null::uuid,
+                        case when s.fecha_ingreso<$1 then s.reserva_id end,
+                        case when s.fecha_ingreso=$1 and s.fecha_salida>$1 then s.reserva_id end,
+                        case when s.fecha_ingreso=s.fecha_salida then s.reserva_id end, null::uuid,
+                        case when s.fecha_ingreso<$1 then s.id end,
+                        case when s.fecha_ingreso=$1 and s.fecha_salida>$1 then s.id end,
+                        case when s.fecha_ingreso=s.fecha_salida then s.id end, null::uuid
                     from public.cabanas b join public.reserva_estadias s on s.cabana_id=b.id
                     where s.fecha_ingreso <= $1 and s.fecha_salida >= $1
                 $$;
@@ -55,8 +64,8 @@ test('Mapa y Huéspedes comparten vehículos y conservan las reglas de estadías
         await db.query('insert into public.cabanas(id,numero) values($1,5)', [cabin]);
         await db.query(`
             insert into public.reserva_estadias(id,reserva_id,cabana_id,fecha_ingreso,fecha_salida,
-                adultos,estado_estadia,checkin_realizado_en)
-            values($1,$2,$3,current_date - 1,current_date + 1,1,'hospedada',now() - interval '1 day')
+                adultos,ninos,estado_estadia,checkin_realizado_en)
+            values($1,$2,$3,current_date - 1,current_date + 1,1,2,'hospedada',now() - interval '1 day')
         `, [stay, reservation, cabin]);
         await db.query("insert into public.huespedes(id,nombre,apellido) values ($1,'  Primera  ',' Acompañante '), ($2,'Segunda','Acompañante')",
             [companion, stayCompanion]);
@@ -136,6 +145,29 @@ test('Mapa y Huéspedes comparten vehículos y conservan las reglas de estadías
         assert.equal((await parked(10)).vehiculo_id,null);
         assert.equal((await save(car,'vehiculo',vehicle,action)).repetido,true);
 
+        const [fullDay, fullDayCabin, future] = [29, 30, 31].map(uuid);
+        await db.exec('reset role');
+        await db.query('insert into public.cabanas(id,numero) values($1,6)',[fullDayCabin]);
+        await db.query(`insert into public.reserva_estadias(id,reserva_id,cabana_id,fecha_ingreso,fecha_salida,adultos)
+            values ($1,$2,$3,current_date,current_date,2), ($4,$2,$3,current_date+2,current_date+3,2)`,
+            [fullDay, reservationWithoutProfile, fullDayCabin, future]);
+        await db.exec('set role authenticated');
+        const beforeOccupancy = await snapshot();
+        await db.exec('reset role');
+        await db.exec(read('supabase/migrations/20261127223323_haiku_mapa_ocupacion_estadias.sql'));
+        await db.exec(read('supabase/migrations/20261127223413_haiku_mapa_puestos_adicionales.sql'));
+        await db.exec('set role authenticated');
+        const {ocupacion_estadias, ...sameMap} = await snapshot();
+        assert.deepEqual(sameMap, beforeOccupancy);
+        assert.deepEqual(ocupacion_estadias, {
+            [confirmedStay]: {huespedes:2,noches:1,por_llegar:true},
+            [stay]: {huespedes:3,noches:2,por_llegar:false},
+            [fullDay]: {huespedes:2,noches:0,por_llegar:true},
+        });
+        await db.query("select set_config('request.jwt.claim.sub',$1,false)", [cleaningUser]);
+        assert.deepEqual((await snapshot()).ocupacion_estadias,{});
+        await db.query("select set_config('request.jwt.claim.sub',$1,false)", [actor]);
+
         await saveProfile({id:fromMap.id,tipo:'Sedán',modelo:'Modelo de prueba',color:'Cereza',patente:'QAAB48',version:fromMap.fecha});
         let park = await parked(8);
         assert.equal(park.datos.patente,'QAAB48');
@@ -179,6 +211,22 @@ test('Mapa y Huéspedes comparten vehículos y conservan las reglas de estadías
         const person = { persona_id:member, reserva_id:reservation, x:742, y:1260 };
         await save(marker, 'persona', person, markerAction);
         assert((await snapshot()).elementos.some(e => e.id === marker));
+        const [primaryCar, secondCar, overflowCar, ownerCar] = [50, 51, 52, 53].map(uuid);
+        await save(primaryCar,'vehiculo',{...vehicle,puesto:7,patente:'QA7001'},uuid(61));
+        await save(secondCar,'vehiculo',{...vehicle,puesto:12,patente:'QA7002'},uuid(62));
+        const vehicleProfiles = (await profile()).vehiculos;
+        assert.deepEqual(vehicleProfiles.find(v => v.patente === 'QA7001').estacionamiento,{puesto:7,estacionado:true});
+        assert.deepEqual(vehicleProfiles.find(v => v.patente === 'QA7002').estacionamiento,{puesto:12,estacionado:true,etiqueta:'Puesto 7B'});
+        assert.equal((await parked(12)).reserva_id,reservation);
+        await assert.rejects(() => save(uuid(54),'vehiculo',{...vehicle,puesto:12,patente:'QA7099'},uuid(63)), /ya figura en el mapa/);
+        assert.equal((await profile()).vehiculos.length,vehicleProfiles.length);
+        await save(overflowCar,'vehiculo',{...vehicle,puesto:15,patente:'QA1501'},uuid(64));
+        assert.equal((await profile()).vehiculos.find(v => v.patente === 'QA1501').estacionamiento.etiqueta,'Adicional');
+        await assert.rejects(() => save(ownerCar,'vehiculo',{...vehicle,puesto:16,patente:'QA1601'},uuid(65)), /puesto de la dueña/);
+        await save(ownerCar,'vehiculo',{...vehicle,puesto:16,patente:'QA1601',reserva_id:null},uuid(66));
+        assert.equal((await parked(16)).vehiculo_id,null);
+        await assert.rejects(() => save(uuid(55),'vehiculo',{...vehicle,puesto:17,patente:'QA1701'},uuid(67)), /Revisa el puesto/);
+
         await db.exec('reset role');
         await db.query("update public.reserva_estadias set estado_estadia='checked_out',checkout_realizado_en=now() where id=$1", [stay]);
         await db.exec('set role authenticated');

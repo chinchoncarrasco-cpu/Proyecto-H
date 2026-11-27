@@ -293,7 +293,7 @@ window.HAIKU_FICHA_HUESPED_V1 = Object.freeze({mount: function (
     }
     function vehicleRow(vehicle) {
         const parking=vehicle.estacionamiento;
-        const context=parking&&"Puesto "+parking.puesto+" · "+(parking.estacionado?"Estacionado":"Fuera del recinto");
+        const context=parking&&(parking.etiqueta||"Puesto "+parking.puesto)+" · "+(parking.estacionado?"Estacionado":"Fuera del recinto");
         const detail=[vehicle.modelo&&vehicle.tipo, vehicle.patente, vehicle.color, context].filter(Boolean);
         return row(vehicle.modelo||vehicle.tipo,detail.join(" · "),
             btn("Ver perfil",()=>editEntity("vehiculo",vehicle)),vehicleVisual(vehicle));
@@ -344,8 +344,17 @@ window.HAIKU_FICHA_HUESPED_V1 = Object.freeze({mount: function (
     }
     function renderProfile() {
         const {persona:p,integrantes,registros,puede_editar:edit}=profile, v=currentVisit();
+        const vehicles=profile.vehiculos;
+        const addVehicle=label=>btn(label,()=>editEntity("vehiculo"),{cls:"hu-plano"});
+        const vehicleSection=vehicles.length&&group("Vehículos de la estadía",edit&&addVehicle("Agregar otro vehículo"),
+            ...vehicles.map(vehicleRow));
+        const vehicleAction=vehicles.length ? btn(vehicles.length===1?"Ver vehículo":"Ver vehículos",event=>{
+            event.currentTarget.closest("details").open=false;
+            if(vehicles.length===1) editEntity("vehiculo",vehicles[0]);
+            else vehicleSection.querySelector(".hu-integrante > button").focus();
+        },{cls:"hu-plano"}) : addVehicle("Agregar vehículo");
         const options=edit&&el("details","hu-opciones",el("summary","","···"),box("",
-            btn("Agregar vehículo",()=>editEntity("vehiculo"),{cls:"hu-plano"}),btn("Agregar mascota",()=>editEntity("mascota"),{cls:"hu-plano"}),
+            vehicleAction,btn("Agregar mascota",()=>editEntity("mascota"),{cls:"hu-plano"}),
             btn("Editar contacto e idioma",editBase,{cls:"hu-plano"})));
         if(options)options.querySelector("summary").setAttribute("aria-label","Más opciones del huésped");
         const header=box("hu-linea hu-perfil-identidad",box("hu-identidad",avatar(p,true),box("",el("h3","",name(p)),muted([quantity(profile.visitas,"estadía","estadías"),profile.tipos_visitados?.join(" y ")||v?.tipo].filter(Boolean).join(" · ")),el("span","hu-rol",v?.rol==="titular"?"Titular de la reserva":roles[v?.rol]||""))),
@@ -374,12 +383,12 @@ window.HAIKU_FICHA_HUESPED_V1 = Object.freeze({mount: function (
         const clothing=local.filter(x=>x.categoria==="vestimenta");
         const related=box("hu-relacionados",
             v&&row("Vestimenta de hoy",clothing.length?[clothing[0].superior,clothing[0].inferior,clothing[0].texto].filter(Boolean).join(" · "):"Sin registrar",edit&&btn("Editar",()=>editPhoto({kind:"persona",path:p.foto})),"shirt"),
-            ...profile.vehiculos.map(vehicleRow),
             ...profile.mascotas.map(x=>row(x.nombre,["Mascota",x.especie,x.tamano].filter(Boolean).join(" · "),btn("Ver perfil",()=>editEntity("mascota",x)),"pet")));
         const content=[titularBack(),header,
             box("hu-linea",muted(p.numero_documento?(p.tipo_documento==="rut"?"RUT ":"Documento ")+"••••"+p.numero_documento.slice(-4):"Sin documento"),
                 muted([p.nacionalidad,p.idioma].filter(Boolean).join(" · "))),visits,draft,
             companions.length&&group((v.rol==="titular"?"Acompañantes":"Integrantes de la reserva")+" · "+companions.length,muted(quantity(integrantes.filter(x=>x.rol==="borrador"&&!x.excedente).length,"por identificar","por identificar")),...companions),
+            vehicleSection,
             group("Perfil de esta visita",edit&&btn("Editar",editTags,buttonOptions),tags,p.descripcion&&muted(p.descripcion)),
             group("Para atender mejor",edit&&btn("Editar",()=>editRecord({categoria:"preferencia"}),buttonOptions),...registros.filter(x=>!x.reserva_id).map(recordRow)),
             v&&group("Durante esta estadía",btn("Ver todo",()=>formDialog("Durante esta estadía",[...local.filter(x=>x.categoria!=="vestimenta").map(recordRow),edit&&btn("Registrar información",()=>editRecord({categoria:"actividad"}),{primary:true})]),buttonOptions),...local.filter(x=>x.categoria!=="vestimenta").slice(0,2).map(recordRow)),

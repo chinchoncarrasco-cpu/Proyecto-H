@@ -216,8 +216,14 @@ function setPrivacyState(page,blocked) {
         await viewer.waitFor({state:'detached'});
         await setPrivacyState(page,false);
         assert.equal(await viewer.count(),0,'el desbloqueo mantiene el visor cerrado');
-        await card.locator('summary[aria-label="Más opciones del huésped"]').click();
-        await card.getByRole('button',{name:'Agregar vehículo',exact:true}).click();
+        const vehicles=card.locator('.hu-bloque').filter({has:page.getByRole('heading',{name:'Vehículos de la estadía',exact:true})});
+        const options=card.locator('summary[aria-label="Más opciones del huésped"]');
+        const another=vehicles.getByRole('button',{name:'Agregar otro vehículo',exact:true});
+        if(await another.count()) await another.click();
+        else {
+            await options.click();
+            await card.getByRole('button',{name:'Agregar vehículo',exact:true}).click();
+        }
         const vehicleForm=section.locator('.hu-vehicle-form');
         const type=`Vehículo de prueba ${width} ${theme}`;
         await vehicleForm.getByLabel('Tipo de vehículo').fill(type);
@@ -249,11 +255,12 @@ function setPrivacyState(page,blocked) {
         assert.equal(await vehicleForm.evaluate(node=>node.scrollWidth>node.clientWidth+1),false);
         await vehicleForm.getByRole('button',{name:'Guardar vehículo',exact:true}).click();
         await vehicleForm.waitFor({state:'hidden'});
-        const stored=(await rpc('haiku_huesped_perfil_v1',{p_id:ada,p_reserva:reservation})).data.vehiculos.find(v=>v.tipo===type);
+        const savedVehicles=(await rpc('haiku_huesped_perfil_v1',{p_id:ada,p_reserva:reservation})).data.vehiculos;
+        const stored=savedVehicles.find(v=>v.tipo===type);
         assert.equal(stored.foto_posicion_y,position);
         assert.equal(stored.fotos_adicionales.length,1);
         assert.notEqual(stored.foto,stored.fotos_adicionales[0]);
-        const vehicleRow=card.locator('.hu-relacionados .hu-integrante').filter({hasText:type});
+        const vehicleRow=vehicles.locator('.hu-integrante').filter({hasText:type});
         const thumbnailAt=photo=>vehicleRow.locator('img.hu-vehiculo-miniatura[src="/guest-test-photo/'+encodeURIComponent(photo)+'"]');
         const thumbnail=thumbnailAt(stored.foto);
         await thumbnail.evaluate(image=>image.decode());
@@ -270,7 +277,13 @@ function setPrivacyState(page,blocked) {
 
         const openVehicle=vehicleRow.getByRole('button',{name:'Ver perfil',exact:true});
         const saveVehicle=vehicleForm.getByRole('button',{name:'Guardar vehículo',exact:true});
-        await openVehicle.click();
+        await options.click();
+        if(savedVehicles.length===1) {
+            await card.getByRole('button',{name:'Ver vehículo',exact:true}).click();
+        } else {
+            await card.getByRole('button',{name:'Ver vehículos',exact:true}).click();
+            await openVehicle.click();
+        }
         const framedPhoto=vehicleForm.locator('.hu-vehicle-photo>img');
         await framedPhoto.evaluate(image=>image.decode());
         const framing=await framedPhoto.evaluate(image=>{
