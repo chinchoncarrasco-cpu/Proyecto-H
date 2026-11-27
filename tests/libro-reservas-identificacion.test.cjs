@@ -47,6 +47,19 @@ test('consulta → comparación → preparación ofrece CAB 5 faltante sin regis
  assert.deepEqual(h.cliente.mutaciones,[]);
  const v=vista(h.w);v.render(r);assert.match(v.out.textContent,/Reservas que faltan/);assert.ok(v.out.textContent.includes(nombre));
 });
+test('las notas de matrimonio y de entrega no impiden asociar al titular de la reserva',async()=>{
+ for (const aviso of ['POSIBLE PEDIDA DE MATRIMONIO','sacacorcho // aseo express solicitado para la tarde // s entrego.']) {
+  const celda=`${nombre} // 2 ADL // 2 NOCHES // ${aviso}`;
+  const h=pagina(celda),reserva=h.data.reservas[0];
+  assert.equal(reserva?.titular,nombre);
+  assert.equal(reserva.texto_original,celda);
+  h.cliente.db.reserva_estadias=[F.estadia(reserva)];
+  const resultado=await h.consultar();
+  assert.equal(resultado.reservas_por_identificar.length,0);
+  assert.equal(resultado.comparacion.filter(x=>x.estado==='asociada').length,1);
+  assert.deepEqual(h.cliente.mutaciones,[]);
+ }
+});
 test('dos titulares reales permanecen visibles, sin crear una reserva arbitraria',async()=>{
  const h=pagina('Ana Pérez // Juan Soto // 2 ADL // 2 noches // WALK IN'),r=await h.consultar();
  assert.equal(r.reservas.length,0);assert.equal(r.reservas_por_identificar.length,1);
