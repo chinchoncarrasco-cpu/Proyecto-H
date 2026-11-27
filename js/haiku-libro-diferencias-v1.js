@@ -84,6 +84,18 @@
             a.advertencias.every(x=>x===aviso) && b.advertencias.every(x=>x===aviso) &&
             conocido(a.noches_texto) && a.noches_texto === b.noches_texto;
     }
+    function continuidadMensualSinCambios(anteriores, actuales) {
+        if (!anteriores.length || anteriores.length !== actuales.length) return false;
+        const porId = new Map(actuales.map(r => [r.id, r]));
+        for (const anterior of anteriores) {
+            const actual = porId.get(anterior.id);
+            if (!anterior.id || anterior.continuidad_mensual_por_revisar !== true ||
+                anterior.advertencias?.length !== 1 || anterior.advertencias_validacion?.length ||
+                !actual || JSON.stringify(anterior) !== JSON.stringify(actual)) return false;
+            porId.delete(anterior.id);
+        }
+        return true;
+    }
     function confianza(a, b, exacta = false) {
         if (a.advertencias_validacion?.length || b.advertencias_validacion?.length) return null;
         if ((a.advertencias?.length || b.advertencias?.length) && !(exacta && contextoExacto(a,b) && advertenciaNochesIdentica(a,b))) return null;
@@ -310,7 +322,11 @@
                 (h.anotaciones||[]).some(x=>(x.tipo==='reserva_por_identificar'||x.lectura==='contenido_no_interpretado'||!x.tipo)&&Number(x.cabana)===Number(prev[i].cabana)&&
                     (x.origen?.celda&&x.origen.celda===prev[i].coordenadas_origen?.celda||[x.fecha,...(x.fechas_ocupadas||[])].includes(prev[i].fecha_checkin)))));
             if (relacionados || dudosos || sinInterpretar || out.no_comparables.length) {
-                out.ambiguas.push({anteriores: a.map(i => copia(prev[i])), actuales: b.map(i => copia(next[i])),
+                const anteriores = a.map(i => prev[i]), actuales = b.map(i => next[i]);
+                // Un tramo de fin de mes puede quedar abierto al leer una hoja vecina.
+                // Si la evidencia es idéntica en ambas copias, no es un cambio.
+                if (continuidadMensualSinCambios(anteriores, actuales)) return;
+                out.ambiguas.push({anteriores: copia(anteriores), actuales: copia(actuales),
                     motivo: out.no_comparables.length ? 'Cobertura incompleta: no se concluye alta o desaparición.' :
                         sinInterpretar?'La celda contiene información que el lector no pudo interpretar; no está confirmada como vacía.':'Identidad no concluyente o múltiples candidatos.'});
             } else {

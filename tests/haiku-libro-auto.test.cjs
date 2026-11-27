@@ -367,7 +367,8 @@ test('aviso en segundo plano conserva conversación, borrador y posición y espe
 
 const burbuja=r=>A.resumir(res(r)).burbuja;
 test('Incorporar espera a la consulta, entrega el aviso exacto y conserva el borrador',async()=>{
-    const resultado=res({nuevas:[{actual:row}],incorporacion:{listos:[{...row,detalles:[['Reserva nueva']]}],pendientes:[]}});
+    const pendientes=Array.from({length:21},(_,i)=>({titular:`Pendiente de prueba ${i+1}`,cabana:5}));
+    const resultado=res({nuevas:[{actual:row}],incorporacion:{listos:[{...row,detalles:[['Reserva nueva']]}],pendientes}});
     const h=interfaz(async()=>resultado);
     const entregados=[];let ocupado=true,resolver;
     h.window.haikuSesion={usuario:{activo:true},roles:['administrador']};
@@ -377,6 +378,9 @@ test('Incorporar espera a la consulta, entrega el aviso exacto y conserva el bor
     h.ids['haiku-asistente-texto'].value='Mi consulta pendiente';
     h.emitir('haiku:libro-version-cargada',evento(2));await tick();
     const boton=h.nodos().find(x=>x.textContent==='Incorporar');assert.ok(boton);assert.equal(boton.disabled,true);
+    const bloque=h.nodos().find(x=>x.className==='haku-libro-auto__pendientes');
+    const acceso=()=>h.nodos().find(x=>x.className==='haku-libro-casos__abrir');
+    assert.equal(bloque.hidden,false);assert.equal(acceso()['aria-label'],'21 casos pendientes');
     boton.dispatchEvent({type:'click'});assert.equal(entregados.length,0);
     ocupado=false;h.ids['haiku-asistente-texto'].dispatchEvent({type:'input'});
     assert.equal(boton.disabled,false);boton.dispatchEvent({type:'click'});
@@ -384,13 +388,15 @@ test('Incorporar espera a la consulta, entrega el aviso exacto y conserva el bor
     assert.deepEqual(entregados[0].nuevas[0].actual,resultado.nuevas[0].actual);
     assert.equal(entregados[0].modificadas.length,0);assert.equal(h.abierto(),0);
     assert.equal(boton.textContent,'Incorporando…');assert.equal(boton['aria-busy'],'true');
+    assert.equal(bloque.hidden,true);
     boton.dispatchEvent({type:'click'});assert.equal(entregados.length,1);
     h.cambiar();assert.equal(h.document.body.children.length,1,'no desaparece durante el guardado');
     assert.equal(boton.textContent,'Incorporando…');
-    resolver({servicios_creados:1,pendientes:[]});await tick();
+    resolver({servicios_creados:1,pendientes:[pendientes[0]]});await tick();
     assert.equal(boton.textContent,'Incorporado');assert.equal(boton.disabled,true);
     assert.equal(boton.hidden,true);
     assert.equal(boton['aria-busy'],undefined);
+    assert.equal(bloque.hidden,false);assert.equal(acceso()['aria-label'],'1 caso pendiente');
     assert.equal(h.ids['haiku-asistente-texto'].value,'Mi consulta pendiente');
     assert.equal(h.document.body.children.length,1);assert.equal(h.abierto(),0);
     const recibo=h.nodos().find(x=>x.className==='haku-libro-auto__recibo');

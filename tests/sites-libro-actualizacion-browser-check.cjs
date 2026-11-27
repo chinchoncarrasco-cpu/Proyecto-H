@@ -364,6 +364,11 @@ async function comprobarCasosDelAviso(browser, url) {
         assert.doesNotMatch(await recibo.innerText(),/Reserva completa/);
         await encabezadoRecibo.click();
         await recibo.getByText('Reserva completa · CAB 2',{exact:true}).waitFor();
+        const revisado=await page.evaluate(async()=>{
+            const aviso=await HAIKU_ASISTENTE_LIBRO_ACTUALIZACION_V1.obtenerResultadoAviso();
+            return {listos:aviso.incorporacion.listos.length,pendientes:aviso.incorporacion.pendientes.length};
+        });
+        assert.deepEqual(revisado,{listos:0,pendientes:8},'el mismo informe revalida lo guardado antes de volver a mostrarlo');
         assert.ok(await abrir.evaluate(el=>el.offsetHeight<=40),'pendientes se presentan en una fila compacta');
         assert.match(await recibo.innerText(),/Reserva completa · CAB 2/);
         assert.doesNotMatch(await aviso.innerText(),/Listos para incorporar|Elena Salas/);
@@ -1045,6 +1050,7 @@ async function comprobarPendientesTrasConfirmar(browser,url){
             for(const width of [1100,390,320]){
                 await page.setViewportSize({width,height:900});
                 assert.equal(await burbuja.evaluate(el=>el.scrollWidth<=el.clientWidth+1),true,`${tema} ${width}: aviso sin desbordes`);
+                assert.equal(await pendienteMixto.isVisible(),false,`${tema} ${width}: se retira el recuento anterior al incorporar`);
                 assert.deepEqual(await incorporando.evaluate(el=>({
                     animacion:getComputedStyle(el,'::before').animationName,
                     fondo:getComputedStyle(el).backgroundColor,opacidad:getComputedStyle(el).opacity
