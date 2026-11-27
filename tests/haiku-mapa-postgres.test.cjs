@@ -156,7 +156,7 @@ test('Mapa y Huéspedes comparten vehículos y conservan las reglas de estadías
         await db.exec('reset role');
         await db.exec(read('supabase/migrations/20261127223323_haiku_mapa_ocupacion_estadias.sql'));
         await db.exec(read('supabase/migrations/20261127223413_haiku_mapa_puestos_adicionales.sql'));
-        await db.exec(read('supabase/migrations/20261127230425_haiku_mapa_hospedaje_estacionamientos.sql'));
+        await db.exec(read('supabase/migrations/20261127233716_haiku_mapa_hospedaje_estacionamientos.sql'));
         await db.exec('set role authenticated');
         const {ocupacion_estadias, ...sameMap} = await snapshot();
         assert.deepEqual(sameMap, beforeOccupancy);
