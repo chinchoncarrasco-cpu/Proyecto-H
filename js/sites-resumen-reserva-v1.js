@@ -870,7 +870,7 @@
     }
 
     window.HAIKU_RESUMEN_RESERVA_SITES_V1 = Object.freeze({
-        abrirDesdeBoton, abrirPorId, cerrar, refrescarFinanzas,
+        abrirDesdeBoton, abrirPorId, cerrar, refrescarFinanzas, refrescarTrasEstado,
         // Funciones puras para comprobar identidad exacta y cabañas grupales.
         identidadOperacion, elegirEstadia
     });

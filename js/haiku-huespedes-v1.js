@@ -1,7 +1,7 @@
 "use strict";
 
 window.HAIKU_FICHA_HUESPED_V1 = Object.freeze({mount: function (
-    root, api, {menu, anchor, iconUrl, openReservation, changed, createId = () => crypto.randomUUID()},
+    root, api, {menu, anchor, iconUrl, openReservation, changed, vehiclePicker, createId = () => crypto.randomUUID()},
 ) {
     const embedded = !menu;
     const tabs = root.querySelector(".hu-tabs");
@@ -644,6 +644,7 @@ window.HAIKU_FICHA_HUESPED_V1 = Object.freeze({mount: function (
             [item.estacionamiento?"Patente":"Patente (opcional)","patente",Boolean(item.estacionamiento)]]
             :[["Nombre","nombre",true],["Especie","especie",true],["Raza (opcional)","raza"],["Tamaño","tamano"],["Color","color"]];
         const fields=entries.map(([label,key,needed])=>field(label,key,item[key],key==="cuidados"?"textarea":"text",needed));
+        if(vehicle&&vehiclePicker) fields[0]=vehiclePicker(item.tipo,fields[2].querySelector("input"),edit);
         if(!vehicle)fields.at(-1).classList.add("hu-full");
         const expected={principal:item.foto??null,posicion_y:item.foto_posicion_y??50,adicionales:item.fotos_adicionales??[]};
         const photo=photoEditor({kind,id,path:item.foto,positionY:expected.posicion_y},vehicle?"hu-vehicle-photo":"hu-pet-photo",vehicle?"vehicle":"pet",edit);
