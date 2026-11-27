@@ -1,0 +1,25 @@
+#seccion-mapa .haiku-mapa-viewport {
+    width: 100%;
+    min-width: 0;
+}
+#seccion-mapa iframe {
+    display: block;
+    width: 100%;
+    height: max(420px, calc(100dvh - 140px));
+    border: 1px solid var(--haiku-border, #d4c7cc);
+    border-radius: 11px;
+    background: var(--haiku-surface, transparent);
+}
+[data-haiku-tema="oscuro"] #seccion-mapa iframe {
+    border-color: #503944;
+}
+#seccion-mapa .haiku-mapa-aviso {
+    padding: 12px;
+    color: inherit;
+}
+@media (max-width: 740px) {
+    #seccion-mapa iframe {
+        height: max(425px, calc(100dvh - 179px));
+        border-radius: 8px;
+    }
+}
