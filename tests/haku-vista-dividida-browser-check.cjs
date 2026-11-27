@@ -156,8 +156,25 @@ async function escritorio(browser) {
     await page.mouse.move(divisor.x + divisor.width / 2, divisor.y + divisor.height / 2);
     await page.mouse.down();
     await page.mouse.move(930, divisor.y + divisor.height / 2, { steps: 8 });
+    await page.waitForFunction(() => document.getElementById("haiku-vista-separador").style.transform !== "");
+    const guia = await separador.boundingBox();
+    assert.ok(Math.abs(guia.x + guia.width / 2 - 930) <= 1, "la guía sigue al puntero");
+    assert.equal((await resumen.boundingBox()).width, ri.width, "no se recalcula Resumen durante el arrastre");
+    assert.equal((await libro.boundingBox()).width, ld.width, "no se recalcula el Libro durante el arrastre");
     await page.mouse.up();
+    assert.ok(Math.abs((await separador.boundingBox()).x - guia.x) <= 1, "los paneles conservan el ancho elegido");
     assert.ok(Number(await separador.getAttribute("aria-valuenow")) > 60);
+
+    const anchoConfirmado = await resumen.boundingBox();
+    await page.mouse.move(guia.x + guia.width / 2, guia.y + guia.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(700, guia.y + guia.height / 2, { steps: 4 });
+    await page.waitForFunction(() => document.getElementById("haiku-vista-separador").style.transform !== "");
+    await page.keyboard.press("Escape");
+    await page.mouse.up();
+    assert.equal((await resumen.boundingBox()).width, anchoConfirmado.width, "cancelar conserva el último ancho");
+    assert.equal(await separador.evaluate(el => el.style.transform), "");
+
     await separador.press("End");
     assert.equal(await separador.getAttribute("aria-valuenow"), await separador.getAttribute("aria-valuemax"));
     assert.ok((await libro.boundingBox()).width >= 320);
@@ -202,8 +219,18 @@ async function escritorio(browser) {
     await page.locator("#haiku-tema-boton").evaluate(el => el.click());
     await page.waitForFunction(() => document.documentElement.dataset.haikuTema === "oscuro");
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), 1440);
+    const separadorOscuro = await separador.boundingBox();
+    const xOscuro = separadorOscuro.x + separadorOscuro.width / 2;
+    const yOscuro = separadorOscuro.y + separadorOscuro.height / 2;
+    await page.mouse.move(xOscuro, yOscuro);
+    await page.mouse.down();
+    await page.mouse.move(xOscuro + 80, yOscuro);
+    await page.waitForFunction(() => document.getElementById("haiku-vista-separador").style.transform !== "");
     await page.setViewportSize({ width: 850, height: 800 });
     await page.getByRole("button", { name: "Ver Cabañas", exact: true }).waitFor();
+    await page.mouse.up();
+    assert.equal(await page.locator("#haiku-area-trabajo").getAttribute("data-haiku-vista-arrastre"), null);
+    assert.equal(await page.locator("#haiku-vista-separador").evaluate(el => el.style.transform), "");
     assert.equal(await libro.isVisible(), true);
     assert.equal(await seccion(page, "cabanas").isVisible(), false);
     await page.setViewportSize({ width: 1440, height: 900 });

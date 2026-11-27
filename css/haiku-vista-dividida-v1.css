@@ -170,6 +170,11 @@ body > #haiku-area-trabajo[data-haiku-vista="doble"] {
     user-select: none;
 }
 
+[data-haiku-vista-arrastre] #haiku-vista-separador {
+    z-index: 7;
+    will-change: transform;
+}
+
 [data-haiku-vista="alternada"] .haiku-vista-controles {
     display: flex;
     justify-content: space-between;
