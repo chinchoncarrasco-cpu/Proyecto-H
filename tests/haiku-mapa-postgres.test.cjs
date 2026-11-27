@@ -7,7 +7,7 @@ const assert = require('node:assert/strict');
 const read = file => readFileSync(join(__dirname, '..', file), 'utf8');
 const uuid = n => 'ee040000-0000-4000-8000-' + String(n).padStart(12, '0');
 
-test('Mapa lee estadías del esquema de Haku, filtra huéspedes tras check-out y protege las ediciones', async () => {
+test('Mapa y Huéspedes comparten vehículos y conservan las reglas de estadías, checkout y permisos', async () => {
     const db = new PGlite();
     const [actor, member, reservation, stay, cabin, car, action, marker, markerAction] =
         [1, 2, 3, 4, 5, 6, 7, 8, 9].map(uuid);
@@ -16,6 +16,8 @@ test('Mapa lee estadías del esquema de Haku, filtra huéspedes tras check-out y
     try {
         await db.exec(read('tests/fixtures/huespedes-schema.sql'));
         await db.exec(read('supabase/migrations/20261120205010_haku_huespedes_v1_1.sql'));
+        await db.exec(read('supabase/migrations/20261121003000_haku_huespedes_directorio_foto.sql'));
+        await db.exec(read('supabase/migrations/20261122233716_huespedes_fotos_vehiculo.sql'));
         await db.exec(`
             set time zone 'America/Santiago';
             alter table public.reserva_estadias add column checkin_realizado_en timestamptz;
@@ -45,6 +47,9 @@ test('Mapa lee estadías del esquema de Haku, filtra huéspedes tras check-out y
             [actor, ['cabanas.ver', 'reservas.ver', 'huespedes.ver', 'huespedes.gestionar', 'servicios.ver']]);
         await db.query("insert into public.usuarios(id,nombre) values($1,'Aseo de prueba')", [cleaningUser]);
         await db.query("insert into private.permisos values($1,'cabanas.ver')", [cleaningUser]);
+        await db.query("insert into public.usuarios(id,nombre) values($1,'Huéspedes de prueba')", [uuid(17)]);
+        await db.query('insert into private.permisos select $1::uuid, unnest($2::text[])',
+            [uuid(17), ['reservas.ver', 'huespedes.ver', 'huespedes.gestionar']]);
         await db.query('insert into public.huespedes(id,nombre) values($1,\'Huésped ficticio\')', [member]);
         await db.query('insert into public.reservas(id,titular_huesped_id,titular_nombre) values($1,$2,\'Huésped ficticio\')', [reservation, member]);
         await db.query('insert into public.cabanas(id,numero) values($1,5)', [cabin]);
@@ -87,14 +92,89 @@ test('Mapa lee estadías del esquema de Haku, filtra huéspedes tras check-out y
         assert.deepEqual((await snapshot()).personas, []);
         await db.query("select set_config('request.jwt.claim.sub',$1,false)", [actor]);
 
-        const save = async (id, kind, data, request) => (await db.query(
-            "select public.haiku_mapa_guardar_v1($1,$2,0,'guardar',$3,$4) as cambio",
-            [id, kind, JSON.stringify(data), request],
+        const save = async (id, kind, data, request, revision = 0, action = 'guardar') => (await db.query(
+            'select public.haiku_mapa_guardar_v1($1,$2,$3,$4,$5,$6) as cambio',
+            [id, kind, revision, action, JSON.stringify(data), request],
         )).rows[0].cambio;
+        const profile = async (person = member, reserve = reservation) => (await db.query(
+            'select public.haiku_huesped_perfil_v1($1,$2,false) as ficha', [person, reserve],
+        )).rows[0].ficha;
+        const saveProfile = async vehicle => (await db.query(
+            "select public.haiku_huesped_guardar_v1($1,$2,'vehiculo',$3) as cambio",
+            [member, reservation, JSON.stringify(vehicle)],
+        )).rows[0].cambio;
+        const parked = async number => (await snapshot()).elementos.find(e => e.puesto === number);
         const vehicle = { puesto:8, patente:'QA AB-47', vehiculo:'SUV', estacionado:true, reserva_id:reservation };
         assert.equal((await save(car, 'vehiculo', vehicle, action)).revision, 1);
         assert.equal((await save(car, 'vehiculo', vehicle, action)).repetido, true);
-        assert.equal((await snapshot()).elementos[0].datos.patente, 'QAAB47');
+        assert.equal((await parked(8)).datos.patente, 'QAAB47');
+        const originalMovement = (await parked(8)).datos;
+        assert.deepEqual((await profile()).vehiculos, []);
+
+        // Existing parked-only, matching profile, and unlinked registrations before the migration.
+        const [matched, matchedMap, unlinked, additional, newMap, freeProfile] = [20, 21, 22, 23, 24, 25].map(uuid);
+        await saveProfile({id:matched,tipo:'Camioneta',modelo:'Marca ya registrada',patente:'PZ 11-23'});
+        const parkedWithProfile = {...vehicle,puesto:9,patente:'pz1123',color:'Cereza'};
+        await save(matchedMap,'vehiculo',parkedWithProfile,uuid(40));
+        await save(unlinked,'vehiculo',{...vehicle,puesto:10,patente:'RN8899',reserva_id:null},uuid(41));
+        await db.exec('reset role');
+        const photo = actor + '/' + additional + '.jpg';
+        await db.query('update public.haiku_huesped_vehiculos set foto=$2, fotos_adicionales=array[$3] where id=$1',
+            [matched,photo,actor + '/' + uuid(26) + '.jpg']);
+        await db.exec(read('supabase/migrations/20261127200953_haiku_vehiculos_mapa_huespedes.sql'));
+        await db.exec('set role authenticated');
+        const afterMigration = (await profile()).vehiculos;
+        const fromMap = afterMigration.find(v => v.patente === 'QAAB47');
+        assert.equal(afterMigration.length,2);
+        assert.deepEqual(fromMap.estacionamiento,{puesto:8,estacionado:true});
+        assert.equal((await parked(8)).vehiculo_id,fromMap.id);
+        assert.deepEqual((await parked(8)).datos,originalMovement);
+        assert.equal((await parked(9)).vehiculo_id,matched);
+        assert.equal((await parked(9)).datos.vehiculo,'Camioneta');
+        assert.equal((await parked(9)).datos.modelo,'Marca ya registrada');
+        assert.equal(afterMigration.find(v => v.id === matched).foto,photo);
+        assert.equal((await parked(10)).vehiculo_id,null);
+        assert.equal((await save(car,'vehiculo',vehicle,action)).repetido,true);
+
+        await saveProfile({id:fromMap.id,tipo:'Sedán',modelo:'Modelo de prueba',color:'Cereza',patente:'QAAB48',version:fromMap.fecha});
+        let park = await parked(8);
+        assert.equal(park.datos.patente,'QAAB48');
+        assert.equal(park.datos.modelo,'Modelo de prueba');
+        assert.equal(park.datos.llegada,originalMovement.llegada);
+        await assert.rejects(() => saveProfile({id:fromMap.id,tipo:'SUV',patente:'QAAB49',version:fromMap.fecha}), {code:'40001'});
+        await assert.rejects(() => saveProfile({id:fromMap.id,tipo:'SUV',patente:'PZ1123'}), /ya está registrada en la ficha/);
+        await assert.rejects(() => saveProfile({id:fromMap.id,tipo:'SUV',patente:'RN8899'}), /asignada a otro puesto/);
+        await assert.rejects(() => saveProfile({id:fromMap.id,tipo:'SUV',patente:''}), /necesita una patente válida/);
+        await assert.rejects(() => save(car,'vehiculo',vehicle,uuid(42),2), {code:'40001'});
+        await save(car,'vehiculo',{...vehicle,patente:'QAAB48',vehiculo:'Sedán',modelo:'Editado en mapa',color:'Cereza',
+            nota:'Recibe llamado para la salida'},uuid(43),park.revision);
+        assert.equal((await profile()).vehiculos.find(v => v.id === fromMap.id).modelo,'Editado en mapa');
+        park = await parked(8);
+        await save(car,'vehiculo',{},uuid(44),park.revision,'salida');
+        assert.deepEqual((await profile()).vehiculos.find(v => v.id === fromMap.id).estacionamiento,{puesto:8,estacionado:false});
+        park = await parked(8);
+        await save(car,'vehiculo',{},uuid(45),park.revision,'retirar');
+        assert.equal(await parked(8),undefined);
+        assert.equal((await profile()).vehiculos.find(v => v.id === fromMap.id).estacionamiento,null);
+
+        // Reuse a vehicle registered first in Huéspedes and keep its photos/person separate from another reservation.
+        await saveProfile({id:freeProfile,tipo:'Vehículo familiar',modelo:'Otro modelo'});
+        const previous = (await profile()).vehiculos.find(v => v.id === freeProfile);
+        const choose = {...vehicle,puesto:8,patente:'AW4455',vehiculo:'Otro',modelo:'Otro modelo',
+            vehiculo_id:freeProfile,vehiculo_version:previous.fecha};
+        await save(newMap,'vehiculo',choose,uuid(46));
+        assert.equal((await parked(8)).vehiculo_id,freeProfile);
+        assert.equal((await parked(8)).datos.vehiculo,'Vehículo familiar');
+        assert.equal((await profile()).vehiculos.length,3);
+        await assert.rejects(() => save(uuid(27),'vehiculo',{...choose,puesto:7,reserva_id:reservationWithoutProfile},
+            uuid(47)), /no pertenece a esta reserva/);
+        assert.equal(await parked(7),undefined);
+        await assert.rejects(() => saveProfile({id:uuid(28),tipo:'SUV',patente:'AW 44-55'}), /ya está registrada en la ficha/);
+        await db.query("select set_config('request.jwt.claim.sub',$1,false)", [uuid(17)]);
+        assert.equal((await profile()).vehiculos.find(v => v.id === freeProfile).estacionamiento,null);
+        await db.query("select set_config('request.jwt.claim.sub',$1,false)", [cleaningUser]);
+        await assert.rejects(profile, {code:'42501'});
+        await db.query("select set_config('request.jwt.claim.sub',$1,false)", [actor]);
         await assert.rejects(() => db.query('update public.haiku_mapa_elementos set activo=false'), { code: '42501' });
         const person = { persona_id:member, reserva_id:reservation, x:742, y:1260 };
         await save(marker, 'persona', person, markerAction);

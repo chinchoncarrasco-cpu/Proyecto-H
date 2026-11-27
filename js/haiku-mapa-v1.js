@@ -104,7 +104,7 @@
         frame.setAttribute("data-haiku-mapa-interno", "");
         frame.setAttribute("sandbox", "allow-scripts allow-forms");
         frame.referrerPolicy = "no-referrer";
-        frame.src = "assets/mapa/recinto.html?v=5";
+        frame.src = "assets/mapa/recinto.html?v=6";
         user = identity();
         // Read today's map while the sandboxed document loads.
         initialSnapshot = query("snapshot", {});

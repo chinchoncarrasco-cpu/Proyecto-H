@@ -291,6 +291,13 @@ window.HAIKU_FICHA_HUESPED_V1 = Object.freeze({mount: function (
         api.signed(path).then(src=>{if(thumb.isConnected)image.src=src;}).catch(()=>{});
         return thumb;
     }
+    function vehicleRow(vehicle) {
+        const parking=vehicle.estacionamiento;
+        const context=parking&&"Puesto "+parking.puesto+" · "+(parking.estacionado?"Estacionado":"Fuera del recinto");
+        const detail=[vehicle.modelo&&vehicle.tipo, vehicle.patente, vehicle.color, context].filter(Boolean);
+        return row(vehicle.modelo||vehicle.tipo,detail.join(" · "),
+            btn("Ver perfil",()=>editEntity("vehiculo",vehicle)),vehicleVisual(vehicle));
+    }
     function group(title,action,...rows) {
         return box("hu-separador hu-bloque"+(/^(Acompañantes|Integrantes|Perfil de esta)/.test(title)?" hu-sin-borde":""),box("hu-subtitulo",el("h4","",title),action),
             ...(/^(Acompañantes|Integrantes)/.test(title)?[box("hu-miembros",...rows)]:rows));
@@ -367,8 +374,7 @@ window.HAIKU_FICHA_HUESPED_V1 = Object.freeze({mount: function (
         const clothing=local.filter(x=>x.categoria==="vestimenta");
         const related=box("hu-relacionados",
             v&&row("Vestimenta de hoy",clothing.length?[clothing[0].superior,clothing[0].inferior,clothing[0].texto].filter(Boolean).join(" · "):"Sin registrar",edit&&btn("Editar",()=>editPhoto({kind:"persona",path:p.foto})),"shirt"),
-            ...profile.vehiculos.map(x=>row(x.modelo||x.tipo,["Vehículo",x.tipo,x.color].filter(Boolean).join(" · "),
-                btn("Ver perfil",()=>editEntity("vehiculo",x)),vehicleVisual(x))),
+            ...profile.vehiculos.map(vehicleRow),
             ...profile.mascotas.map(x=>row(x.nombre,["Mascota",x.especie,x.tamano].filter(Boolean).join(" · "),btn("Ver perfil",()=>editEntity("mascota",x)),"pet")));
         const content=[titularBack(),header,
             box("hu-linea",muted(p.numero_documento?(p.tipo_documento==="rut"?"RUT ":"Documento ")+"••••"+p.numero_documento.slice(-4):"Sin documento"),
@@ -634,7 +640,8 @@ window.HAIKU_FICHA_HUESPED_V1 = Object.freeze({mount: function (
         const vehicle=kind==="vehiculo", edit=profile.puede_editar;
         const visit=currentVisit();
         const id=item.id||createId();
-        const entries=vehicle?[["Tipo de vehículo","tipo",true],["Marca y modelo","modelo"],["Color","color"],["Patente (opcional)","patente"]]
+        const entries=vehicle?[["Tipo de vehículo","tipo",true],["Marca y modelo","modelo"],["Color","color"],
+            [item.estacionamiento?"Patente":"Patente (opcional)","patente",Boolean(item.estacionamiento)]]
             :[["Nombre","nombre",true],["Especie","especie",true],["Raza (opcional)","raza"],["Tamaño","tamano"],["Color","color"]];
         const fields=entries.map(([label,key,needed])=>field(label,key,item[key],key==="cuidados"?"textarea":"text",needed));
         if(!vehicle)fields.at(-1).classList.add("hu-full");
@@ -658,6 +665,7 @@ window.HAIKU_FICHA_HUESPED_V1 = Object.freeze({mount: function (
                     try {
                         const {tipo,modelo,color,patente}=v;
                         const data={id,tipo,modelo,color,patente};
+                        if(item.fecha) data.version=item.fecha;
                         const primary=await photo.value(),additional=await gallery.value(),positionY=photo.positionY();
                         if(primary===expected.principal&&positionY===expected.posicion_y&&
                             additional.length===expected.adicionales.length&&additional.every((p,i)=>p===expected.adicionales[i])) {
