@@ -651,7 +651,20 @@
         }
     });
 
-    window.addEventListener("blur", salidaDeHaiku);
+    const selectorMapa = "#seccion-mapa iframe[data-haiku-mapa-interno]";
+    window.addEventListener("blur", () => {
+        // El navegador puede enviar blur al transferir el foco al mapa interno.
+        // Se espera ese cambio de foco sólo cuando el mapa ya está montado.
+        if (!document.querySelector(selectorMapa)) {
+            salidaDeHaiku();
+            return;
+        }
+        setTimeout(() => {
+            if (document.visibilityState === "visible" && document.hasFocus()
+                && document.activeElement?.matches(selectorMapa)) return;
+            salidaDeHaiku();
+        }, 0);
+    });
     window.addEventListener("focus", regresoAHaiku);
 
     document.addEventListener("visibilitychange", () => {
@@ -672,6 +685,9 @@
     }
 
     window.HAIKU_PRIVACIDAD = {
+        verificarFocoMapa() {
+            if (document.visibilityState === "hidden" || !document.hasFocus()) salidaDeHaiku();
+        },
         bloquearAhora() {
             if (!armado || !configurado) return false;
             marcarBloqueado();

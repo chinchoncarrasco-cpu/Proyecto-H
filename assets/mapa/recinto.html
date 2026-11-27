@@ -1,0 +1,1696 @@
+<!doctype html>
+<html lang="es" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:; form-action 'none'; base-uri 'none'">
+<title>Mapa del recinto · Haku</title>
+<style>
+:root {
+  color-scheme: light;
+  --page: #faf6ee;
+  --map: #f5efe5;
+  --paper: #fffaf3;
+  --line: #e1d5ce;
+  --ink: #2a2228;
+  --sub: #665a65;
+  --accent: #78263f;
+  --accent-ink: #fff7f9;
+  --tint: #f4e6e8;
+  --outline: #a58e9b;
+  --free: #f3eee9;
+  --continuing: #ead3df;
+  --arrival: #e4e0f3;
+  --departure: #f3deca;
+  --checkout: #e9e3d9;
+  --blocked: #e3dcdf;
+  --full: #f2d9bd;
+  --unknown: #e9dfd6;
+  --ready: #318051;
+  --working: #bd5e26;
+  --waiting: #986d0d;
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #201a20;
+  --map: #29262d;
+  --paper: #2c232b;
+  --line: #4e3b47;
+  --ink: #f4e9ef;
+  --sub: #c5b4c0;
+  --accent: #a64f6d;
+  --accent-ink: #fff5f7;
+  --tint: #482e3a;
+  --outline: #887581;
+  --free: #3c3740;
+  --continuing: #543345;
+  --arrival: #354655;
+  --departure: #543d2c;
+  --checkout: #4b403c;
+  --blocked: #4b3d43;
+  --full: #624236;
+  --unknown: #37323b;
+  --ready: #8ed2a6;
+  --working: #efa976;
+  --waiting: #edc96f;
+}
+* {box-sizing: border-box}
+[hidden] {display: none !important}
+html, body {height:100%; margin:0; overflow:hidden}
+body {font:14px/1.38 Inter, system-ui, sans-serif; color:var(--ink); background:var(--page)}
+button, input, select, textarea {font:inherit; color:inherit}
+button, input, select, textarea {border:1px solid var(--line); border-radius:8px; background:var(--paper)}
+button {min-height:36px; padding:5px 11px; cursor:pointer; font-weight:640}
+button:disabled {opacity:.45; cursor:default}
+button:focus-visible, [tabindex]:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible {outline:2px solid var(--accent); outline-offset:2px}
+button.primary {background:var(--accent); color:var(--accent-ink); border-color:transparent}
+button[aria-pressed="true"] {background:var(--tint); border-color:var(--accent)}
+.workspace {display:flex; flex-direction:column; height:100%; min-width:0}
+.toolbar {flex:none; padding:10px 12px 8px; display:flex; flex-wrap:wrap; align-items:center; gap:8px 14px; border-bottom:1px solid var(--line)}
+.heading {display:flex; flex:1 0 auto; gap:7px; align-items:center}
+h1, h2, h3, p {margin:0}
+h1 {font-size:clamp(17px, 2.6vw, 25px); letter-spacing:-.025em; margin-right:auto}
+.heading time {color:var(--sub); white-space:nowrap; font-size:12px}
+#reload {font-size:18px; width:36px; padding:3px}
+#filters {display:flex; gap:5px; max-width:100%; overflow:auto; scrollbar-width:none}
+#filters button {white-space:nowrap}
+#status {width:100%; color:var(--sub); font-size:12px}
+.content {display:flex; flex:1; min-height:0; position:relative}
+#viewport {flex:1; min-width:0; position:relative; overflow:hidden; isolation:isolate; background:var(--map); touch-action:none; cursor:grab; outline-offset:-3px}
+#viewport[data-dragging="true"] {cursor:grabbing}
+#viewport.placing, #viewport.placing .region {cursor:crosshair}
+#world {position:absolute; width:1136px; height:1578px; transform-origin:0 0; user-select:none; will-change:transform}
+#base, #regions {position:absolute; inset:0; width:1136px; height:1578px; pointer-events:none}
+#base svg {display:block}
+.region {cursor:pointer; pointer-events:all; outline:none}
+.region .hit {fill:transparent; stroke:transparent; stroke-width:1.8}
+.region[aria-current="true"] .hit, .region:focus-visible .hit {fill:var(--tint); fill-opacity:.18; stroke:var(--accent); stroke-width:3}
+.region .footprint {stroke:var(--outline); stroke-width:2; stroke-linejoin:round}
+.region[aria-current="true"] .footprint, .region:focus-visible .footprint {stroke:var(--accent); stroke-width:3}
+.region text, .river {fill:var(--ink); font-weight:700; text-anchor:middle; dominant-baseline:central; paint-order:stroke; stroke:var(--map); stroke-width:1.8; pointer-events:none}
+.region .zone-tag {fill:var(--paper); stroke:var(--line); stroke-width:1.25}
+.region[aria-current="true"] .zone-tag, .region:focus-visible .zone-tag {stroke:var(--accent); stroke-width:2.5}
+.river {fill:var(--sub); font-size:19px; font-weight:500; text-anchor:start}
+#tooltip, #placement {position:absolute; z-index:2; color:var(--ink); background:var(--paper); border:1px solid var(--line); border-radius:9px; box-shadow:0 5px 18px #1610182c}
+#tooltip {padding:6px 9px; pointer-events:none; max-width:min(230px,75vw); font-size:12px}
+#placement {top:8px; left:8px; padding:5px 6px 5px 10px; display:flex; align-items:center; gap:8px}
+.viewport-tools {position:absolute; z-index:1; inset:auto 8px 8px; display:flex; justify-content:space-between; pointer-events:none}
+.viewport-tools div {display:flex; gap:4px}
+.viewport-tools button {pointer-events:auto; background:var(--paper); min-width:34px; padding:4px 7px}
+#details {background:var(--paper); border-left:1px solid var(--line); flex:0 0 clamp(240px,26%,340px); overflow:auto; overscroll-behavior:contain}
+.detail-head {position:sticky; top:0; z-index:1; display:flex; align-items:flex-start; justify-content:space-between; gap:7px; background:var(--paper); padding:12px; border-bottom:1px solid var(--line)}
+.detail-head h2 {font-size:18px}
+.detail-head p {font-size:12px; color:var(--sub)}
+.detail-head button {font-size:20px; width:36px; padding:2px 8px; background:transparent}
+#detail-body {padding:10px 12px 13px; display:flex; flex-direction:column; gap:9px}
+#detail-body h3 {font-size:13px; margin-top:4px}
+#detail-body p, #detail-body li {overflow-wrap:anywhere}
+.rows {margin:0; display:flex; flex-direction:column; gap:4px}
+.rows div {display:flex; gap:8px; justify-content:space-between; align-items:baseline}
+dt {color:var(--sub); min-width:42%}
+dd {margin:0; text-align:right; overflow-wrap:anywhere}
+.compact-list {list-style:none; padding:0; margin:0; display:grid; gap:3px}
+.compact-list li {padding:6px 0; border-bottom:1px solid var(--line)}
+.compact-list li:last-child {border:0}
+.actions {display:flex; flex-wrap:wrap; gap:5px}
+.actions button {flex:1 0 auto}
+form {display:grid; gap:7px}
+form label {display:grid; gap:3px; color:var(--sub); font-size:12px}
+form :is(input,select,textarea) {width:100%; min-width:0; min-height:37px; padding:6px 7px; font-size:15px; color:var(--ink)}
+textarea {min-height:59px; resize:vertical}
+.form-note, .subtle {color:var(--sub); font-size:12px}
+.form-error {color:var(--working); font-size:12px}
+footer {display:flex; gap:10px; align-items:center; padding:6px 10px; border-top:1px solid var(--line); color:var(--sub); font-size:11px}
+footer span {display:inline-flex; align-items:center; gap:5px; white-space:nowrap}
+footer .web-help {margin-left:auto}
+.aura {width:6px; height:6px; border-radius:50%; background:var(--tone); box-shadow:0 0 0 3px color-mix(in srgb, var(--tone) 24%, transparent)}
+.ready {--tone:var(--ready)}
+.working {--tone:var(--working)}
+.waiting {--tone:var(--waiting)}
+@media (max-width:740px) {
+  .toolbar {padding:6px 8px; gap:5px}
+  .heading, #filters {width:100%}
+  .heading time {font-size:11px}
+  #filters button {min-height:36px; padding:4px 9px}
+  #details {position:absolute; z-index:3; inset:auto 0 0; max-height:min(71%, 380px); min-height:105px; overflow:auto; border:1px solid var(--line); border-radius:15px 15px 0 0; box-shadow:0 -7px 24px #140b1730}
+  .detail-head {padding:8px 10px}
+  #detail-body {padding:8px 10px 10px; gap:7px}
+  #detail-body button, .detail-head button, .viewport-tools button {min-height:42px}
+  #detail-body form :is(input,select,textarea) {font-size:16px}
+  footer .web-help {display:none}
+}
+@media (pointer:coarse) {#tooltip, footer .web-help {display:none !important}}
+
+.guest-notes {border-top:1px solid var(--line); padding:7px 0 2px}
+.guest-notes summary {cursor:pointer; font-weight:650}
+.guest-notes > div {padding-top:5px}
+</style>
+</head>
+<body>
+<main class="workspace">
+  <header class="toolbar">
+    <div class="heading"><h1>Mapa del recinto</h1><time id="day"></time><button id="reload" type="button" aria-label="Actualizar mapa" title="Actualizar mapa">↻</button><button id="add" class="primary" type="button" disabled>＋ Agregar</button></div>
+    <nav id="filters" aria-label="Capas del mapa">
+      <button type="button" data-filter="all" aria-pressed="true">Todo</button>
+      <button type="button" data-filter="cabins">Cabañas</button>
+      <button type="button" data-filter="parking">Vehículos</button>
+      <button type="button" data-filter="services">Servicios</button>
+      <button type="button" data-filter="people">Personas</button>
+      <button type="button" data-filter="tasks">Tareas</button>
+    </nav>
+    <p id="status" role="status" hidden></p>
+  </header>
+  <div class="content">
+    <section id="viewport" aria-label="Plano de Haku" tabindex="0">
+      <div id="world">
+        <div id="base" aria-hidden="true"></div>
+        <svg id="regions" viewBox="0 0 1136 1578" aria-label="Ubicaciones del recinto"></svg>
+      </div>
+      <div id="tooltip" role="tooltip" hidden></div>
+      <div id="placement" hidden><span>Elige la ubicación en el mapa</span><button id="cancel-placement" type="button">Cancelar</button></div>
+      <nav class="viewport-tools" aria-label="Navegación del plano">
+        <div class="sectors"><button type="button" data-sector="north">Norte</button><button type="button" data-sector="south">Sur</button><button id="cabin11" type="button">CAB 11</button></div>
+        <div class="zoom"><button type="button" id="minus" aria-label="Alejar">−</button><button type="button" id="plus" aria-label="Acercar">＋</button><button type="button" id="center" aria-label="Ver todo el recinto" title="Ver todo el recinto">◎</button></div>
+      </nav>
+    </section>
+    <aside id="details" aria-label="Detalle del mapa" hidden>
+      <header class="detail-head"><div><h2 id="detail-title" tabindex="-1"></h2><p id="detail-caption" hidden></p></div><button type="button" id="close" aria-label="Cerrar detalle">×</button></header>
+      <div id="detail-body"></div>
+    </aside>
+  </div>
+  <footer aria-label="Estados de aseo">
+    <span><i class="aura ready"></i>Lista</span><span><i class="aura working"></i>En proceso</span><span><i class="aura waiting"></i>Pendiente</span>
+    <span class="web-help">Arrastra para mover · Ctrl + rueda para acercar</span>
+  </footer>
+</main>
+<template id="art-light"><svg width="1136" height="1578" viewBox="0 0 1136 1578" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="Plano Haiku / Claro" clip-path="url(#clip0_22_235)">
+<g id="Plano vectorial" clip-path="url(#clip1_22_235)">
+<g id="Clip path group">
+<mask id="mask0_22_235" style="mask-type:luminance" maskUnits="userSpaceOnUse" x="0" y="0" width="1136" height="1578">
+<g id="clip0_2_2">
+<path id="Vector" d="M1136 0H0V1578H1136V0Z" fill="white"/>
+</g>
+</mask>
+<g mask="url(#mask0_22_235)">
+<g id="Base del plano &#195;&#130;&#194;&#183; desbloquear para editar el trazado">
+<g id="Clip path group_2">
+<mask id="mask1_22_235" style="mask-type:luminance" maskUnits="userSpaceOnUse" x="0" y="0" width="1136" height="1578">
+<g id="clip1_2_2">
+<path id="Vector_2" d="M1136 0H0V1578H1136V0Z" fill="white"/>
+</g>
+</mask>
+<g mask="url(#mask1_22_235)">
+<g id="R&#195;&#131;&#194;&#173;o Maipo y orilla">
+<g id="Group">
+<path id="Vector_3" d="M-32.96 -19.04C-13.52 13.36 -4.87996 47.92 18.88 80.32C38.32 114.88 53.44 151.6 77.2 175.36C92.32 190.48 90.16 209.92 96.64 227.2C105.28 244.48 103.12 270.4 116.08 289.84C122.56 322.24 124.72 350.32 131.2 378.4C139.84 423.76 161.44 479.92 189.52 523.12C221.92 570.64 252.16 605.2 232.72 654.88C213.28 700.24 243.52 762.88 267.28 790.96C291.04 816.88 284.56 881.68 299.68 940C312.64 987.52 312.64 1045.84 345.04 1089.04C370.96 1125.76 418.48 1143.04 418.48 1201.36C416.32 1251.04 373.12 1302.88 407.68 1350.4C444.4 1402.24 461.68 1456.24 472.48 1503.76C478.96 1531.84 491.92 1562.08 509.2 1611.76L-32.96 1613.92V-23.36V-19.04Z" fill="#E5EEF0"/>
+<path id="Vector_4" d="M-32.96 -19.04C-13.52 13.36 -4.87996 47.92 18.88 80.32C38.32 114.88 53.44 151.6 77.2 175.36C92.32 190.48 90.16 209.92 96.64 227.2C105.28 244.48 103.12 270.4 116.08 289.84C122.56 322.24 124.72 350.32 131.2 378.4C139.84 423.76 161.44 479.92 189.52 523.12C221.92 570.64 252.16 605.2 232.72 654.88C213.28 700.24 243.52 762.88 267.28 790.96C291.04 816.88 284.56 881.68 299.68 940C312.64 987.52 312.64 1045.84 345.04 1089.04C370.96 1125.76 418.48 1143.04 418.48 1201.36C416.32 1251.04 373.12 1302.88 407.68 1350.4C444.4 1402.24 461.68 1456.24 472.48 1503.76C478.96 1531.84 491.92 1562.08 509.2 1611.76" stroke-width="15.12" stroke="#DCE1D5"/>
+<path id="Vector_5" d="M-32.96 -19.04C-13.52 13.36 -4.87996 47.92 18.88 80.32C38.32 114.88 53.44 151.6 77.2 175.36C92.32 190.48 90.16 209.92 96.64 227.2C105.28 244.48 103.12 270.4 116.08 289.84C122.56 322.24 124.72 350.32 131.2 378.4C139.84 423.76 161.44 479.92 189.52 523.12C221.92 570.64 252.16 605.2 232.72 654.88C213.28 700.24 243.52 762.88 267.28 790.96C291.04 816.88 284.56 881.68 299.68 940C312.64 987.52 312.64 1045.84 345.04 1089.04C370.96 1125.76 418.48 1143.04 418.48 1201.36C416.32 1251.04 373.12 1302.88 407.68 1350.4C444.4 1402.24 461.68 1456.24 472.48 1503.76C478.96 1531.84 491.92 1562.08 509.2 1611.76" stroke-width="1.94" stroke="#A7B4AF"/>
+<g id="Group_2">
+<path id="Vector_6" d="M-4.87988 80.32C18.8801 127.84 18.8801 164.56 46.9601 196.96C72.8801 227.2 66.4001 255.28 81.5201 296.32C94.4801 333.04 85.8401 365.44 105.28 404.32" stroke-width="1.84" stroke-linecap="round" stroke="#CBDDE1"/>
+<path id="Corriente-junto-al-muelle" d="M31.8398 125.68C44.7998 149.44 51.2798 164.56 62.0798 184C75.0398 209.92 72.8798 238 83.6798 268.24" stroke-width="1.84" stroke-linecap="round" stroke="#CBDDE1"/>
+<path id="Vector_7" d="M-7.04004 175.36C8.07996 220.72 23.2 259.6 34 307.12C46.96 354.64 57.76 380.56 59.92 408.64" stroke-width="1.84" stroke-linecap="round" stroke="#CBDDE1"/>
+<path id="Vector_8" d="M88 475.6C111.76 529.6 157.12 570.64 172.24 624.64C187.36 674.32 163.6 706.72 193.84 758.56" stroke-width="1.84" stroke-linecap="round" stroke="#CBDDE1"/>
+<path id="Vector_9" d="M116.08 726.16C150.64 808.24 183.04 801.76 198.16 868.72C211.12 916.24 213.28 940 239.2 970.24" stroke-width="1.84" stroke-linecap="round" stroke="#CBDDE1"/>
+<path id="Vector_10" d="M96.6401 821.2C124.72 851.44 137.68 901.12 146.32 950.8C152.8 996.16 170.08 1041.52 196 1069.6" stroke-width="1.84" stroke-linecap="round" stroke="#CBDDE1"/>
+<path id="Vector_11" d="M122.56 1015.6C144.16 1084.72 208.96 1127.92 234.88 1186.24C256.48 1235.92 247.84 1279.12 267.28 1318C306.16 1384.96 358 1428.16 377.44 1497.28C388.24 1531.84 405.52 1564.24 422.8 1611.76" stroke-width="1.84" stroke-linecap="round" stroke="#CBDDE1"/>
+<path id="Vector_12" d="M85.8398 1121.44C126.88 1149.52 183.04 1222.96 183.04 1276.96C185.2 1315.84 215.44 1389.28 258.64 1413.04C295.36 1434.64 319.12 1464.88 327.76 1497.28C336.4 1523.2 347.2 1557.76 368.8 1603.12" stroke-width="1.84" stroke-linecap="round" stroke="#CBDDE1"/>
+<path id="Vector_13" d="M232.72 1017.76C258.64 1073.92 304 1097.68 338.56 1136.56C362.32 1164.64 370.96 1192.72 358 1222.96" stroke-width="1.84" stroke-linecap="round" stroke="#CBDDE1"/>
+<path id="Vector_14" d="M325.6 1268.32C314.8 1313.68 334.24 1350.4 358 1378.48" stroke-width="1.84" stroke-linecap="round" stroke="#CBDDE1"/>
+<path id="Vector_15" d="M394.72 1415.2C418.48 1447.6 424.96 1482.16 437.92 1516.72" stroke-width="1.84" stroke-linecap="round" stroke="#CBDDE1"/>
+</g>
+</g>
+</g>
+</g>
+</g>
+<g id="&#195;&#131;&#194;&#129;reas verdes y arbolado">
+<g id="Group_3">
+<g id="Group_4">
+<path id="Vector_16" d="M269.44 450.76C276 450.76 281.32 445.44 281.32 438.88C281.32 432.32 276 427 269.44 427C262.88 427 257.56 432.32 257.56 438.88C257.56 445.44 262.88 450.76 269.44 450.76Z" fill="#EEF0E5" stroke-width="1.51" stroke="#CED5C3"/>
+<path id="Vector_17" d="M250 482.08C259.54 482.08 267.28 474.34 267.28 464.8C267.28 455.26 259.54 447.52 250 447.52C240.46 447.52 232.72 455.26 232.72 464.8C232.72 474.34 240.46 482.08 250 482.08Z" fill="#EEF0E5" stroke-width="1.51" stroke="#CED5C3"/>
+<path id="Vector_18" d="M301.84 569.56C310.79 569.56 318.04 562.31 318.04 553.36C318.04 544.41 310.79 537.16 301.84 537.16C292.89 537.16 285.64 544.41 285.64 553.36C285.64 562.31 292.89 569.56 301.84 569.56Z" fill="#EEF0E5" stroke-width="1.51" stroke="#CED5C3"/>
+<path id="Vector_19" d="M319.12 597.64C325.68 597.64 331 592.32 331 585.76C331 579.2 325.68 573.88 319.12 573.88C312.56 573.88 307.24 579.2 307.24 585.76C307.24 592.32 312.56 597.64 319.12 597.64Z" fill="#EEF0E5" stroke-width="1.51" stroke="#CED5C3"/>
+<path id="Vector_20" d="M291.04 650.56C299.39 650.56 306.16 643.79 306.16 635.44C306.16 627.09 299.39 620.32 291.04 620.32C282.69 620.32 275.92 627.09 275.92 635.44C275.92 643.79 282.69 650.56 291.04 650.56Z" fill="#EEF0E5" stroke-width="1.51" stroke="#CED5C3"/>
+<path id="Vector_21" d="M312.64 667.84C318.61 667.84 323.44 663 323.44 657.04C323.44 651.08 318.61 646.24 312.64 646.24C306.68 646.24 301.84 651.08 301.84 657.04C301.84 663 306.68 667.84 312.64 667.84Z" fill="#EEF0E5" stroke-width="1.51" stroke="#CED5C3"/>
+<path id="Vector_22" d="M314.8 752.08C321.96 752.08 327.76 746.28 327.76 739.12C327.76 731.96 321.96 726.16 314.8 726.16C307.64 726.16 301.84 731.96 301.84 739.12C301.84 746.28 307.64 752.08 314.8 752.08Z" fill="#EEF0E5" stroke-width="1.51" stroke="#CED5C3"/>
+<path id="Vector_23" d="M340.72 778C350.26 778 358 770.26 358 760.72C358 751.18 350.26 743.44 340.72 743.44C331.18 743.44 323.44 751.18 323.44 760.72C323.44 770.26 331.18 778 340.72 778Z" fill="#EEF0E5" stroke-width="1.51" stroke="#CED5C3"/>
+<path id="Vector_24" d="M342.88 844.96C352.42 844.96 360.16 837.22 360.16 827.68C360.16 818.14 352.42 810.4 342.88 810.4C333.34 810.4 325.6 818.14 325.6 827.68C325.6 837.22 333.34 844.96 342.88 844.96Z" fill="#EEF0E5" stroke-width="1.51" stroke="#CED5C3"/>
+<path id="Vector_25" d="M358 866.56C363.96 866.56 368.8 861.73 368.8 855.76C368.8 849.79 363.96 844.96 358 844.96C352.04 844.96 347.2 849.79 347.2 855.76C347.2 861.73 352.04 866.56 358 866.56Z" fill="#EEF0E5" stroke-width="1.51" stroke="#CED5C3"/>
+<path id="Vector_26" d="M360.16 950.8C368.51 950.8 375.28 944.03 375.28 935.68C375.28 927.33 368.51 920.56 360.16 920.56C351.81 920.56 345.04 927.33 345.04 935.68C345.04 944.03 351.81 950.8 360.16 950.8Z" fill="#EEF0E5" stroke-width="1.51" stroke="#CED5C3"/>
+<path id="Vector_27" d="M375.28 985.36C386.02 985.36 394.72 976.66 394.72 965.92C394.72 955.18 386.02 946.48 375.28 946.48C364.54 946.48 355.84 955.18 355.84 965.92C355.84 976.66 364.54 985.36 375.28 985.36Z" fill="#EEF0E5" stroke-width="1.51" stroke="#CED5C3"/>
+<path id="Vector_28" d="M388.24 1058.8C397.78 1058.8 405.52 1051.06 405.52 1041.52C405.52 1031.98 397.78 1024.24 388.24 1024.24C378.7 1024.24 370.96 1031.98 370.96 1041.52C370.96 1051.06 378.7 1058.8 388.24 1058.8Z" fill="#EEF0E5" stroke-width="1.51" stroke="#CED5C3"/>
+<path id="Vector_29" d="M409.84 1076.08C415.81 1076.08 420.64 1071.24 420.64 1065.28C420.64 1059.32 415.81 1054.48 409.84 1054.48C403.88 1054.48 399.04 1059.32 399.04 1065.28C399.04 1071.24 403.88 1076.08 409.84 1076.08Z" fill="#EEF0E5" stroke-width="1.51" stroke="#CED5C3"/>
+<path id="Vector_30" d="M913.12 1093.36C920.28 1093.36 926.08 1087.56 926.08 1080.4C926.08 1073.24 920.28 1067.44 913.12 1067.44C905.96 1067.44 900.16 1073.24 900.16 1080.4C900.16 1087.56 905.96 1093.36 913.12 1093.36Z" fill="#EEF0E5" stroke-width="1.51" stroke="#CED5C3"/>
+<path id="Vector_31" d="M919.6 1068.52C924.97 1068.52 929.32 1064.17 929.32 1058.8C929.32 1053.43 924.97 1049.08 919.6 1049.08C914.23 1049.08 909.88 1053.43 909.88 1058.8C909.88 1064.17 914.23 1068.52 919.6 1068.52Z" fill="#EEF0E5" stroke-width="1.51" stroke="#CED5C3"/>
+</g>
+<g id="Group_5">
+<path id="&#195;&#131;&#194;&#129;reas-verdes" d="M522.22 1137.53L656.61 1162.72C660.17 1163.23 662.98 1165.52 665.01 1169.6L677.99 1126.07L709.3 1136.76L677.23 1240.61L668.07 1248.25L710.83 1407.84L761.99 1415.47L769.62 1419.29L782.6 1459L744.42 1470.45L610.03 1422.35L545.89 1307.04L522.22 1148.98V1137.53Z" fill="#EAEBE0" stroke-width="1.53" stroke-linejoin="round" stroke="#C3CBB6"/>
+<g id="Group_6">
+<path id="Vector_32" d="M544.36 1159.67C578.47 1168.83 605.71 1174.18 626.07 1175.71M588.65 1365.84C604.43 1383.15 614.87 1397.91 619.96 1410.13M692.5 1442.96C711.85 1449.58 728.64 1453.91 742.9 1455.94" stroke-width="1.18" stroke-linecap="round" stroke="#D2D8C7"/>
+</g>
+<g id="Group_7">
+<path id="Vector_33" d="M480.99 1183.34C486.89 1183.34 491.68 1178.56 491.68 1172.65C491.68 1166.75 486.89 1161.96 480.99 1161.96C475.08 1161.96 470.3 1166.75 470.3 1172.65C470.3 1178.56 475.08 1183.34 480.99 1183.34Z" fill="#E7ECDE" stroke-width="1.18" stroke="#C6CEBB"/>
+<path id="Vector_34" d="M490.911 1194.03C494.711 1194.03 497.791 1190.96 497.791 1187.16C497.791 1183.36 494.711 1180.29 490.911 1180.29C487.121 1180.29 484.041 1183.36 484.041 1187.16C484.041 1190.96 487.121 1194.03 490.911 1194.03Z" fill="#E7ECDE" stroke-width="1.18" stroke="#C6CEBB"/>
+<path id="Vector_35" d="M569.56 1219.99C577.58 1219.99 584.07 1213.5 584.07 1205.49C584.07 1197.47 577.58 1190.98 569.56 1190.98C561.55 1190.98 555.05 1197.47 555.05 1205.49C555.05 1213.5 561.55 1219.99 569.56 1219.99Z" fill="#E7ECDE" stroke-width="1.18" stroke="#C6CEBB"/>
+<path id="Vector_36" d="M592.47 1229.16C598.8 1229.16 603.92 1224.03 603.92 1217.7C603.92 1211.38 598.8 1206.25 592.47 1206.25C586.14 1206.25 581.021 1211.38 581.021 1217.7C581.021 1224.03 586.14 1229.16 592.47 1229.16Z" fill="#E7ECDE" stroke-width="1.18" stroke="#C6CEBB"/>
+<path id="Vector_37" d="M445.1 1327.66C454.38 1327.66 461.9 1320.14 461.9 1310.86C461.9 1301.58 454.38 1294.06 445.1 1294.06C435.82 1294.06 428.3 1301.58 428.3 1310.86C428.3 1320.14 435.82 1327.66 445.1 1327.66Z" fill="#E7ECDE" stroke-width="1.18" stroke="#C6CEBB"/>
+<path id="Vector_38" d="M466.481 1337.59C472.801 1337.59 477.931 1332.46 477.931 1326.13C477.931 1319.81 472.801 1314.68 466.481 1314.68C460.151 1314.68 455.021 1319.81 455.021 1326.13C455.021 1332.46 460.151 1337.59 466.481 1337.59Z" fill="#E7ECDE" stroke-width="1.18" stroke="#C6CEBB"/>
+<path id="Vector_39" d="M531.38 1429.22C540.66 1429.22 548.18 1421.7 548.18 1412.42C548.18 1403.14 540.66 1395.62 531.38 1395.62C522.11 1395.62 514.58 1403.14 514.58 1412.42C514.58 1421.7 522.11 1429.22 531.38 1429.22Z" fill="#E7ECDE" stroke-width="1.18" stroke="#C6CEBB"/>
+<path id="Vector_40" d="M553.531 1442.2C560.271 1442.2 565.741 1436.73 565.741 1429.98C565.741 1423.23 560.271 1417.76 553.531 1417.76C546.781 1417.76 541.311 1423.23 541.311 1429.98C541.311 1436.73 546.781 1442.2 553.531 1442.2Z" fill="#E7ECDE" stroke-width="1.18" stroke="#C6CEBB"/>
+<path id="Vector_41" d="M564.98 1488.01C572.15 1488.01 577.961 1482.2 577.961 1475.03C577.961 1467.86 572.15 1462.05 564.98 1462.05C557.81 1462.05 552 1467.86 552 1475.03C552 1482.2 557.81 1488.01 564.98 1488.01Z" fill="#E7ECDE" stroke-width="1.18" stroke="#C6CEBB"/>
+<path id="Vector_42" d="M548.18 1497.18C552.82 1497.18 556.58 1493.42 556.58 1488.78C556.58 1484.14 552.82 1480.38 548.18 1480.38C543.54 1480.38 539.78 1484.14 539.78 1488.78C539.78 1493.42 543.54 1497.18 548.18 1497.18Z" fill="#E7ECDE" stroke-width="1.18" stroke="#C6CEBB"/>
+<path id="Vector_43" d="M641.34 1408.6C647.24 1408.6 652.03 1403.82 652.03 1397.91C652.03 1392.01 647.24 1387.22 641.34 1387.22C635.44 1387.22 630.65 1392.01 630.65 1397.91C630.65 1403.82 635.44 1408.6 641.34 1408.6Z" fill="#E7ECDE" stroke-width="1.18" stroke="#C6CEBB"/>
+<path id="Vector_44" d="M656.61 1423.87C664.62 1423.87 671.12 1417.38 671.12 1409.36C671.12 1401.35 664.62 1394.86 656.61 1394.86C648.6 1394.86 642.1 1401.35 642.1 1409.36C642.1 1417.38 648.6 1423.87 656.61 1423.87Z" fill="#E7ECDE" stroke-width="1.18" stroke="#C6CEBB"/>
+<path id="Vector_45" d="M686.39 1500.23C693.14 1500.23 698.61 1494.76 698.61 1488.01C698.61 1481.27 693.14 1475.8 686.39 1475.8C679.64 1475.8 674.17 1481.27 674.17 1488.01C674.17 1494.76 679.64 1500.23 686.39 1500.23Z" fill="#E7ECDE" stroke-width="1.18" stroke="#C6CEBB"/>
+<path id="Vector_46" d="M703.19 1510.16C708.25 1510.16 712.35 1506.06 712.35 1501C712.35 1495.94 708.25 1491.83 703.19 1491.83C698.13 1491.83 694.03 1495.94 694.03 1501C694.03 1506.06 698.13 1510.16 703.19 1510.16Z" fill="#E7ECDE" stroke-width="1.18" stroke="#C6CEBB"/>
+<path id="Vector_47" d="M899.43 1258.17C906.18 1258.17 911.65 1252.7 911.65 1245.96C911.65 1239.21 906.18 1233.74 899.43 1233.74C892.69 1233.74 887.22 1239.21 887.22 1245.96C887.22 1252.7 892.69 1258.17 899.43 1258.17Z" fill="#E7ECDE" stroke-width="1.18" stroke="#C6CEBB"/>
+<path id="Vector_48" d="M917 1267.34C921.21 1267.34 924.63 1263.92 924.63 1259.7C924.63 1255.48 921.21 1252.07 917 1252.07C912.78 1252.07 909.36 1255.48 909.36 1259.7C909.36 1263.92 912.78 1267.34 917 1267.34Z" fill="#E7ECDE" stroke-width="1.18" stroke="#C6CEBB"/>
+</g>
+</g>
+</g>
+</g>
+<g id="Clip path group_3">
+<mask id="mask2_22_235" style="mask-type:luminance" maskUnits="userSpaceOnUse" x="0" y="0" width="1136" height="1578">
+<g id="clip2_2_2">
+<path id="Vector_49" d="M1136 0H0V1578H1136V0Z" fill="white"/>
+</g>
+</mask>
+<g mask="url(#mask2_22_235)">
+<g id="Camino al Volc&#195;&#131;&#194;&#161;n y acceso">
+<g id="Group_8">
+<path id="Vector_50" d="M798.64 -29.84C818.08 76 837.52 184 854.8 289.84L869.92 384.88C895.84 555.52 917.44 678.64 943.36 823.36C964.96 952.96 982.24 1089.04 1008.16 1216.48C1021.12 1313.68 1042.72 1475.68 1075.12 1620.4H1148.56C1116.16 1471.36 1094.56 1309.36 1081.6 1201.36C1057.84 1069.6 1040.56 927.04 1018.96 806.08C995.2 670 971.44 542.56 943.36 384.88L928.24 289.84C910.96 184 891.52 78.16 874.24 -29.84H798.64Z" fill="#E8E1D7" stroke-width="1.94" stroke="#C4B9AC"/>
+<path id="Vector_51" d="M835.36 -29.84C835.79 -27.45 836.22 -25.06 836.65 -22.67M1111.84 1622.56C1111.3 1620.08 1110.77 1617.61 1110.25 1615.14M838.5 -12.43C839.36 -7.65 840.22 -2.87 841.08 1.9M842.93 12.14C843.79 16.92 844.66 21.7 845.52 26.47M847.37 36.71C848.23 41.49 849.09 46.27 849.95 51.04M851.8 61.28C852.66 66.06 853.52 70.84 854.38 75.61M856.22 85.85C857.08 90.63 857.93 95.41 858.79 100.19M860.62 110.43C861.47 115.21 862.33 119.99 863.17 124.77M865 135.01C865.84 139.79 866.69 144.57 867.53 149.35M869.34 159.6C870.18 164.38 871.02 169.16 871.86 173.94M873.65 184.19C874.48 188.97 875.31 193.76 876.14 198.54M877.91 208.79C878.73 213.58 879.55 218.36 880.37 223.15M882.12 233.4C882.93 238.19 883.74 242.98 884.54 247.76M886.26 258.02C887.06 262.81 887.86 267.6 888.65 272.39M890.34 282.65C890.74 285.05 891.13 287.44 891.52 289.84L892.62 297.24M894.2 307.82L896.4 322.62M897.98 333.2L900.18 348M901.76 358.58L903.96 373.38M905.54 383.96L906.64 391.36C907 393.82 907.37 396.27 907.74 398.71M909.32 409.17C910.06 414.08 910.81 418.96 911.56 423.81M913.18 434.26C913.95 439.17 914.72 444.05 915.49 448.9M917.16 459.36C917.95 464.27 918.74 469.14 919.53 473.99M921.24 484.44C922.04 489.33 922.85 494.21 923.66 499.05M925.41 509.49C926.24 514.38 927.06 519.25 927.89 524.1M929.67 534.52C930.51 539.41 931.35 544.28 932.2 549.13M934.01 559.55C934.87 564.43 935.72 569.3 936.58 574.14M938.42 584.57C939.29 589.44 940.15 594.3 941.02 599.15M942.88 609.57C943.76 614.45 944.63 619.31 945.51 624.15M947.39 634.57C948.27 639.44 949.15 644.3 950.03 649.15M951.93 659.57C952.81 664.43 953.69 669.29 954.58 674.14M956.47 684.55C957.36 689.42 958.24 694.28 959.12 699.13M961.01 709.54C961.9 714.4 962.78 719.26 963.66 724.13M965.54 734.54C966.41 739.4 967.29 744.26 968.16 749.12M970.02 759.54C970.89 764.4 971.75 769.26 972.62 774.13M974.46 784.55C975.31 789.4 976.16 794.27 977.01 799.14M978.82 809.57C979.24 812 979.66 814.44 980.08 816.88C980.54 819.44 981 822 981.46 824.55M983.4 835.5C984.3 840.63 985.2 845.74 986.09 850.85M987.98 861.81C988.85 866.94 989.73 872.05 990.59 877.17M992.43 888.14C993.29 893.27 994.14 898.39 994.98 903.51M996.79 914.49C997.63 919.61 998.46 924.74 999.29 929.86M1001.06 940.85C1001.89 945.98 1002.71 951.1 1003.53 956.23M1005.28 967.22C1006.09 972.34 1006.9 977.47 1007.71 982.6M1009.44 993.59C1010.25 998.72 1011.06 1003.85 1011.86 1008.98M1013.59 1019.97C1014.39 1025.1 1015.2 1030.23 1016.01 1035.36M1017.73 1046.35C1018.54 1051.48 1019.35 1056.61 1020.15 1061.74M1021.89 1072.73C1022.7 1077.85 1023.51 1082.98 1024.33 1088.12M1026.08 1099.11C1026.9 1104.23 1027.72 1109.35 1028.55 1114.48M1030.33 1125.47C1031.16 1130.59 1031.99 1135.71 1032.83 1140.84M1034.64 1151.82C1035.49 1156.93 1036.34 1162.05 1037.2 1167.19M1039.04 1178.16C1039.9 1183.27 1040.78 1188.39 1041.65 1193.51M1043.54 1204.48C1043.99 1207.04 1044.43 1209.6 1044.88 1212.16C1045.25 1214.62 1045.62 1217.12 1045.99 1219.64M1047.55 1230.36C1048.25 1235.27 1048.97 1240.27 1049.69 1245.36M1051.2 1256.09C1051.89 1261.02 1052.59 1266.03 1053.3 1271.11M1054.8 1281.84C1055.49 1286.78 1056.19 1291.8 1056.9 1296.88M1058.39 1307.6C1059.08 1312.55 1059.78 1317.55 1060.5 1322.61M1062.01 1333.34C1062.72 1338.29 1063.43 1343.29 1064.15 1348.34M1065.7 1359.07C1066.41 1364.03 1067.14 1369.03 1067.88 1374.07M1069.47 1384.79C1070.21 1389.75 1070.96 1394.75 1071.72 1399.78M1073.35 1410.5C1074.11 1415.46 1074.89 1420.45 1075.67 1425.48M1077.36 1436.19C1078.15 1441.15 1078.95 1446.14 1079.76 1451.16M1081.51 1461.85C1082.33 1466.81 1083.16 1471.8 1084.01 1476.81M1085.83 1487.48C1086.68 1492.44 1087.54 1497.42 1088.42 1502.42M1090.31 1513.08C1091.2 1518.04 1092.1 1523.01 1093.01 1528M1094.98 1538.66C1095.91 1543.61 1096.85 1548.57 1097.8 1553.56M1099.86 1564.2C1100.82 1569.15 1101.8 1574.11 1102.79 1579.08M1104.94 1589.69C1105.95 1594.63 1106.97 1599.58 1108.01 1604.54" stroke-width="2.48" stroke="#FFFBF2"/>
+<path id="Vector_52" d="M958.48 868.72C928.24 873.04 906.64 877.36 869.92 881.68C854.8 883.84 850.48 890.32 841.84 894.64L820.24 881.68C796.48 873.04 755.44 881.68 733.84 903.28C714.4 918.4 705.76 940 697.12 976.72L701.44 994L703.6 1019.92C727.36 1043.68 755.44 1058.8 783.52 1060.96L809.44 1097.68C846.16 1095.52 872.08 1076.08 882.88 1058.8C880.72 1015.6 859.12 985.36 865.6 950.8C874.24 924.88 919.6 918.4 969.28 911.92L958.48 868.72Z" fill="#EDE6DA" stroke-width="2.05" stroke-linejoin="round" stroke="#D6C9B8"/>
+<path id="Vector_53" d="M772.72 1054.48C764.08 1078.24 744.64 1099.84 720.88 1114.96C707.92 1123.6 694.96 1130.08 686.32 1145.2" stroke-width="12.96" stroke-linecap="round" stroke="#E1D7C6"/>
+<g id="Group_9">
+<path id="Vector_54" d="M906.64 870.88L915.28 911.92" stroke-width="2.38" stroke-linecap="round" stroke="#8D5260"/>
+</g>
+<path id="Vector_55" d="M906.64 874.34C908.55 874.34 910.1 872.79 910.1 870.88C910.1 868.97 908.55 867.42 906.64 867.42C904.73 867.42 903.18 868.97 903.18 870.88C903.18 872.79 904.73 874.34 906.64 874.34Z" fill="#8D5260"/>
+<path id="Vector_56" d="M915.28 915.38C917.19 915.38 918.74 913.83 918.74 911.92C918.74 910.01 917.19 908.46 915.28 908.46C913.37 908.46 911.82 910.01 911.82 911.92C911.82 913.83 913.37 915.38 915.28 915.38Z" fill="#8D5260"/>
+<path id="Vector_57" d="M928.24 905.44L915.28 901.12L926.08 892.48M915.28 901.12L941.2 896.8" stroke-width="2.16" stroke-linecap="round" stroke-linejoin="round" stroke="#8D5260"/>
+</g>
+</g>
+</g>
+</g>
+<g id="Huellas sin identificar">
+<g id="Group_10">
+<g id="Group_11">
+<g id="Techo-06">
+<path id="Vector_58" d="M520 566.32L574 544.72L593.44 574.96L606.4 628.96L563.2 641.92L535.12 637.6L520 566.32Z" fill="#EDE7DA"/>
+<path id="Vector_59" d="M520.61 569.18L520 566.32L522.53 565.31M521.55 573.64L522.77 579.37M523.71 583.82L524.93 589.55M525.87 594L527.09 599.73M528.03 604.19L529.25 609.91M530.19 614.37L531.41 620.1M532.35 624.55L533.57 630.28M534.51 634.74L535.12 637.6L537.75 638M541.85 638.63L547.11 639.45M551.21 640.08L556.47 640.88M560.57 641.51L563.2 641.92L566.24 641.01M570.96 639.59L577.04 637.77M581.76 636.35L587.84 634.53M592.56 633.11L598.64 631.29M603.36 629.87L606.4 628.96L605.67 625.92M604.54 621.2L603.08 615.12M601.95 610.4L600.49 604.32M599.35 599.6L597.89 593.52M596.76 588.8L595.3 582.72M594.17 578L593.44 574.96L591.62 572.13M588.78 567.72L585.14 562.04M582.3 557.63L578.66 551.97M575.82 547.55L574 544.72L571.47 545.73M567.53 547.31L562.47 549.33M558.53 550.91L553.47 552.93M549.53 554.51L544.47 556.53M540.53 558.11L535.47 560.13M531.53 561.71L526.47 563.73" stroke-width="1.94" stroke-linejoin="round" stroke="#A79B8C"/>
+</g>
+<g id="Techo-07">
+<path id="Vector_60" d="M567.52 661.36L595.6 652.72L608.56 689.44L578.32 702.4L567.52 661.36Z" fill="#EDE7DA"/>
+<path id="Vector_61" d="M568.28 664.25L567.52 661.36L570.15 660.55M569.46 668.73L570.98 674.51M572.16 678.99L573.68 684.77M574.86 689.25L576.38 695.03M577.56 699.51L578.32 702.4L581.15 701.18M585.57 699.29L591.24 696.87M595.64 694.98L601.32 692.54M605.73 690.65L608.56 689.44L607.65 686.86M606.23 682.84L604.41 677.68M602.99 673.66L601.17 668.5M599.75 664.48L597.93 659.32M596.51 655.3L595.6 652.72L592.97 653.53M588.87 654.79L583.61 656.41M579.51 657.67L574.25 659.29" stroke-width="1.94" stroke-linejoin="round" stroke="#A79B8C"/>
+</g>
+<g id="Techo-08">
+<path id="Vector_62" d="M608.56 583.6L636.64 574.96L651.76 626.8L634.48 639.76L621.52 628.96L608.56 583.6ZM589.12 695.92L612.88 687.28L623.68 715.36L602.08 728.32L589.12 695.92Z" fill="#EDE7DA"/>
+<path id="Vector_63" d="M609.29 586.15L608.56 583.6L611.19 582.79M610.42 590.12L611.88 595.22M613.01 599.19L614.47 604.29M615.61 608.26L617.07 613.37M618.2 617.34L619.66 622.44M620.79 626.41L621.52 628.96L623.34 630.48M626.18 632.84L629.82 635.88M632.66 638.24L634.48 639.76L636.91 637.94M640.69 635.1L645.55 631.46M649.33 628.62L651.76 626.8L650.91 623.88M649.59 619.35L647.88 613.52M646.56 608.98L644.86 603.15M643.54 598.61L641.84 592.78M640.51 588.24L638.81 582.41M637.49 577.88L636.64 574.96L634.01 575.77M629.91 577.03L624.65 578.65M620.55 579.91L615.29 581.53M590.34 698.96L589.12 695.92L592.46 694.71M592.23 703.68L594.65 709.76M596.54 714.48L598.98 720.56M600.87 725.28L602.08 728.32L605.12 726.5M609.84 723.66L615.92 720.02M620.64 717.18L623.68 715.36L622.67 712.73M621.09 708.63L619.07 703.37M617.49 699.27L615.47 694.01M613.89 689.91L612.88 687.28L609.54 688.5M604.34 690.38L597.66 692.82" stroke-width="1.94" stroke-linejoin="round" stroke="#A79B8C"/>
+</g>
+<g id="Techo-10">
+<path id="Vector_64" d="M714.4 803.92L785.68 773.68L835.36 799.6L844 825.52L761.92 849.28L738.16 844.96L714.4 803.92Z" fill="#EDE7DA"/>
+<path id="Vector_65" d="M715.74 806.23L714.4 803.92L717.26 802.71M717.82 809.82L720.49 814.44M722.57 818.03L725.24 822.64M727.32 826.24L729.99 830.85M732.07 834.44L734.75 839.06M736.82 842.65L738.16 844.96L741.5 845.57M746.7 846.51L753.38 847.73M758.58 848.67L761.92 849.28L764.81 848.45M769.29 847.14L775.07 845.48M779.55 844.17L785.33 842.5M789.81 841.21L795.59 839.53M800.07 838.24L805.85 836.57M810.33 835.26L816.11 833.6M820.59 832.29L826.37 830.63M830.85 829.33L836.63 827.65M841.11 826.36L844 825.52L843.19 823.09M841.93 819.31L840.31 814.45M839.05 810.67L837.43 805.81M836.17 802.03L835.36 799.6L832.57 798.14M828.22 795.87L822.63 792.96M818.28 790.69L812.69 787.77M808.35 785.51L802.76 782.59M798.41 780.32L792.82 777.41M788.48 775.14L785.68 773.68L782.82 774.89M778.36 776.78L772.63 779.22M768.18 781.11L762.45 783.53M758 785.42L752.27 787.86M747.81 789.75L742.09 792.17M737.63 794.07L731.9 796.5M727.45 798.38L721.72 800.82" stroke-width="1.94" stroke-linejoin="round" stroke="#A79B8C"/>
+</g>
+</g>
+<g id="Group_12">
+<g id="Huella-del-edificio">
+<path id="Vector_66" d="M749.01 1152.8L808.57 1133.71L826.13 1190.21L847.51 1186.4L853.62 1210.07L875.76 1265.05L892.56 1326.13L925.4 1320.02L936.09 1376.53L870.42 1389.51L809.33 1400.2L787.95 1321.55L771.15 1231.45L749.01 1152.8Z" fill="#EBE4D9"/>
+<path id="Vector_67" d="M749.52 1154.62L749.01 1152.8L750.85 1152.21M750.34 1157.53L751.36 1161.17M752.18 1164.09L753.21 1167.73M754.03 1170.64L755.05 1174.28M755.88 1177.19L756.9 1180.84M757.72 1183.75L758.75 1187.39M759.57 1190.3L760.59 1193.94M761.41 1196.86L762.44 1200.5M763.26 1203.41L764.28 1207.05M765.1 1209.97L766.13 1213.61M766.95 1216.52L767.97 1220.16M768.79 1223.07L769.82 1226.71M770.64 1229.63L771.15 1231.45L771.51 1233.37M772.08 1236.45L772.8 1240.3M773.38 1243.38L774.09 1247.24M774.67 1250.32L775.39 1254.17M775.96 1257.25L776.68 1261.1M777.25 1264.18L777.97 1268.03M778.54 1271.11L779.26 1274.96M779.84 1278.04L780.55 1281.89M781.13 1284.97L781.85 1288.82M782.42 1291.9L783.14 1295.75M783.71 1298.83L784.43 1302.68M785.01 1305.76L785.72 1309.62M786.3 1312.7L787.02 1316.55M787.59 1319.63L787.95 1321.55L788.44 1323.37M789.24 1326.29L790.23 1329.93M791.02 1332.84L792.01 1336.48M792.8 1339.39L793.79 1343.03M794.58 1345.95L795.57 1349.59M796.36 1352.5L797.35 1356.14M798.14 1359.06L799.13 1362.7M799.93 1365.61L800.92 1369.25M801.71 1372.16L802.7 1375.81M803.49 1378.72L804.48 1382.36M805.27 1385.27L806.26 1388.91M807.05 1391.83L808.04 1395.47M808.84 1398.38L809.33 1400.2L811.22 1399.87M814.23 1399.34L818 1398.68M821.02 1398.16L824.79 1397.5M827.81 1396.97L831.58 1396.31M834.6 1395.78L838.37 1395.12M841.38 1394.59L845.15 1393.93M848.17 1393.4L851.94 1392.75M854.96 1392.22L858.73 1391.56M861.74 1391.03L865.51 1390.37M868.53 1389.84L870.42 1389.51L872.24 1389.15M875.16 1388.57L878.81 1387.85M881.73 1387.28L885.38 1386.55M888.29 1385.98L891.94 1385.26M894.86 1384.68L898.51 1383.96M901.43 1383.38L905.08 1382.66M908 1382.08L911.64 1381.36M914.56 1380.79L918.21 1380.06M921.13 1379.49L924.78 1378.77M927.7 1378.19L931.34 1377.47M934.26 1376.89L936.09 1376.53L935.72 1374.57M935.12 1371.43L934.38 1367.51M933.78 1364.37L933.04 1360.44M932.45 1357.3L931.71 1353.38M931.11 1350.24L930.37 1346.32M929.78 1343.18L929.03 1339.25M928.44 1336.11L927.7 1332.19M927.1 1329.05L926.36 1325.13M925.77 1321.99L925.4 1320.02L923.57 1320.36M920.65 1320.91L917 1321.59M914.09 1322.13L910.44 1322.81M907.52 1323.35L903.87 1324.03M900.95 1324.57L897.3 1325.25M894.39 1325.79L892.56 1326.13L892.04 1324.25M891.21 1321.23L890.18 1317.46M889.35 1314.44L888.31 1310.67M887.48 1307.66L886.44 1303.89M885.61 1300.87L884.58 1297.1M883.75 1294.08L882.71 1290.31M881.88 1287.29L880.84 1283.52M880.01 1280.51L878.98 1276.74M878.15 1273.72L877.11 1269.95M876.28 1266.93L875.76 1265.05L875.08 1263.35M873.99 1260.63L872.62 1257.24M871.52 1254.53L870.16 1251.13M869.07 1248.42L867.7 1245.02M866.6 1242.31L865.24 1238.91M864.14 1236.2L862.78 1232.81M861.68 1230.09L860.32 1226.7M859.22 1223.98L857.86 1220.59M856.76 1217.87L855.39 1214.48M854.3 1211.76L853.62 1210.07L853.19 1208.42M852.51 1205.79L851.67 1202.51M850.99 1199.88L850.14 1196.59M849.46 1193.96L848.61 1190.67M847.93 1188.04L847.51 1186.4L845.53 1186.75M842.36 1187.32L838.4 1188.02M835.24 1188.59L831.28 1189.3M828.11 1189.86L826.13 1190.21L825.59 1188.47M824.72 1185.68L823.64 1182.19M822.77 1179.4L821.68 1175.91M820.82 1173.12L819.73 1169.63M818.87 1166.84L817.78 1163.36M816.91 1160.57L815.83 1157.08M814.96 1154.29L813.88 1150.8M813.01 1148.01L811.93 1144.52M811.06 1141.73L809.98 1138.24M809.11 1135.45L808.57 1133.71L806.73 1134.3M803.79 1135.24L800.11 1136.42M797.17 1137.36L793.49 1138.54M790.55 1139.48L786.88 1140.66M783.93 1141.6L780.26 1142.78M777.32 1143.72L773.64 1144.9M770.7 1145.85L767.02 1147.02M764.08 1147.97L760.4 1149.15M757.46 1150.09L753.79 1151.27" stroke-width="1.37" stroke-linejoin="round" stroke="#ADA191"/>
+</g>
+</g>
+</g>
+</g>
+<g id="Recintos y tinajas del croquis">
+<g id="Group_13">
+<path id="Lavander&#195;&#131;&#194;&#173;a" d="M554.79 917.63L624.16 915.07L642.15 995.99L572.14 1001.77L554.79 917.63Z" fill="#F5E5E1" stroke-width="2.16" stroke-linejoin="round" stroke="#995E69"/>
+<g id="Group_14">
+<path id="Casa-Sra-Naifi" d="M543.6 1012.3L681.05 1048.95L657.38 1146.69L520.69 1108.51L543.6 1012.3Z" fill="#F5E5E1" stroke-width="1.95" stroke-linejoin="round" stroke="#995E69"/>
+<path id="Galp&#195;&#131;&#194;&#179;n" d="M748.24 1153.56L808.57 1132.94L835.29 1222.29L771.91 1229.16L748.24 1153.56Z" fill="#F5E5E1" stroke-width="1.95" stroke-linejoin="round" stroke="#995E69"/>
+<path id="Cocina" d="M770.39 1228.39L797.11 1225.34L809.33 1284.9L782.6 1294.06L770.39 1228.39Z" fill="#F5E5E1" stroke-width="1.95" stroke-linejoin="round" stroke="#995E69"/>
+<path id="Camarines-y-ba&#195;&#131;&#194;&#177;os" d="M860.49 1336.06L926.16 1320.02L936.09 1376.53L873.47 1388.75L860.49 1336.06Z" fill="#F5E5E1" stroke-width="1.95" stroke-linejoin="round" stroke="#995E69"/>
+<path id="Bodega-Sra-Naifi" d="M787.95 1421.58L823.08 1420.06L833 1463.58L803.22 1471.98L787.95 1421.58Z" fill="#F5E5E1" stroke-width="1.95" stroke-linejoin="round" stroke="#995E69"/>
+<path id="Piscina" d="M694.03 1232.98L736.02 1223.81C739.08 1223.3 741.12 1224.83 742.13 1228.39L758.17 1299.41C759.19 1302.97 757.91 1305.26 754.35 1306.28L714.64 1315.44C711.59 1315.95 709.55 1314.68 708.54 1311.63L690.97 1238.32C690.46 1235.78 691.48 1233.99 694.03 1232.98Z" fill="#D9EBEF" stroke-width="2.06" stroke="#648D98"/>
+<path id="Vector_68" d="M702.43 1249.01C705.99 1246.47 709.55 1245.96 713.12 1247.48C716.68 1249.01 721.77 1248.25 728.39 1245.19M711.59 1285.66C715.66 1283.12 720.24 1282.61 725.34 1284.14C730.43 1285.66 736.53 1284.65 743.66 1281.08M715.41 1297.88C719.48 1295.34 724.06 1294.83 729.15 1296.35C734.24 1297.88 740.1 1296.86 746.72 1293.3" stroke-width="1.3" stroke-linecap="round" stroke="#96B6C0"/>
+<path id="Tinaja-Tonel-de-Madera" d="M490.15 1331.48L522.98 1325.37L535.2 1368.13L501.6 1378.82L490.15 1331.48Z" fill="#F1E6D8" stroke-width="1.91" stroke-linejoin="round" stroke="#9B7658"/>
+<path id="Vector_69" d="M512.29 1362.79C518.62 1362.79 523.75 1357.66 523.75 1351.33C523.75 1345.01 518.62 1339.88 512.29 1339.88C505.97 1339.88 500.84 1345.01 500.84 1351.33C500.84 1357.66 505.97 1362.79 512.29 1362.79Z" fill="#F9F2E6" stroke-width="1.53" stroke="#9B7658"/>
+<path id="Vector_70" d="M512.29 1359.27C516.68 1359.27 520.23 1355.72 520.23 1351.33C520.23 1346.95 516.68 1343.39 512.29 1343.39C507.91 1343.39 504.35 1346.95 504.35 1351.33C504.35 1355.72 507.91 1359.27 512.29 1359.27Z" fill="#DDEBED" stroke-width="1.22" stroke="#7A9AA2"/>
+<path id="Tinaja-Jacuzzi" d="M599.34 1436.09L642.1 1433.04L652.03 1481.91L610.03 1488.78L599.34 1436.09Z" fill="#F1E6D8" stroke-width="1.91" stroke-linejoin="round" stroke="#9B7658"/>
+<path id="Vector_71" d="M627.4 1447.67L618.4 1449.41C614.26 1450.22 611.56 1454.23 612.36 1458.37L614.26 1468.11C615.06 1472.25 619.07 1474.95 623.21 1474.15L632.21 1472.4C636.35 1471.6 639.05 1467.59 638.24 1463.45L636.35 1453.7C635.55 1449.56 631.54 1446.86 627.4 1447.67Z" fill="#DDEBED" stroke-width="1.68" stroke="#7A9AA2"/>
+<path id="Vector_72" d="M619.2 1460.53C621.23 1459 623.27 1458.74 625.3 1459.76C627.34 1460.78 629.38 1460.27 631.41 1458.23" stroke-width="1.15" stroke-linecap="round" stroke="#7A9AA2"/>
+</g>
+</g>
+</g>
+<g id="Puestos de estacionamiento">
+<g id="Group_15">
+<path id="Puesto-4" d="M735.503 869.174L756.866 864.677L774.394 904.831L753.863 909.155Z" fill="#FFFBF0" stroke-width="1.77" stroke-linejoin="round" stroke="#A38B69"/>
+<path id="Puesto-3" d="M759.508 864.121L780.871 859.624L797.567 899.951L777.036 904.275Z" fill="#FFFBF0" stroke-width="1.77" stroke-linejoin="round" stroke="#A38B69"/>
+<path id="Puesto-2" d="M783.513 859.068L804.875 854.571L820.741 895.071L800.209 899.395Z" fill="#FFFBF0" stroke-width="1.77" stroke-linejoin="round" stroke="#A38B69"/>
+<path id="Puesto-1" d="M807.517 854.014L828.88 849.518L843.914 890.19L823.383 894.514Z" fill="#FFFBF0" stroke-width="1.77" stroke-linejoin="round" stroke="#A38B69"/>
+<path id="Puesto-11" d="M673.533 914.231L680.765 938.824L726.32 927.285L719.67 903.928Z" fill="#FFFBF0" stroke-width="1.77" stroke-linejoin="round" stroke="#A38B69"/>
+<path id="Puesto-10" d="M681.526 941.414L688.758 966.007L733.708 953.238L727.059 929.882Z" fill="#FFFBF0" stroke-width="1.77" stroke-linejoin="round" stroke="#A38B69"/>
+<path id="Puesto-6" d="M689.52 968.598L696.751 993.19L741.096 979.192L734.447 955.835Z" fill="#FFFBF0" stroke-width="1.77" stroke-linejoin="round" stroke="#A38B69"/>
+<path id="Puesto-5" d="M697.513 995.781L704.745 1020.374L748.485 1005.146L741.836 981.789Z" fill="#FFFBF0" stroke-width="1.77" stroke-linejoin="round" stroke="#A38B69"/>
+<path id="Puesto-9" d="M785.68 1041.174L807.443 1033.662L825.746 1085.326L805.422 1092.885Z" fill="#FFFBF0" stroke-width="1.77" stroke-linejoin="round" stroke="#A38B69"/>
+<path id="Puesto-8" d="M809.996 1032.781L831.759 1025.268L848.6 1076.826L828.276 1084.385Z" fill="#FFFBF0" stroke-width="1.77" stroke-linejoin="round" stroke="#A38B69"/>
+<path id="Puesto-7" d="M834.311 1024.387L856.074 1016.875L871.454 1068.326L851.13 1075.885Z" fill="#FFFBF0" stroke-width="1.77" stroke-linejoin="round" stroke="#A38B69"/>
+</g>
+</g>
+<g id="Caminos y l&#195;&#131;&#194;&#173;neas de referencia">
+<g id="Group_16">
+<g id="Group_17">
+<path id="Vector_73" d="M375.28 1177.6L401.2 1186.24L414.16 1199.2" stroke-width="1.73" stroke-linecap="round" stroke-linejoin="round" stroke="#8C9B8D"/>
+</g>
+<g id="Group_18">
+<path id="Vector_74" d="M397.75 976.41L455.02 1102.4C456.55 1105.96 457.31 1110.55 457.31 1116.15L463.42 1268.86M452.73 1095.53L464.19 1090.18" stroke-width="9.16" stroke-linecap="round" stroke-linejoin="round" stroke="#DFE5D8"/>
+<path id="Camino-junto-al-r&#195;&#131;&#194;&#173;o" d="M397.75 976.41L455.02 1102.4C456.55 1105.96 457.31 1110.55 457.31 1116.15L463.42 1268.86M452.73 1095.53L464.19 1090.18" stroke-width="1.76" stroke-linecap="round" stroke-linejoin="round" stroke="#7F9074"/>
+<path id="Vector_75" d="M521.46 1126.84L525.27 1143.64M536.73 1207.01L516.11 1215.41L545.13 1306.28L527.57 1332.24" stroke-width="5.35" stroke-linecap="round" stroke-linejoin="round" stroke="#D5CAB4"/>
+<path id="Vector_76" d="M521.46 1126.84L525.27 1143.64M536.73 1207.01L516.11 1215.41L545.13 1306.28L527.57 1332.24" stroke-width="1.26" stroke-linecap="round" stroke-linejoin="round" stroke="#A29A81"/>
+<path id="Vector_77" d="M813.91 1413.18C849.04 1407.07 882.89 1400.2 915.47 1392.57M907.07 1389.51L915.47 1392.57L910.89 1398.67" stroke-width="1.72" stroke-linecap="round" stroke-linejoin="round" stroke="#927A5F"/>
+<path id="Escalera-al-r&#195;&#131;&#194;&#173;o" d="M459.61 1095.21L519.93 1131.86L526.04 1121.81L465.71 1085.16L459.61 1095.21Z" fill="#FAF7ED" stroke-width="1.53" stroke-linejoin="round" stroke="#62775E"/>
+<g id="Group_19">
+<path id="Vector_78" d="M473.56 1089.92L467.45 1099.97" stroke-width="1.3" stroke="#62775E"/>
+<path id="Vector_79" d="M481.4 1094.69L475.29 1104.74" stroke-width="1.3" stroke="#62775E"/>
+<path id="Vector_80" d="M489.24 1099.45L483.13 1109.5" stroke-width="1.3" stroke="#62775E"/>
+<path id="Vector_81" d="M497.08 1104.22L490.97 1114.27" stroke-width="1.3" stroke="#62775E"/>
+<path id="Vector_82" d="M504.92 1108.98L498.81 1119.03" stroke-width="1.3" stroke="#62775E"/>
+<path id="Vector_83" d="M512.77 1113.75L506.66 1123.8" stroke-width="1.3" stroke="#62775E"/>
+<path id="Vector_84" d="M520.61 1118.51L514.5 1128.56" stroke-width="1.3" stroke="#62775E"/>
+</g>
+</g>
+</g>
+</g>
+<g id="L&#195;&#131;&#194;&#173;neas de r&#195;&#131;&#194;&#179;tulos de &#195;&#131;&#194;&#129;reas verdes">
+<g id="Group_20">
+<path id="Vector_85" d="M420.36 1049.95L432.12 1050.48" stroke-width="1.3" stroke-linecap="round" stroke="#53644F" stroke-opacity="0.73"/>
+<path id="Vector_86" d="M439.22 1105.23L478.69 1100.87" stroke-width="1.3" stroke-linecap="round" stroke="#53644F" stroke-opacity="0.73"/>
+<path id="Vector_87" d="M492.74 1375.77L502.37 1374.24" stroke-width="1.3" stroke-linecap="round" stroke="#6B4B36" stroke-opacity="0.73"/>
+<path id="Vector_88" d="M612.07 1496.16L624.54 1487.25" stroke-width="1.3" stroke-linecap="round" stroke="#6B4B36" stroke-opacity="0.73"/>
+<path id="Vector_89" d="M819.33 1261.04L804.75 1261.99" stroke-width="1.3" stroke-linecap="round" stroke="#5C2334" stroke-opacity="0.73"/>
+<path id="Vector_90" d="M923.6 1305.01L912.41 1323.08" stroke-width="1.3" stroke-linecap="round" stroke="#5C2334" stroke-opacity="0.73"/>
+<path id="Vector_91" d="M842.6 1445.4L826.89 1445.25" stroke-width="1.3" stroke-linecap="round" stroke="#5C2334" stroke-opacity="0.73"/>
+</g>
+</g>
+<g id="Caminos y escaleras de caba&#195;&#131;&#194;&#177;as">
+<g id="Group_21">
+<g id="Group_22">
+<path id="Recorrido-junto-al-muelle" d="M244.55 166.74L262.11 301.91L301.82 447.78" stroke-width="1.79" stroke-linecap="round" stroke-linejoin="round" stroke="#A8AA96"/>
+<path id="Trazado-junto-a-las-caba&#195;&#131;&#194;&#177;as" d="M271.28 528.73L320.92 552.4L345.35 635.65L416.38 844.9L404.92 931.96" stroke-width="1.79" stroke-linecap="round" stroke-linejoin="round" stroke="#A8AA96"/>
+<path id="Vector_92" d="M165.89 28.51L247.6 159.86L333.13 404.25L437 450.83M337.72 115.57L356.05 177.43L408.74 356.9L437 450.83L478.24 588.3C481.29 609.68 482.82 640.23 488.93 662.38L543.15 814.35M543.15 814.35L547.73 828.1M543.15 814.35L612.65 817.41L646.25 857.12M377.43 516.51L465.25 545.53" stroke-width="7.64" stroke-linecap="round" stroke-linejoin="round" stroke="#E2E6D9"/>
+<path id="Camino-de-caba&#195;&#131;&#194;&#177;as" d="M165.89 28.51L247.6 159.86L333.13 404.25L437 450.83M337.72 115.57L356.05 177.43L408.74 356.9L437 450.83L478.24 588.3C481.29 609.68 482.82 640.23 488.93 662.38L543.15 814.35M543.15 814.35L547.73 828.1M543.15 814.35L612.65 817.41L646.25 857.12M377.43 516.51L465.25 545.53" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" stroke="#849278"/>
+<path id="Escalera-sala-de-masajes" d="M288.06 143.06L339.99 120.91L335.44 110.23L283.51 132.38L288.06 143.06Z" fill="#FAF7ED" stroke-width="1.6" stroke-linejoin="round" stroke="#62775E"/>
+<g id="Group_23">
+<path id="Vector_93" d="M290.78 129.28L295.33 139.96" stroke-width="1.34" stroke="#62775E"/>
+<path id="Vector_94" d="M298.05 126.18L302.6 136.85" stroke-width="1.34" stroke="#62775E"/>
+<path id="Vector_95" d="M305.32 123.08L309.87 133.75" stroke-width="1.34" stroke="#62775E"/>
+<path id="Vector_96" d="M312.59 119.98L317.14 130.65" stroke-width="1.34" stroke="#62775E"/>
+<path id="Vector_97" d="M319.86 116.88L324.42 127.55" stroke-width="1.34" stroke="#62775E"/>
+<path id="Vector_98" d="M327.13 113.77L331.69 124.45" stroke-width="1.34" stroke="#62775E"/>
+</g>
+<path id="Escalera-al-r&#195;&#131;&#194;&#173;o-zona-norte" d="M329.33 549.72L380.5 522.23L374.36 510.79L323.19 538.28L329.33 549.72Z" fill="#FAF7ED" stroke-width="1.6" stroke-linejoin="round" stroke="#62775E"/>
+<g id="Group_24">
+<path id="Vector_99" d="M330.35 534.44L336.5 545.87" stroke-width="1.34" stroke="#62775E"/>
+<path id="Vector_100" d="M337.52 530.59L343.66 542.02" stroke-width="1.34" stroke="#62775E"/>
+<path id="Vector_101" d="M344.68 526.74L350.82 538.17" stroke-width="1.34" stroke="#62775E"/>
+<path id="Vector_102" d="M351.84 522.89L357.99 534.33" stroke-width="1.34" stroke="#62775E"/>
+<path id="Vector_103" d="M359.01 519.04L365.15 530.48" stroke-width="1.34" stroke="#62775E"/>
+<path id="Vector_104" d="M366.17 515.19L372.31 526.63" stroke-width="1.34" stroke="#62775E"/>
+</g>
+</g>
+</g>
+</g>
+<g id="Caba&#195;&#131;&#194;&#177;as identificadas, Torre&#195;&#131;&#194;&#179;n y Recepci&#195;&#131;&#194;&#179;n">
+<g id="Group_25">
+<g id="Group_26">
+<path id="CAB-1" d="M431.8 770.49L498.23 755.99L511.22 818.6L450.12 827L431.8 770.49Z" fill="#F3EEE8" stroke-width="2" stroke-linejoin="round" stroke="#958990"/>
+<path id="CAB-2" d="M409.65 723.91L474.56 699.48L498.23 755.99L431.8 770.49L409.65 723.91Z" fill="#DDE9F2" stroke-width="2" stroke-linejoin="round" stroke="#958990"/>
+<path id="CAB-3" d="M389.8 662.06L445.54 645.26L474.56 699.48L409.65 723.91L389.8 662.06Z" fill="#EACFD9" stroke-width="2" stroke-linejoin="round" stroke="#958990"/>
+<path id="CAB-4" d="M368.41 615.47L431.8 594.09L445.54 645.26L389.8 662.06L368.41 615.47Z" fill="#F2DFBF" stroke-width="2" stroke-linejoin="round" stroke="#958990"/>
+<path id="CAB-5" d="M337.1 550.56L399.72 533L431.8 594.09L368.41 615.47L337.1 550.56Z" fill="#EACFD9" stroke-width="2" stroke-linejoin="round" stroke="#958990"/>
+<path id="CAB-10" d="M279.07 460.45L318.01 453.58L337.87 507.8L299.69 522.31L279.07 460.45Z" fill="#F3EEE8" stroke-width="2" stroke-linejoin="round" stroke="#958990"/>
+<path id="Torre&#195;&#131;&#194;&#179;n" d="M480.67 840.75L530.31 836.17L542.52 900.31L489.83 905.66L480.67 840.75Z" fill="#F5E5E1" stroke-width="1.87" stroke-linejoin="round" stroke="#995E69"/>
+<path id="Recepci&#195;&#131;&#194;&#179;n" d="M531.83 849.15L602.09 847.62L615.07 902.61L543.29 903.37L531.83 849.15Z" fill="#F5E5E1" stroke-width="1.87" stroke-linejoin="round" stroke="#995E69"/>
+</g>
+</g>
+</g>
+<g id="Referencia exterior &#195;&#130;&#194;&#183; Bomberos">
+<g id="Group_27">
+<g id="Group_28">
+<path id="Bomberos" d="M656.31 570.42L766.27 559.73L790.71 746.06L679.98 755.22L656.31 570.42Z" fill="#E8E4DC" stroke-width="1.64" stroke-linejoin="round" stroke="#92877C"/>
+</g>
+</g>
+</g>
+<g id="Gu&#195;&#131;&#194;&#173;as de Port&#195;&#131;&#194;&#179;n y Lavander&#195;&#131;&#194;&#173;a">
+<g id="Group_29">
+<path id="Vector_105" d="M893.68 844.96L906.64 857.92V870.88M528.64 959.44H563.2" stroke-width="1.84" stroke-linecap="round" stroke-linejoin="round" stroke="#995E69"/>
+</g>
+</g>
+<g id="Arbolado &#195;&#130;&#194;&#183; zona norte">
+<g id="Group_30">
+<g id="Group_31">
+<g id="Group_32">
+<path id="Vector_106" d="M102.5 108.7C109.67 108.7 115.48 102.88 115.48 95.71C115.48 88.54 109.67 82.73 102.5 82.73C95.33 82.73 89.52 88.54 89.52 95.71C89.52 102.88 95.33 108.7 102.5 108.7Z" fill="#EEF0E5" stroke-width="1.53" stroke="#CED5C3"/>
+<path id="Vector_107" d="M123.88 122.44C128.94 122.44 133.05 118.34 133.05 113.28C133.05 108.22 128.94 104.11 123.88 104.11C118.82 104.11 114.72 108.22 114.72 113.28C114.72 118.34 118.82 122.44 123.88 122.44Z" fill="#EEF0E5" stroke-width="1.53" stroke="#CED5C3"/>
+<path id="Vector_108" d="M154.43 258.38C161.6 258.38 167.41 252.57 167.41 245.4C167.41 238.23 161.6 232.42 154.43 232.42C147.26 232.42 141.45 238.23 141.45 245.4C141.45 252.57 147.26 258.38 154.43 258.38Z" fill="#EEF0E5" stroke-width="1.53" stroke="#CED5C3"/>
+<path id="Vector_109" d="M175.05 269.84C180.11 269.84 184.21 265.73 184.21 260.67C184.21 255.61 180.11 251.51 175.05 251.51C169.99 251.51 165.89 255.61 165.89 260.67C165.89 265.73 169.99 269.84 175.05 269.84Z" fill="#EEF0E5" stroke-width="1.53" stroke="#CED5C3"/>
+<path id="Vector_110" d="M193.38 324.82C200.55 324.82 206.36 319.01 206.36 311.84C206.36 304.67 200.55 298.86 193.38 298.86C186.21 298.86 180.4 304.67 180.4 311.84C180.4 319.01 186.21 324.82 193.38 324.82Z" fill="#EEF0E5" stroke-width="1.53" stroke="#CED5C3"/>
+<path id="Vector_111" d="M212.47 338.57C217.11 338.57 220.87 334.81 220.87 330.17C220.87 325.53 217.11 321.77 212.47 321.77C207.83 321.77 204.07 325.53 204.07 330.17C204.07 334.81 207.83 338.57 212.47 338.57Z" fill="#EEF0E5" stroke-width="1.53" stroke="#CED5C3"/>
+<path id="Vector_112" d="M220.11 395.85C227.7 395.85 233.85 389.69 233.85 382.1C233.85 374.51 227.7 368.35 220.11 368.35C212.52 368.35 206.36 374.51 206.36 382.1C206.36 389.69 212.52 395.85 220.11 395.85Z" fill="#EEF0E5" stroke-width="1.53" stroke="#CED5C3"/>
+<path id="Vector_113" d="M240.73 407.3C246.21 407.3 250.66 402.86 250.66 397.37C250.66 391.89 246.21 387.45 240.73 387.45C235.25 387.45 230.8 391.89 230.8 397.37C230.8 402.86 235.25 407.3 240.73 407.3Z" fill="#EEF0E5" stroke-width="1.53" stroke="#CED5C3"/>
+<path id="Vector_114" d="M256 440.14C261.06 440.14 265.17 436.04 265.17 430.98C265.17 425.92 261.06 421.81 256 421.81C250.94 421.81 246.84 425.92 246.84 430.98C246.84 436.04 250.94 440.14 256 440.14Z" fill="#EEF0E5" stroke-width="1.53" stroke="#CED5C3"/>
+<path id="Vector_115" d="M519.48 317.19C527.07 317.19 533.22 311.03 533.22 303.44C533.22 295.85 527.07 289.69 519.48 289.69C511.88 289.69 505.73 295.85 505.73 303.44C505.73 311.03 511.88 317.19 519.48 317.19Z" fill="#EEF0E5" stroke-width="1.53" stroke="#CED5C3"/>
+<path id="Vector_116" d="M537.81 324.82C542.45 324.82 546.21 321.06 546.21 316.42C546.21 311.78 542.45 308.02 537.81 308.02C533.17 308.02 529.4 311.78 529.4 316.42C529.4 321.06 533.17 324.82 537.81 324.82Z" fill="#EEF0E5" stroke-width="1.53" stroke="#CED5C3"/>
+</g>
+</g>
+</g>
+</g>
+<g id="Caba&#195;&#131;&#194;&#177;as 6 a 9, sala de masajes y muelle">
+<g id="Group_33">
+<g id="Group_34">
+<path id="CAB-6" d="M335.43 333.22L396.52 319.48L408.74 356.9L349.17 379.81L335.43 333.22Z" fill="#EACFD9" stroke-width="2" stroke-linejoin="round" stroke="#958990"/>
+<path id="CAB-7" d="M322.44 289.69L380.48 266.78L396.52 319.48L335.43 333.22L322.44 289.69Z" fill="#E5E4EA" stroke-width="2" stroke-linejoin="round" stroke="#958990"/>
+<path id="CAB-8" d="M309.46 246.16L371.32 229.36L380.48 266.78L322.44 289.69L309.46 246.16Z" fill="#F3EEE8" stroke-width="2" stroke-linejoin="round" stroke="#958990"/>
+<path id="CAB-9" d="M290.37 194.23L356.05 177.43L371.32 229.36L309.46 246.16L290.37 194.23Z" fill="#DDE9F2" stroke-width="2" stroke-linejoin="round" stroke="#958990"/>
+<path id="Sala-de-masajes" d="M284.26 72.04L313.28 63.64L330.84 111.75L301.82 125.5L284.26 72.04Z" fill="#F5E5E1" stroke-width="1.87" stroke-linejoin="round" stroke="#995E69"/>
+<path id="Muelle" d="M32.1001 167.5L80.9801 149.17L97.0201 189.65L48.1401 211.03L32.1001 167.5Z" fill="#EFE5D8" stroke-width="1.87" stroke-linejoin="round" stroke="#9B7658"/>
+</g>
+</g>
+</g>
+<g id="Referencia exterior &#195;&#130;&#194;&#183; Estaci&#195;&#131;&#194;&#179;n de trenes">
+<g id="Group_35">
+<g id="Group_36">
+<path id="Estaci&#195;&#131;&#194;&#179;n-de-trenes" d="M610.36 172.85L673.74 161.39L732.55 382.1L666.11 388.21L610.36 172.85Z" fill="#E8E4DC" stroke-width="1.64" stroke-linejoin="round" stroke="#92877C"/>
+</g>
+</g>
+</g>
+<g id="Gu&#195;&#131;&#194;&#173;as de la zona norte">
+<path id="Vector_117" d="M335.81 93.19L324.74 93.42" stroke-width="1.2" stroke-linecap="round" stroke="#5C2334" stroke-opacity="0.75"/>
+<path id="Vector_118" d="M364.42 128.72L321.68 122.44" stroke-width="1.2" stroke-linecap="round" stroke="#53644F" stroke-opacity="0.75"/>
+<path id="Vector_119" d="M286.56 543.04L336.95 538.66" stroke-width="1.2" stroke-linecap="round" stroke="#53644F" stroke-opacity="0.75"/>
+<path id="Vector_120" d="M716.8 270.84L703.53 270.6" stroke-width="1.2" stroke-linecap="round" stroke="#514A45" stroke-opacity="0.75"/>
+</g>
+</g>
+</g>
+</g>
+</g>
+</g>
+<defs>
+<clipPath id="clip0_22_235">
+<rect width="1136" height="1578" fill="white"/>
+</clipPath>
+<clipPath id="clip1_22_235">
+<rect width="1136" height="1578" fill="white"/>
+</clipPath>
+</defs>
+</svg>
+</template>
+<template id="art-dark"><svg width="1136" height="1578" viewBox="0 0 1136 1578" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="Plano Haiku / Oscuro" clip-path="url(#clip0_22_3)">
+<g id="Plano vectorial" clip-path="url(#clip1_22_3)">
+<g id="Clip path group">
+<mask id="mask0_22_3" style="mask-type:luminance" maskUnits="userSpaceOnUse" x="0" y="0" width="1136" height="1578">
+<g id="clip0_2_2">
+<path id="Vector" d="M1136 0H0V1578H1136V0Z" fill="white"/>
+</g>
+</mask>
+<g mask="url(#mask0_22_3)">
+<g id="Base del plano &#195;&#130;&#194;&#183; desbloquear para editar el trazado">
+<g id="Clip path group_2">
+<mask id="mask1_22_3" style="mask-type:luminance" maskUnits="userSpaceOnUse" x="0" y="0" width="1136" height="1578">
+<g id="clip1_2_2">
+<path id="Vector_2" d="M1136 0H0V1578H1136V0Z" fill="white"/>
+</g>
+</mask>
+<g mask="url(#mask1_22_3)">
+<g id="R&#195;&#131;&#194;&#173;o Maipo y orilla">
+<g id="Group">
+<path id="Vector_3" d="M-32.96 -19.04C-13.52 13.36 -4.87996 47.92 18.88 80.32C38.32 114.88 53.44 151.6 77.2 175.36C92.32 190.48 90.16 209.92 96.64 227.2C105.28 244.48 103.12 270.4 116.08 289.84C122.56 322.24 124.72 350.32 131.2 378.4C139.84 423.76 161.44 479.92 189.52 523.12C221.92 570.64 252.16 605.2 232.72 654.88C213.28 700.24 243.52 762.88 267.28 790.96C291.04 816.88 284.56 881.68 299.68 940C312.64 987.52 312.64 1045.84 345.04 1089.04C370.96 1125.76 418.48 1143.04 418.48 1201.36C416.32 1251.04 373.12 1302.88 407.68 1350.4C444.4 1402.24 461.68 1456.24 472.48 1503.76C478.96 1531.84 491.92 1562.08 509.2 1611.76L-32.96 1613.92V-23.36V-19.04Z" fill="#1F303A"/>
+<path id="Vector_4" d="M-32.96 -19.04C-13.52 13.36 -4.87996 47.92 18.88 80.32C38.32 114.88 53.44 151.6 77.2 175.36C92.32 190.48 90.16 209.92 96.64 227.2C105.28 244.48 103.12 270.4 116.08 289.84C122.56 322.24 124.72 350.32 131.2 378.4C139.84 423.76 161.44 479.92 189.52 523.12C221.92 570.64 252.16 605.2 232.72 654.88C213.28 700.24 243.52 762.88 267.28 790.96C291.04 816.88 284.56 881.68 299.68 940C312.64 987.52 312.64 1045.84 345.04 1089.04C370.96 1125.76 418.48 1143.04 418.48 1201.36C416.32 1251.04 373.12 1302.88 407.68 1350.4C444.4 1402.24 461.68 1456.24 472.48 1503.76C478.96 1531.84 491.92 1562.08 509.2 1611.76" stroke-width="15.12" stroke="#344147"/>
+<path id="Vector_5" d="M-32.96 -19.04C-13.52 13.36 -4.87996 47.92 18.88 80.32C38.32 114.88 53.44 151.6 77.2 175.36C92.32 190.48 90.16 209.92 96.64 227.2C105.28 244.48 103.12 270.4 116.08 289.84C122.56 322.24 124.72 350.32 131.2 378.4C139.84 423.76 161.44 479.92 189.52 523.12C221.92 570.64 252.16 605.2 232.72 654.88C213.28 700.24 243.52 762.88 267.28 790.96C291.04 816.88 284.56 881.68 299.68 940C312.64 987.52 312.64 1045.84 345.04 1089.04C370.96 1125.76 418.48 1143.04 418.48 1201.36C416.32 1251.04 373.12 1302.88 407.68 1350.4C444.4 1402.24 461.68 1456.24 472.48 1503.76C478.96 1531.84 491.92 1562.08 509.2 1611.76" stroke-width="1.94" stroke="#536B6B"/>
+<g id="Group_2">
+<path id="Vector_6" d="M-4.87988 80.32C18.8801 127.84 18.8801 164.56 46.9601 196.96C72.8801 227.2 66.4001 255.28 81.5201 296.32C94.4801 333.04 85.8401 365.44 105.28 404.32" stroke-width="1.84" stroke-linecap="round" stroke="#324954"/>
+<path id="Corriente-junto-al-muelle" d="M31.8398 125.68C44.7998 149.44 51.2798 164.56 62.0798 184C75.0398 209.92 72.8798 238 83.6798 268.24" stroke-width="1.84" stroke-linecap="round" stroke="#324954"/>
+<path id="Vector_7" d="M-7.04004 175.36C8.07996 220.72 23.2 259.6 34 307.12C46.96 354.64 57.76 380.56 59.92 408.64" stroke-width="1.84" stroke-linecap="round" stroke="#324954"/>
+<path id="Vector_8" d="M88 475.6C111.76 529.6 157.12 570.64 172.24 624.64C187.36 674.32 163.6 706.72 193.84 758.56" stroke-width="1.84" stroke-linecap="round" stroke="#324954"/>
+<path id="Vector_9" d="M116.08 726.16C150.64 808.24 183.04 801.76 198.16 868.72C211.12 916.24 213.28 940 239.2 970.24" stroke-width="1.84" stroke-linecap="round" stroke="#324954"/>
+<path id="Vector_10" d="M96.6401 821.2C124.72 851.44 137.68 901.12 146.32 950.8C152.8 996.16 170.08 1041.52 196 1069.6" stroke-width="1.84" stroke-linecap="round" stroke="#324954"/>
+<path id="Vector_11" d="M122.56 1015.6C144.16 1084.72 208.96 1127.92 234.88 1186.24C256.48 1235.92 247.84 1279.12 267.28 1318C306.16 1384.96 358 1428.16 377.44 1497.28C388.24 1531.84 405.52 1564.24 422.8 1611.76" stroke-width="1.84" stroke-linecap="round" stroke="#324954"/>
+<path id="Vector_12" d="M85.8398 1121.44C126.88 1149.52 183.04 1222.96 183.04 1276.96C185.2 1315.84 215.44 1389.28 258.64 1413.04C295.36 1434.64 319.12 1464.88 327.76 1497.28C336.4 1523.2 347.2 1557.76 368.8 1603.12" stroke-width="1.84" stroke-linecap="round" stroke="#324954"/>
+<path id="Vector_13" d="M232.72 1017.76C258.64 1073.92 304 1097.68 338.56 1136.56C362.32 1164.64 370.96 1192.72 358 1222.96" stroke-width="1.84" stroke-linecap="round" stroke="#324954"/>
+<path id="Vector_14" d="M325.6 1268.32C314.8 1313.68 334.24 1350.4 358 1378.48" stroke-width="1.84" stroke-linecap="round" stroke="#324954"/>
+<path id="Vector_15" d="M394.72 1415.2C418.48 1447.6 424.96 1482.16 437.92 1516.72" stroke-width="1.84" stroke-linecap="round" stroke="#324954"/>
+</g>
+</g>
+</g>
+</g>
+</g>
+<g id="&#195;&#131;&#194;&#129;reas verdes y arbolado">
+<g id="Group_3">
+<g id="Group_4">
+<path id="Vector_16" d="M269.44 450.76C276 450.76 281.32 445.44 281.32 438.88C281.32 432.32 276 427 269.44 427C262.88 427 257.56 432.32 257.56 438.88C257.56 445.44 262.88 450.76 269.44 450.76Z" fill="#303833" stroke-width="1.51" stroke="#465345"/>
+<path id="Vector_17" d="M250 482.08C259.54 482.08 267.28 474.34 267.28 464.8C267.28 455.26 259.54 447.52 250 447.52C240.46 447.52 232.72 455.26 232.72 464.8C232.72 474.34 240.46 482.08 250 482.08Z" fill="#303833" stroke-width="1.51" stroke="#465345"/>
+<path id="Vector_18" d="M301.84 569.56C310.79 569.56 318.04 562.31 318.04 553.36C318.04 544.41 310.79 537.16 301.84 537.16C292.89 537.16 285.64 544.41 285.64 553.36C285.64 562.31 292.89 569.56 301.84 569.56Z" fill="#303833" stroke-width="1.51" stroke="#465345"/>
+<path id="Vector_19" d="M319.12 597.64C325.68 597.64 331 592.32 331 585.76C331 579.2 325.68 573.88 319.12 573.88C312.56 573.88 307.24 579.2 307.24 585.76C307.24 592.32 312.56 597.64 319.12 597.64Z" fill="#303833" stroke-width="1.51" stroke="#465345"/>
+<path id="Vector_20" d="M291.04 650.56C299.39 650.56 306.16 643.79 306.16 635.44C306.16 627.09 299.39 620.32 291.04 620.32C282.69 620.32 275.92 627.09 275.92 635.44C275.92 643.79 282.69 650.56 291.04 650.56Z" fill="#303833" stroke-width="1.51" stroke="#465345"/>
+<path id="Vector_21" d="M312.64 667.84C318.61 667.84 323.44 663 323.44 657.04C323.44 651.08 318.61 646.24 312.64 646.24C306.68 646.24 301.84 651.08 301.84 657.04C301.84 663 306.68 667.84 312.64 667.84Z" fill="#303833" stroke-width="1.51" stroke="#465345"/>
+<path id="Vector_22" d="M314.8 752.08C321.96 752.08 327.76 746.28 327.76 739.12C327.76 731.96 321.96 726.16 314.8 726.16C307.64 726.16 301.84 731.96 301.84 739.12C301.84 746.28 307.64 752.08 314.8 752.08Z" fill="#303833" stroke-width="1.51" stroke="#465345"/>
+<path id="Vector_23" d="M340.72 778C350.26 778 358 770.26 358 760.72C358 751.18 350.26 743.44 340.72 743.44C331.18 743.44 323.44 751.18 323.44 760.72C323.44 770.26 331.18 778 340.72 778Z" fill="#303833" stroke-width="1.51" stroke="#465345"/>
+<path id="Vector_24" d="M342.88 844.96C352.42 844.96 360.16 837.22 360.16 827.68C360.16 818.14 352.42 810.4 342.88 810.4C333.34 810.4 325.6 818.14 325.6 827.68C325.6 837.22 333.34 844.96 342.88 844.96Z" fill="#303833" stroke-width="1.51" stroke="#465345"/>
+<path id="Vector_25" d="M358 866.56C363.96 866.56 368.8 861.73 368.8 855.76C368.8 849.79 363.96 844.96 358 844.96C352.04 844.96 347.2 849.79 347.2 855.76C347.2 861.73 352.04 866.56 358 866.56Z" fill="#303833" stroke-width="1.51" stroke="#465345"/>
+<path id="Vector_26" d="M360.16 950.8C368.51 950.8 375.28 944.03 375.28 935.68C375.28 927.33 368.51 920.56 360.16 920.56C351.81 920.56 345.04 927.33 345.04 935.68C345.04 944.03 351.81 950.8 360.16 950.8Z" fill="#303833" stroke-width="1.51" stroke="#465345"/>
+<path id="Vector_27" d="M375.28 985.36C386.02 985.36 394.72 976.66 394.72 965.92C394.72 955.18 386.02 946.48 375.28 946.48C364.54 946.48 355.84 955.18 355.84 965.92C355.84 976.66 364.54 985.36 375.28 985.36Z" fill="#303833" stroke-width="1.51" stroke="#465345"/>
+<path id="Vector_28" d="M388.24 1058.8C397.78 1058.8 405.52 1051.06 405.52 1041.52C405.52 1031.98 397.78 1024.24 388.24 1024.24C378.7 1024.24 370.96 1031.98 370.96 1041.52C370.96 1051.06 378.7 1058.8 388.24 1058.8Z" fill="#303833" stroke-width="1.51" stroke="#465345"/>
+<path id="Vector_29" d="M409.84 1076.08C415.81 1076.08 420.64 1071.24 420.64 1065.28C420.64 1059.32 415.81 1054.48 409.84 1054.48C403.88 1054.48 399.04 1059.32 399.04 1065.28C399.04 1071.24 403.88 1076.08 409.84 1076.08Z" fill="#303833" stroke-width="1.51" stroke="#465345"/>
+<path id="Vector_30" d="M913.12 1093.36C920.28 1093.36 926.08 1087.56 926.08 1080.4C926.08 1073.24 920.28 1067.44 913.12 1067.44C905.96 1067.44 900.16 1073.24 900.16 1080.4C900.16 1087.56 905.96 1093.36 913.12 1093.36Z" fill="#303833" stroke-width="1.51" stroke="#465345"/>
+<path id="Vector_31" d="M919.6 1068.52C924.97 1068.52 929.32 1064.17 929.32 1058.8C929.32 1053.43 924.97 1049.08 919.6 1049.08C914.23 1049.08 909.88 1053.43 909.88 1058.8C909.88 1064.17 914.23 1068.52 919.6 1068.52Z" fill="#303833" stroke-width="1.51" stroke="#465345"/>
+</g>
+<g id="Group_5">
+<path id="&#195;&#131;&#194;&#129;reas-verdes" d="M522.22 1137.53L656.61 1162.72C660.17 1163.23 662.98 1165.52 665.01 1169.6L677.99 1126.07L709.3 1136.76L677.23 1240.61L668.07 1248.25L710.83 1407.84L761.99 1415.47L769.62 1419.29L782.6 1459L744.42 1470.45L610.03 1422.35L545.89 1307.04L522.22 1148.98V1137.53Z" fill="#323A31" stroke-width="1.53" stroke-linejoin="round" stroke="#56644E"/>
+<g id="Group_6">
+<path id="Vector_32" d="M544.36 1159.67C578.47 1168.83 605.71 1174.18 626.07 1175.71M588.65 1365.84C604.43 1383.15 614.87 1397.91 619.96 1410.13M692.5 1442.96C711.85 1449.58 728.64 1453.91 742.9 1455.94" stroke-width="1.18" stroke-linecap="round" stroke="#465344"/>
+</g>
+<g id="Group_7">
+<path id="Vector_33" d="M480.99 1183.34C486.89 1183.34 491.68 1178.56 491.68 1172.65C491.68 1166.75 486.89 1161.96 480.99 1161.96C475.08 1161.96 470.3 1166.75 470.3 1172.65C470.3 1178.56 475.08 1183.34 480.99 1183.34Z" fill="#343D34" stroke-width="1.18" stroke="#4B5948"/>
+<path id="Vector_34" d="M490.911 1194.03C494.711 1194.03 497.791 1190.96 497.791 1187.16C497.791 1183.36 494.711 1180.29 490.911 1180.29C487.121 1180.29 484.041 1183.36 484.041 1187.16C484.041 1190.96 487.121 1194.03 490.911 1194.03Z" fill="#343D34" stroke-width="1.18" stroke="#4B5948"/>
+<path id="Vector_35" d="M569.56 1219.99C577.58 1219.99 584.07 1213.5 584.07 1205.49C584.07 1197.47 577.58 1190.98 569.56 1190.98C561.55 1190.98 555.05 1197.47 555.05 1205.49C555.05 1213.5 561.55 1219.99 569.56 1219.99Z" fill="#343D34" stroke-width="1.18" stroke="#4B5948"/>
+<path id="Vector_36" d="M592.47 1229.16C598.8 1229.16 603.92 1224.03 603.92 1217.7C603.92 1211.38 598.8 1206.25 592.47 1206.25C586.14 1206.25 581.021 1211.38 581.021 1217.7C581.021 1224.03 586.14 1229.16 592.47 1229.16Z" fill="#343D34" stroke-width="1.18" stroke="#4B5948"/>
+<path id="Vector_37" d="M445.1 1327.66C454.38 1327.66 461.9 1320.14 461.9 1310.86C461.9 1301.58 454.38 1294.06 445.1 1294.06C435.82 1294.06 428.3 1301.58 428.3 1310.86C428.3 1320.14 435.82 1327.66 445.1 1327.66Z" fill="#343D34" stroke-width="1.18" stroke="#4B5948"/>
+<path id="Vector_38" d="M466.481 1337.59C472.801 1337.59 477.931 1332.46 477.931 1326.13C477.931 1319.81 472.801 1314.68 466.481 1314.68C460.151 1314.68 455.021 1319.81 455.021 1326.13C455.021 1332.46 460.151 1337.59 466.481 1337.59Z" fill="#343D34" stroke-width="1.18" stroke="#4B5948"/>
+<path id="Vector_39" d="M531.38 1429.22C540.66 1429.22 548.18 1421.7 548.18 1412.42C548.18 1403.14 540.66 1395.62 531.38 1395.62C522.11 1395.62 514.58 1403.14 514.58 1412.42C514.58 1421.7 522.11 1429.22 531.38 1429.22Z" fill="#343D34" stroke-width="1.18" stroke="#4B5948"/>
+<path id="Vector_40" d="M553.531 1442.2C560.271 1442.2 565.741 1436.73 565.741 1429.98C565.741 1423.23 560.271 1417.76 553.531 1417.76C546.781 1417.76 541.311 1423.23 541.311 1429.98C541.311 1436.73 546.781 1442.2 553.531 1442.2Z" fill="#343D34" stroke-width="1.18" stroke="#4B5948"/>
+<path id="Vector_41" d="M564.98 1488.01C572.15 1488.01 577.961 1482.2 577.961 1475.03C577.961 1467.86 572.15 1462.05 564.98 1462.05C557.81 1462.05 552 1467.86 552 1475.03C552 1482.2 557.81 1488.01 564.98 1488.01Z" fill="#343D34" stroke-width="1.18" stroke="#4B5948"/>
+<path id="Vector_42" d="M548.18 1497.18C552.82 1497.18 556.58 1493.42 556.58 1488.78C556.58 1484.14 552.82 1480.38 548.18 1480.38C543.54 1480.38 539.78 1484.14 539.78 1488.78C539.78 1493.42 543.54 1497.18 548.18 1497.18Z" fill="#343D34" stroke-width="1.18" stroke="#4B5948"/>
+<path id="Vector_43" d="M641.34 1408.6C647.24 1408.6 652.03 1403.82 652.03 1397.91C652.03 1392.01 647.24 1387.22 641.34 1387.22C635.44 1387.22 630.65 1392.01 630.65 1397.91C630.65 1403.82 635.44 1408.6 641.34 1408.6Z" fill="#343D34" stroke-width="1.18" stroke="#4B5948"/>
+<path id="Vector_44" d="M656.61 1423.87C664.62 1423.87 671.12 1417.38 671.12 1409.36C671.12 1401.35 664.62 1394.86 656.61 1394.86C648.6 1394.86 642.1 1401.35 642.1 1409.36C642.1 1417.38 648.6 1423.87 656.61 1423.87Z" fill="#343D34" stroke-width="1.18" stroke="#4B5948"/>
+<path id="Vector_45" d="M686.39 1500.23C693.14 1500.23 698.61 1494.76 698.61 1488.01C698.61 1481.27 693.14 1475.8 686.39 1475.8C679.64 1475.8 674.17 1481.27 674.17 1488.01C674.17 1494.76 679.64 1500.23 686.39 1500.23Z" fill="#343D34" stroke-width="1.18" stroke="#4B5948"/>
+<path id="Vector_46" d="M703.19 1510.16C708.25 1510.16 712.35 1506.06 712.35 1501C712.35 1495.94 708.25 1491.83 703.19 1491.83C698.13 1491.83 694.03 1495.94 694.03 1501C694.03 1506.06 698.13 1510.16 703.19 1510.16Z" fill="#343D34" stroke-width="1.18" stroke="#4B5948"/>
+<path id="Vector_47" d="M899.43 1258.17C906.18 1258.17 911.65 1252.7 911.65 1245.96C911.65 1239.21 906.18 1233.74 899.43 1233.74C892.69 1233.74 887.22 1239.21 887.22 1245.96C887.22 1252.7 892.69 1258.17 899.43 1258.17Z" fill="#343D34" stroke-width="1.18" stroke="#4B5948"/>
+<path id="Vector_48" d="M917 1267.34C921.21 1267.34 924.63 1263.92 924.63 1259.7C924.63 1255.48 921.21 1252.07 917 1252.07C912.78 1252.07 909.36 1255.48 909.36 1259.7C909.36 1263.92 912.78 1267.34 917 1267.34Z" fill="#343D34" stroke-width="1.18" stroke="#4B5948"/>
+</g>
+</g>
+</g>
+</g>
+<g id="Clip path group_3">
+<mask id="mask2_22_3" style="mask-type:luminance" maskUnits="userSpaceOnUse" x="0" y="0" width="1136" height="1578">
+<g id="clip2_2_2">
+<path id="Vector_49" d="M1136 0H0V1578H1136V0Z" fill="white"/>
+</g>
+</mask>
+<g mask="url(#mask2_22_3)">
+<g id="Camino al Volc&#195;&#131;&#194;&#161;n y acceso">
+<g id="Group_8">
+<path id="Vector_50" d="M798.64 -29.84C818.08 76 837.52 184 854.8 289.84L869.92 384.88C895.84 555.52 917.44 678.64 943.36 823.36C964.96 952.96 982.24 1089.04 1008.16 1216.48C1021.12 1313.68 1042.72 1475.68 1075.12 1620.4H1148.56C1116.16 1471.36 1094.56 1309.36 1081.6 1201.36C1057.84 1069.6 1040.56 927.04 1018.96 806.08C995.2 670 971.44 542.56 943.36 384.88L928.24 289.84C910.96 184 891.52 78.16 874.24 -29.84H798.64Z" fill="#3E3840" stroke-width="1.94" stroke="#5D535D"/>
+<path id="Vector_51" d="M835.36 -29.84C835.79 -27.45 836.22 -25.06 836.65 -22.67M1111.84 1622.56C1111.3 1620.08 1110.77 1617.61 1110.25 1615.14M838.5 -12.43C839.36 -7.65 840.22 -2.87 841.08 1.9M842.93 12.14C843.79 16.92 844.66 21.7 845.52 26.47M847.37 36.71C848.23 41.49 849.09 46.27 849.95 51.04M851.8 61.28C852.66 66.06 853.52 70.84 854.38 75.61M856.22 85.85C857.08 90.63 857.93 95.41 858.79 100.19M860.62 110.43C861.47 115.21 862.33 119.99 863.17 124.77M865 135.01C865.84 139.79 866.69 144.57 867.53 149.35M869.34 159.6C870.18 164.38 871.02 169.16 871.86 173.94M873.65 184.19C874.48 188.97 875.31 193.76 876.14 198.54M877.91 208.79C878.73 213.58 879.55 218.36 880.37 223.15M882.12 233.4C882.93 238.19 883.74 242.98 884.54 247.76M886.26 258.02C887.06 262.81 887.86 267.6 888.65 272.39M890.34 282.65C890.74 285.05 891.13 287.44 891.52 289.84L892.62 297.24M894.2 307.82L896.4 322.62M897.98 333.2L900.18 348M901.76 358.58L903.96 373.38M905.54 383.96L906.64 391.36C907 393.82 907.37 396.27 907.74 398.71M909.32 409.17C910.06 414.08 910.81 418.96 911.56 423.81M913.18 434.26C913.95 439.17 914.72 444.05 915.49 448.9M917.16 459.36C917.95 464.27 918.74 469.14 919.53 473.99M921.24 484.44C922.04 489.33 922.85 494.21 923.66 499.05M925.41 509.49C926.24 514.38 927.06 519.25 927.89 524.1M929.67 534.52C930.51 539.41 931.35 544.28 932.2 549.13M934.01 559.55C934.87 564.43 935.72 569.3 936.58 574.14M938.42 584.57C939.29 589.44 940.15 594.3 941.02 599.15M942.88 609.57C943.76 614.45 944.63 619.31 945.51 624.15M947.39 634.57C948.27 639.44 949.15 644.3 950.03 649.15M951.93 659.57C952.81 664.43 953.69 669.29 954.58 674.14M956.47 684.55C957.36 689.42 958.24 694.28 959.12 699.13M961.01 709.54C961.9 714.4 962.78 719.26 963.66 724.13M965.54 734.54C966.41 739.4 967.29 744.26 968.16 749.12M970.02 759.54C970.89 764.4 971.75 769.26 972.62 774.13M974.46 784.55C975.31 789.4 976.16 794.27 977.01 799.14M978.82 809.57C979.24 812 979.66 814.44 980.08 816.88C980.54 819.44 981 822 981.46 824.55M983.4 835.5C984.3 840.63 985.2 845.74 986.09 850.85M987.98 861.81C988.85 866.94 989.73 872.05 990.59 877.17M992.43 888.14C993.29 893.27 994.14 898.39 994.98 903.51M996.79 914.49C997.63 919.61 998.46 924.74 999.29 929.86M1001.06 940.85C1001.89 945.98 1002.71 951.1 1003.53 956.23M1005.28 967.22C1006.09 972.34 1006.9 977.47 1007.71 982.6M1009.44 993.59C1010.25 998.72 1011.06 1003.85 1011.86 1008.98M1013.59 1019.97C1014.39 1025.1 1015.2 1030.23 1016.01 1035.36M1017.73 1046.35C1018.54 1051.48 1019.35 1056.61 1020.15 1061.74M1021.89 1072.73C1022.7 1077.85 1023.51 1082.98 1024.33 1088.12M1026.08 1099.11C1026.9 1104.23 1027.72 1109.35 1028.55 1114.48M1030.33 1125.47C1031.16 1130.59 1031.99 1135.71 1032.83 1140.84M1034.64 1151.82C1035.49 1156.93 1036.34 1162.05 1037.2 1167.19M1039.04 1178.16C1039.9 1183.27 1040.78 1188.39 1041.65 1193.51M1043.54 1204.48C1043.99 1207.04 1044.43 1209.6 1044.88 1212.16C1045.25 1214.62 1045.62 1217.12 1045.99 1219.64M1047.55 1230.36C1048.25 1235.27 1048.97 1240.27 1049.69 1245.36M1051.2 1256.09C1051.89 1261.02 1052.59 1266.03 1053.3 1271.11M1054.8 1281.84C1055.49 1286.78 1056.19 1291.8 1056.9 1296.88M1058.39 1307.6C1059.08 1312.55 1059.78 1317.55 1060.5 1322.61M1062.01 1333.34C1062.72 1338.29 1063.43 1343.29 1064.15 1348.34M1065.7 1359.07C1066.41 1364.03 1067.14 1369.03 1067.88 1374.07M1069.47 1384.79C1070.21 1389.75 1070.96 1394.75 1071.72 1399.78M1073.35 1410.5C1074.11 1415.46 1074.89 1420.45 1075.67 1425.48M1077.36 1436.19C1078.15 1441.15 1078.95 1446.14 1079.76 1451.16M1081.51 1461.85C1082.33 1466.81 1083.16 1471.8 1084.01 1476.81M1085.83 1487.48C1086.68 1492.44 1087.54 1497.42 1088.42 1502.42M1090.31 1513.08C1091.2 1518.04 1092.1 1523.01 1093.01 1528M1094.98 1538.66C1095.91 1543.61 1096.85 1548.57 1097.8 1553.56M1099.86 1564.2C1100.82 1569.15 1101.8 1574.11 1102.79 1579.08M1104.94 1589.69C1105.95 1594.63 1106.97 1599.58 1108.01 1604.54" stroke-width="2.48" stroke="#796D77"/>
+<path id="Vector_52" d="M958.48 868.72C928.24 873.04 906.64 877.36 869.92 881.68C854.8 883.84 850.48 890.32 841.84 894.64L820.24 881.68C796.48 873.04 755.44 881.68 733.84 903.28C714.4 918.4 705.76 940 697.12 976.72L701.44 994L703.6 1019.92C727.36 1043.68 755.44 1058.8 783.52 1060.96L809.44 1097.68C846.16 1095.52 872.08 1076.08 882.88 1058.8C880.72 1015.6 859.12 985.36 865.6 950.8C874.24 924.88 919.6 918.4 969.28 911.92L958.48 868.72Z" fill="#3B3539" stroke-width="2.05" stroke-linejoin="round" stroke="#564E50"/>
+<path id="Vector_53" d="M772.72 1054.48C764.08 1078.24 744.64 1099.84 720.88 1114.96C707.92 1123.6 694.96 1130.08 686.32 1145.2" stroke-width="12.96" stroke-linecap="round" stroke="#67594E"/>
+<g id="Group_9">
+<path id="Vector_54" d="M906.64 870.88L915.28 911.92" stroke-width="2.38" stroke-linecap="round" stroke="#B1808F"/>
+</g>
+<path id="Vector_55" d="M906.64 874.34C908.55 874.34 910.1 872.79 910.1 870.88C910.1 868.97 908.55 867.42 906.64 867.42C904.73 867.42 903.18 868.97 903.18 870.88C903.18 872.79 904.73 874.34 906.64 874.34Z" fill="#B1808F"/>
+<path id="Vector_56" d="M915.28 915.38C917.19 915.38 918.74 913.83 918.74 911.92C918.74 910.01 917.19 908.46 915.28 908.46C913.37 908.46 911.82 910.01 911.82 911.92C911.82 913.83 913.37 915.38 915.28 915.38Z" fill="#B1808F"/>
+<path id="Vector_57" d="M928.24 905.44L915.28 901.12L926.08 892.48M915.28 901.12L941.2 896.8" stroke-width="2.16" stroke-linecap="round" stroke-linejoin="round" stroke="#B1808F"/>
+</g>
+</g>
+</g>
+</g>
+<g id="Huellas sin identificar">
+<g id="Group_10">
+<g id="Group_11">
+<g id="Techo-06">
+<path id="Vector_58" d="M520 566.32L574 544.72L593.44 574.96L606.4 628.96L563.2 641.92L535.12 637.6L520 566.32Z" fill="#312E36"/>
+<path id="Vector_59" d="M520.61 569.18L520 566.32L522.53 565.31M521.55 573.64L522.77 579.37M523.71 583.82L524.93 589.55M525.87 594L527.09 599.73M528.03 604.19L529.25 609.91M530.19 614.37L531.41 620.1M532.35 624.55L533.57 630.28M534.51 634.74L535.12 637.6L537.75 638M541.85 638.63L547.11 639.45M551.21 640.08L556.47 640.88M560.57 641.51L563.2 641.92L566.24 641.01M570.96 639.59L577.04 637.77M581.76 636.35L587.84 634.53M592.56 633.11L598.64 631.29M603.36 629.87L606.4 628.96L605.67 625.92M604.54 621.2L603.08 615.12M601.95 610.4L600.49 604.32M599.35 599.6L597.89 593.52M596.76 588.8L595.3 582.72M594.17 578L593.44 574.96L591.62 572.13M588.78 567.72L585.14 562.04M582.3 557.63L578.66 551.97M575.82 547.55L574 544.72L571.47 545.73M567.53 547.31L562.47 549.33M558.53 550.91L553.47 552.93M549.53 554.51L544.47 556.53M540.53 558.11L535.47 560.13M531.53 561.71L526.47 563.73" stroke-width="1.94" stroke-linejoin="round" stroke="#60555F"/>
+</g>
+<g id="Techo-07">
+<path id="Vector_60" d="M567.52 661.36L595.6 652.72L608.56 689.44L578.32 702.4L567.52 661.36Z" fill="#312E36"/>
+<path id="Vector_61" d="M568.28 664.25L567.52 661.36L570.15 660.55M569.46 668.73L570.98 674.51M572.16 678.99L573.68 684.77M574.86 689.25L576.38 695.03M577.56 699.51L578.32 702.4L581.15 701.18M585.57 699.29L591.24 696.87M595.64 694.98L601.32 692.54M605.73 690.65L608.56 689.44L607.65 686.86M606.23 682.84L604.41 677.68M602.99 673.66L601.17 668.5M599.75 664.48L597.93 659.32M596.51 655.3L595.6 652.72L592.97 653.53M588.87 654.79L583.61 656.41M579.51 657.67L574.25 659.29" stroke-width="1.94" stroke-linejoin="round" stroke="#60555F"/>
+</g>
+<g id="Techo-08">
+<path id="Vector_62" d="M608.56 583.6L636.64 574.96L651.76 626.8L634.48 639.76L621.52 628.96L608.56 583.6ZM589.12 695.92L612.88 687.28L623.68 715.36L602.08 728.32L589.12 695.92Z" fill="#312E36"/>
+<path id="Vector_63" d="M609.29 586.15L608.56 583.6L611.19 582.79M610.42 590.12L611.88 595.22M613.01 599.19L614.47 604.29M615.61 608.26L617.07 613.37M618.2 617.34L619.66 622.44M620.79 626.41L621.52 628.96L623.34 630.48M626.18 632.84L629.82 635.88M632.66 638.24L634.48 639.76L636.91 637.94M640.69 635.1L645.55 631.46M649.33 628.62L651.76 626.8L650.91 623.88M649.59 619.35L647.88 613.52M646.56 608.98L644.86 603.15M643.54 598.61L641.84 592.78M640.51 588.24L638.81 582.41M637.49 577.88L636.64 574.96L634.01 575.77M629.91 577.03L624.65 578.65M620.55 579.91L615.29 581.53M590.34 698.96L589.12 695.92L592.46 694.71M592.23 703.68L594.65 709.76M596.54 714.48L598.98 720.56M600.87 725.28L602.08 728.32L605.12 726.5M609.84 723.66L615.92 720.02M620.64 717.18L623.68 715.36L622.67 712.73M621.09 708.63L619.07 703.37M617.49 699.27L615.47 694.01M613.89 689.91L612.88 687.28L609.54 688.5M604.34 690.38L597.66 692.82" stroke-width="1.94" stroke-linejoin="round" stroke="#60555F"/>
+</g>
+<g id="Techo-10">
+<path id="Vector_64" d="M714.4 803.92L785.68 773.68L835.36 799.6L844 825.52L761.92 849.28L738.16 844.96L714.4 803.92Z" fill="#312E36"/>
+<path id="Vector_65" d="M715.74 806.23L714.4 803.92L717.26 802.71M717.82 809.82L720.49 814.44M722.57 818.03L725.24 822.64M727.32 826.24L729.99 830.85M732.07 834.44L734.75 839.06M736.82 842.65L738.16 844.96L741.5 845.57M746.7 846.51L753.38 847.73M758.58 848.67L761.92 849.28L764.81 848.45M769.29 847.14L775.07 845.48M779.55 844.17L785.33 842.5M789.81 841.21L795.59 839.53M800.07 838.24L805.85 836.57M810.33 835.26L816.11 833.6M820.59 832.29L826.37 830.63M830.85 829.33L836.63 827.65M841.11 826.36L844 825.52L843.19 823.09M841.93 819.31L840.31 814.45M839.05 810.67L837.43 805.81M836.17 802.03L835.36 799.6L832.57 798.14M828.22 795.87L822.63 792.96M818.28 790.69L812.69 787.77M808.35 785.51L802.76 782.59M798.41 780.32L792.82 777.41M788.48 775.14L785.68 773.68L782.82 774.89M778.36 776.78L772.63 779.22M768.18 781.11L762.45 783.53M758 785.42L752.27 787.86M747.81 789.75L742.09 792.17M737.63 794.07L731.9 796.5M727.45 798.38L721.72 800.82" stroke-width="1.94" stroke-linejoin="round" stroke="#60555F"/>
+</g>
+</g>
+<g id="Group_12">
+<g id="Huella-del-edificio">
+<path id="Vector_66" d="M749.01 1152.8L808.57 1133.71L826.13 1190.21L847.51 1186.4L853.62 1210.07L875.76 1265.05L892.56 1326.13L925.4 1320.02L936.09 1376.53L870.42 1389.51L809.33 1400.2L787.95 1321.55L771.15 1231.45L749.01 1152.8Z" fill="#393239"/>
+<path id="Vector_67" d="M749.52 1154.62L749.01 1152.8L750.85 1152.21M750.34 1157.53L751.36 1161.17M752.18 1164.09L753.21 1167.73M754.03 1170.64L755.05 1174.28M755.88 1177.19L756.9 1180.84M757.72 1183.75L758.75 1187.39M759.57 1190.3L760.59 1193.94M761.41 1196.86L762.44 1200.5M763.26 1203.41L764.28 1207.05M765.1 1209.97L766.13 1213.61M766.95 1216.52L767.97 1220.16M768.79 1223.07L769.82 1226.71M770.64 1229.63L771.15 1231.45L771.51 1233.37M772.08 1236.45L772.8 1240.3M773.38 1243.38L774.09 1247.24M774.67 1250.32L775.39 1254.17M775.96 1257.25L776.68 1261.1M777.25 1264.18L777.97 1268.03M778.54 1271.11L779.26 1274.96M779.84 1278.04L780.55 1281.89M781.13 1284.97L781.85 1288.82M782.42 1291.9L783.14 1295.75M783.71 1298.83L784.43 1302.68M785.01 1305.76L785.72 1309.62M786.3 1312.7L787.02 1316.55M787.59 1319.63L787.95 1321.55L788.44 1323.37M789.24 1326.29L790.23 1329.93M791.02 1332.84L792.01 1336.48M792.8 1339.39L793.79 1343.03M794.58 1345.95L795.57 1349.59M796.36 1352.5L797.35 1356.14M798.14 1359.06L799.13 1362.7M799.93 1365.61L800.92 1369.25M801.71 1372.16L802.7 1375.81M803.49 1378.72L804.48 1382.36M805.27 1385.27L806.26 1388.91M807.05 1391.83L808.04 1395.47M808.84 1398.38L809.33 1400.2L811.22 1399.87M814.23 1399.34L818 1398.68M821.02 1398.16L824.79 1397.5M827.81 1396.97L831.58 1396.31M834.6 1395.78L838.37 1395.12M841.38 1394.59L845.15 1393.93M848.17 1393.4L851.94 1392.75M854.96 1392.22L858.73 1391.56M861.74 1391.03L865.51 1390.37M868.53 1389.84L870.42 1389.51L872.24 1389.15M875.16 1388.57L878.81 1387.85M881.73 1387.28L885.38 1386.55M888.29 1385.98L891.94 1385.26M894.86 1384.68L898.51 1383.96M901.43 1383.38L905.08 1382.66M908 1382.08L911.64 1381.36M914.56 1380.79L918.21 1380.06M921.13 1379.49L924.78 1378.77M927.7 1378.19L931.34 1377.47M934.26 1376.89L936.09 1376.53L935.72 1374.57M935.12 1371.43L934.38 1367.51M933.78 1364.37L933.04 1360.44M932.45 1357.3L931.71 1353.38M931.11 1350.24L930.37 1346.32M929.78 1343.18L929.03 1339.25M928.44 1336.11L927.7 1332.19M927.1 1329.05L926.36 1325.13M925.77 1321.99L925.4 1320.02L923.57 1320.36M920.65 1320.91L917 1321.59M914.09 1322.13L910.44 1322.81M907.52 1323.35L903.87 1324.03M900.95 1324.57L897.3 1325.25M894.39 1325.79L892.56 1326.13L892.04 1324.25M891.21 1321.23L890.18 1317.46M889.35 1314.44L888.31 1310.67M887.48 1307.66L886.44 1303.89M885.61 1300.87L884.58 1297.1M883.75 1294.08L882.71 1290.31M881.88 1287.29L880.84 1283.52M880.01 1280.51L878.98 1276.74M878.15 1273.72L877.11 1269.95M876.28 1266.93L875.76 1265.05L875.08 1263.35M873.99 1260.63L872.62 1257.24M871.52 1254.53L870.16 1251.13M869.07 1248.42L867.7 1245.02M866.6 1242.31L865.24 1238.91M864.14 1236.2L862.78 1232.81M861.68 1230.09L860.32 1226.7M859.22 1223.98L857.86 1220.59M856.76 1217.87L855.39 1214.48M854.3 1211.76L853.62 1210.07L853.19 1208.42M852.51 1205.79L851.67 1202.51M850.99 1199.88L850.14 1196.59M849.46 1193.96L848.61 1190.67M847.93 1188.04L847.51 1186.4L845.53 1186.75M842.36 1187.32L838.4 1188.02M835.24 1188.59L831.28 1189.3M828.11 1189.86L826.13 1190.21L825.59 1188.47M824.72 1185.68L823.64 1182.19M822.77 1179.4L821.68 1175.91M820.82 1173.12L819.73 1169.63M818.87 1166.84L817.78 1163.36M816.91 1160.57L815.83 1157.08M814.96 1154.29L813.88 1150.8M813.01 1148.01L811.93 1144.52M811.06 1141.73L809.98 1138.24M809.11 1135.45L808.57 1133.71L806.73 1134.3M803.79 1135.24L800.11 1136.42M797.17 1137.36L793.49 1138.54M790.55 1139.48L786.88 1140.66M783.93 1141.6L780.26 1142.78M777.32 1143.72L773.64 1144.9M770.7 1145.85L767.02 1147.02M764.08 1147.97L760.4 1149.15M757.46 1150.09L753.79 1151.27" stroke-width="1.37" stroke-linejoin="round" stroke="#665965"/>
+</g>
+</g>
+</g>
+</g>
+<g id="Recintos y tinajas del croquis">
+<g id="Group_13">
+<path id="Lavander&#195;&#131;&#194;&#173;a" d="M554.79 917.63L624.16 915.07L642.15 995.99L572.14 1001.77L554.79 917.63Z" fill="#483640" stroke-width="2.16" stroke-linejoin="round" stroke="#89616F"/>
+<g id="Group_14">
+<path id="Casa-Sra-Naifi" d="M543.6 1012.3L681.05 1048.95L657.38 1146.69L520.69 1108.51L543.6 1012.3Z" fill="#483640" stroke-width="1.95" stroke-linejoin="round" stroke="#89616F"/>
+<path id="Galp&#195;&#131;&#194;&#179;n" d="M748.24 1153.56L808.57 1132.94L835.29 1222.29L771.91 1229.16L748.24 1153.56Z" fill="#483640" stroke-width="1.95" stroke-linejoin="round" stroke="#89616F"/>
+<path id="Cocina" d="M770.39 1228.39L797.11 1225.34L809.33 1284.9L782.6 1294.06L770.39 1228.39Z" fill="#483640" stroke-width="1.95" stroke-linejoin="round" stroke="#89616F"/>
+<path id="Camarines-y-ba&#195;&#131;&#194;&#177;os" d="M860.49 1336.06L926.16 1320.02L936.09 1376.53L873.47 1388.75L860.49 1336.06Z" fill="#483640" stroke-width="1.95" stroke-linejoin="round" stroke="#89616F"/>
+<path id="Bodega-Sra-Naifi" d="M787.95 1421.58L823.08 1420.06L833 1463.58L803.22 1471.98L787.95 1421.58Z" fill="#483640" stroke-width="1.95" stroke-linejoin="round" stroke="#89616F"/>
+<path id="Piscina" d="M694.03 1232.98L736.02 1223.81C739.08 1223.3 741.12 1224.83 742.13 1228.39L758.17 1299.41C759.19 1302.97 757.91 1305.26 754.35 1306.28L714.64 1315.44C711.59 1315.95 709.55 1314.68 708.54 1311.63L690.97 1238.32C690.46 1235.78 691.48 1233.99 694.03 1232.98Z" fill="#314956" stroke-width="2.06" stroke="#668D9D"/>
+<path id="Vector_68" d="M702.43 1249.01C705.99 1246.47 709.55 1245.96 713.12 1247.48C716.68 1249.01 721.77 1248.25 728.39 1245.19M711.59 1285.66C715.66 1283.12 720.24 1282.61 725.34 1284.14C730.43 1285.66 736.53 1284.65 743.66 1281.08M715.41 1297.88C719.48 1295.34 724.06 1294.83 729.15 1296.35C734.24 1297.88 740.1 1296.86 746.72 1293.3" stroke-width="1.3" stroke-linecap="round" stroke="#577D8E"/>
+<path id="Tinaja-Tonel-de-Madera" d="M490.15 1331.48L522.98 1325.37L535.2 1368.13L501.6 1378.82L490.15 1331.48Z" fill="#4E4037" stroke-width="1.91" stroke-linejoin="round" stroke="#87694D"/>
+<path id="Vector_69" d="M512.29 1362.79C518.62 1362.79 523.75 1357.66 523.75 1351.33C523.75 1345.01 518.62 1339.88 512.29 1339.88C505.97 1339.88 500.84 1345.01 500.84 1351.33C500.84 1357.66 505.97 1362.79 512.29 1362.79Z" fill="#544638" stroke-width="1.53" stroke="#87694D"/>
+<path id="Vector_70" d="M512.29 1359.27C516.68 1359.27 520.23 1355.72 520.23 1351.33C520.23 1346.95 516.68 1343.39 512.29 1343.39C507.91 1343.39 504.35 1346.95 504.35 1351.33C504.35 1355.72 507.91 1359.27 512.29 1359.27Z" fill="#405564" stroke-width="1.22" stroke="#668B99"/>
+<path id="Tinaja-Jacuzzi" d="M599.34 1436.09L642.1 1433.04L652.03 1481.91L610.03 1488.78L599.34 1436.09Z" fill="#4E4037" stroke-width="1.91" stroke-linejoin="round" stroke="#87694D"/>
+<path id="Vector_71" d="M627.4 1447.67L618.4 1449.41C614.26 1450.22 611.56 1454.23 612.36 1458.37L614.26 1468.11C615.06 1472.25 619.07 1474.95 623.21 1474.15L632.21 1472.4C636.35 1471.6 639.05 1467.59 638.24 1463.45L636.35 1453.7C635.55 1449.56 631.54 1446.86 627.4 1447.67Z" fill="#405564" stroke-width="1.68" stroke="#668B99"/>
+<path id="Vector_72" d="M619.2 1460.53C621.23 1459 623.27 1458.74 625.3 1459.76C627.34 1460.78 629.38 1460.27 631.41 1458.23" stroke-width="1.15" stroke-linecap="round" stroke="#668B99"/>
+</g>
+</g>
+</g>
+<g id="Puestos de estacionamiento">
+<g id="Group_15">
+<path id="Puesto-4" d="M735.503 869.174L756.866 864.677L774.394 904.831L753.863 909.155Z" fill="#47403F" stroke-width="1.77" stroke-linejoin="round" stroke="#8A765A"/>
+<path id="Puesto-3" d="M759.508 864.121L780.871 859.624L797.567 899.951L777.036 904.275Z" fill="#47403F" stroke-width="1.77" stroke-linejoin="round" stroke="#8A765A"/>
+<path id="Puesto-2" d="M783.513 859.068L804.875 854.571L820.741 895.071L800.209 899.395Z" fill="#47403F" stroke-width="1.77" stroke-linejoin="round" stroke="#8A765A"/>
+<path id="Puesto-1" d="M807.517 854.014L828.88 849.518L843.914 890.19L823.383 894.514Z" fill="#47403F" stroke-width="1.77" stroke-linejoin="round" stroke="#8A765A"/>
+<path id="Puesto-11" d="M673.533 914.231L680.765 938.824L726.32 927.285L719.67 903.928Z" fill="#47403F" stroke-width="1.77" stroke-linejoin="round" stroke="#8A765A"/>
+<path id="Puesto-10" d="M681.526 941.414L688.758 966.007L733.708 953.238L727.059 929.882Z" fill="#47403F" stroke-width="1.77" stroke-linejoin="round" stroke="#8A765A"/>
+<path id="Puesto-6" d="M689.52 968.598L696.751 993.19L741.096 979.192L734.447 955.835Z" fill="#47403F" stroke-width="1.77" stroke-linejoin="round" stroke="#8A765A"/>
+<path id="Puesto-5" d="M697.513 995.781L704.745 1020.374L748.485 1005.146L741.836 981.789Z" fill="#47403F" stroke-width="1.77" stroke-linejoin="round" stroke="#8A765A"/>
+<path id="Puesto-9" d="M785.68 1041.174L807.443 1033.662L825.746 1085.326L805.422 1092.885Z" fill="#47403F" stroke-width="1.77" stroke-linejoin="round" stroke="#8A765A"/>
+<path id="Puesto-8" d="M809.996 1032.781L831.759 1025.268L848.6 1076.826L828.276 1084.385Z" fill="#47403F" stroke-width="1.77" stroke-linejoin="round" stroke="#8A765A"/>
+<path id="Puesto-7" d="M834.311 1024.387L856.074 1016.875L871.454 1068.326L851.13 1075.885Z" fill="#47403F" stroke-width="1.77" stroke-linejoin="round" stroke="#8A765A"/>
+</g>
+</g>
+<g id="Caminos y l&#195;&#131;&#194;&#173;neas de referencia">
+<g id="Group_16">
+<g id="Group_17">
+<path id="Vector_73" d="M375.28 1177.6L401.2 1186.24L414.16 1199.2" stroke-width="1.73" stroke-linecap="round" stroke-linejoin="round" stroke="#536D62"/>
+</g>
+<g id="Group_18">
+<path id="Vector_74" d="M397.75 976.41L455.02 1102.4C456.55 1105.96 457.31 1110.55 457.31 1116.15L463.42 1268.86M452.73 1095.53L464.19 1090.18" stroke-width="9.16" stroke-linecap="round" stroke-linejoin="round" stroke="#3B493E"/>
+<path id="Camino-junto-al-r&#195;&#131;&#194;&#173;o" d="M397.75 976.41L455.02 1102.4C456.55 1105.96 457.31 1110.55 457.31 1116.15L463.42 1268.86M452.73 1095.53L464.19 1090.18" stroke-width="1.76" stroke-linecap="round" stroke-linejoin="round" stroke="#6C836D"/>
+<path id="Vector_75" d="M521.46 1126.84L525.27 1143.64M536.73 1207.01L516.11 1215.41L545.13 1306.28L527.57 1332.24" stroke-width="5.35" stroke-linecap="round" stroke-linejoin="round" stroke="#54493C"/>
+<path id="Vector_76" d="M521.46 1126.84L525.27 1143.64M536.73 1207.01L516.11 1215.41L545.13 1306.28L527.57 1332.24" stroke-width="1.26" stroke-linecap="round" stroke-linejoin="round" stroke="#786B50"/>
+<path id="Vector_77" d="M813.91 1413.18C849.04 1407.07 882.89 1400.2 915.47 1392.57M907.07 1389.51L915.47 1392.57L910.89 1398.67" stroke-width="1.72" stroke-linecap="round" stroke-linejoin="round" stroke="#917D61"/>
+<path id="Escalera-al-r&#195;&#131;&#194;&#173;o" d="M459.61 1095.21L519.93 1131.86L526.04 1121.81L465.71 1085.16L459.61 1095.21Z" fill="#364139" stroke-width="1.53" stroke-linejoin="round" stroke="#879682"/>
+<g id="Group_19">
+<path id="Vector_78" d="M473.56 1089.92L467.45 1099.97" stroke-width="1.3" stroke="#879682"/>
+<path id="Vector_79" d="M481.4 1094.69L475.29 1104.74" stroke-width="1.3" stroke="#879682"/>
+<path id="Vector_80" d="M489.24 1099.45L483.13 1109.5" stroke-width="1.3" stroke="#879682"/>
+<path id="Vector_81" d="M497.08 1104.22L490.97 1114.27" stroke-width="1.3" stroke="#879682"/>
+<path id="Vector_82" d="M504.92 1108.98L498.81 1119.03" stroke-width="1.3" stroke="#879682"/>
+<path id="Vector_83" d="M512.77 1113.75L506.66 1123.8" stroke-width="1.3" stroke="#879682"/>
+<path id="Vector_84" d="M520.61 1118.51L514.5 1128.56" stroke-width="1.3" stroke="#879682"/>
+</g>
+</g>
+</g>
+</g>
+<g id="L&#195;&#131;&#194;&#173;neas de r&#195;&#131;&#194;&#179;tulos de &#195;&#131;&#194;&#129;reas verdes">
+<g id="Group_20">
+<path id="Vector_85" d="M420.36 1049.95L432.12 1050.48" stroke-width="1.3" stroke-linecap="round" stroke="#6A856D" stroke-opacity="0.73"/>
+<path id="Vector_86" d="M439.22 1105.23L478.69 1100.87" stroke-width="1.3" stroke-linecap="round" stroke="#6A856D" stroke-opacity="0.73"/>
+<path id="Vector_87" d="M492.74 1375.77L502.37 1374.24" stroke-width="1.3" stroke-linecap="round" stroke="#A2876D" stroke-opacity="0.73"/>
+<path id="Vector_88" d="M612.07 1496.16L624.54 1487.25" stroke-width="1.3" stroke-linecap="round" stroke="#A2876D" stroke-opacity="0.73"/>
+<path id="Vector_89" d="M819.33 1261.04L804.75 1261.99" stroke-width="1.3" stroke-linecap="round" stroke="#B98198" stroke-opacity="0.73"/>
+<path id="Vector_90" d="M923.6 1305.01L912.41 1323.08" stroke-width="1.3" stroke-linecap="round" stroke="#B98198" stroke-opacity="0.73"/>
+<path id="Vector_91" d="M842.6 1445.4L826.89 1445.25" stroke-width="1.3" stroke-linecap="round" stroke="#B98198" stroke-opacity="0.73"/>
+</g>
+</g>
+<g id="Caminos y escaleras de caba&#195;&#131;&#194;&#177;as">
+<g id="Group_21">
+<g id="Group_22">
+<path id="Recorrido-junto-al-muelle" d="M244.55 166.74L262.11 301.91L301.82 447.78" stroke-width="1.79" stroke-linecap="round" stroke-linejoin="round" stroke="#5C695F"/>
+<path id="Trazado-junto-a-las-caba&#195;&#131;&#194;&#177;as" d="M271.28 528.73L320.92 552.4L345.35 635.65L416.38 844.9L404.92 931.96" stroke-width="1.79" stroke-linecap="round" stroke-linejoin="round" stroke="#5C695F"/>
+<path id="Vector_92" d="M165.89 28.51L247.6 159.86L333.13 404.25L437 450.83M337.72 115.57L356.05 177.43L408.74 356.9L437 450.83L478.24 588.3C481.29 609.68 482.82 640.23 488.93 662.38L543.15 814.35M543.15 814.35L547.73 828.1M543.15 814.35L612.65 817.41L646.25 857.12M377.43 516.51L465.25 545.53" stroke-width="7.64" stroke-linecap="round" stroke-linejoin="round" stroke="#39463D"/>
+<path id="Camino-de-caba&#195;&#131;&#194;&#177;as" d="M165.89 28.51L247.6 159.86L333.13 404.25L437 450.83M337.72 115.57L356.05 177.43L408.74 356.9L437 450.83L478.24 588.3C481.29 609.68 482.82 640.23 488.93 662.38L543.15 814.35M543.15 814.35L547.73 828.1M543.15 814.35L612.65 817.41L646.25 857.12M377.43 516.51L465.25 545.53" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" stroke="#6A7C69"/>
+<path id="Escalera-sala-de-masajes" d="M288.06 143.06L339.99 120.91L335.44 110.23L283.51 132.38L288.06 143.06Z" fill="#364139" stroke-width="1.6" stroke-linejoin="round" stroke="#879682"/>
+<g id="Group_23">
+<path id="Vector_93" d="M290.78 129.28L295.33 139.96" stroke-width="1.34" stroke="#879682"/>
+<path id="Vector_94" d="M298.05 126.18L302.6 136.85" stroke-width="1.34" stroke="#879682"/>
+<path id="Vector_95" d="M305.32 123.08L309.87 133.75" stroke-width="1.34" stroke="#879682"/>
+<path id="Vector_96" d="M312.59 119.98L317.14 130.65" stroke-width="1.34" stroke="#879682"/>
+<path id="Vector_97" d="M319.86 116.88L324.42 127.55" stroke-width="1.34" stroke="#879682"/>
+<path id="Vector_98" d="M327.13 113.77L331.69 124.45" stroke-width="1.34" stroke="#879682"/>
+</g>
+<path id="Escalera-al-r&#195;&#131;&#194;&#173;o-zona-norte" d="M329.33 549.72L380.5 522.23L374.36 510.79L323.19 538.28L329.33 549.72Z" fill="#364139" stroke-width="1.6" stroke-linejoin="round" stroke="#879682"/>
+<g id="Group_24">
+<path id="Vector_99" d="M330.35 534.44L336.5 545.87" stroke-width="1.34" stroke="#879682"/>
+<path id="Vector_100" d="M337.52 530.59L343.66 542.02" stroke-width="1.34" stroke="#879682"/>
+<path id="Vector_101" d="M344.68 526.74L350.82 538.17" stroke-width="1.34" stroke="#879682"/>
+<path id="Vector_102" d="M351.84 522.89L357.99 534.33" stroke-width="1.34" stroke="#879682"/>
+<path id="Vector_103" d="M359.01 519.04L365.15 530.48" stroke-width="1.34" stroke="#879682"/>
+<path id="Vector_104" d="M366.17 515.19L372.31 526.63" stroke-width="1.34" stroke="#879682"/>
+</g>
+</g>
+</g>
+</g>
+<g id="Caba&#195;&#131;&#194;&#177;as identificadas, Torre&#195;&#131;&#194;&#179;n y Recepci&#195;&#131;&#194;&#179;n">
+<g id="Group_25">
+<g id="Group_26">
+<path id="CAB-1" d="M431.8 770.49L498.23 755.99L511.22 818.6L450.12 827L431.8 770.49Z" fill="#3D3941" stroke-width="2" stroke-linejoin="round" stroke="#766B76"/>
+<path id="CAB-2" d="M409.65 723.91L474.56 699.48L498.23 755.99L431.8 770.49L409.65 723.91Z" fill="#344654" stroke-width="2" stroke-linejoin="round" stroke="#766B76"/>
+<path id="CAB-3" d="M389.8 662.06L445.54 645.26L474.56 699.48L409.65 723.91L389.8 662.06Z" fill="#563345" stroke-width="2" stroke-linejoin="round" stroke="#766B76"/>
+<path id="CAB-4" d="M368.41 615.47L431.8 594.09L445.54 645.26L389.8 662.06L368.41 615.47Z" fill="#503B2B" stroke-width="2" stroke-linejoin="round" stroke="#766B76"/>
+<path id="CAB-5" d="M337.1 550.56L399.72 533L431.8 594.09L368.41 615.47L337.1 550.56Z" fill="#563345" stroke-width="2" stroke-linejoin="round" stroke="#766B76"/>
+<path id="CAB-10" d="M279.07 460.45L318.01 453.58L337.87 507.8L299.69 522.31L279.07 460.45Z" fill="#3D3941" stroke-width="2" stroke-linejoin="round" stroke="#766B76"/>
+<path id="Torre&#195;&#131;&#194;&#179;n" d="M480.67 840.75L530.31 836.17L542.52 900.31L489.83 905.66L480.67 840.75Z" fill="#483640" stroke-width="1.87" stroke-linejoin="round" stroke="#89616F"/>
+<path id="Recepci&#195;&#131;&#194;&#179;n" d="M531.83 849.15L602.09 847.62L615.07 902.61L543.29 903.37L531.83 849.15Z" fill="#483640" stroke-width="1.87" stroke-linejoin="round" stroke="#89616F"/>
+</g>
+</g>
+</g>
+<g id="Referencia exterior &#195;&#130;&#194;&#183; Bomberos">
+<g id="Group_27">
+<g id="Group_28">
+<path id="Bomberos" d="M656.31 570.42L766.27 559.73L790.71 746.06L679.98 755.22L656.31 570.42Z" fill="#35323A" stroke-width="1.64" stroke-linejoin="round" stroke="#645B64"/>
+</g>
+</g>
+</g>
+<g id="Gu&#195;&#131;&#194;&#173;as de Port&#195;&#131;&#194;&#179;n y Lavander&#195;&#131;&#194;&#173;a">
+<g id="Group_29">
+<path id="Vector_105" d="M893.68 844.96L906.64 857.92V870.88M528.64 959.44H563.2" stroke-width="1.84" stroke-linecap="round" stroke-linejoin="round" stroke="#89616F"/>
+</g>
+</g>
+<g id="Arbolado &#195;&#130;&#194;&#183; zona norte">
+<g id="Group_30">
+<g id="Group_31">
+<g id="Group_32">
+<path id="Vector_106" d="M102.5 108.7C109.67 108.7 115.48 102.88 115.48 95.71C115.48 88.54 109.67 82.73 102.5 82.73C95.33 82.73 89.52 88.54 89.52 95.71C89.52 102.88 95.33 108.7 102.5 108.7Z" fill="#303833" stroke-width="1.53" stroke="#465345"/>
+<path id="Vector_107" d="M123.88 122.44C128.94 122.44 133.05 118.34 133.05 113.28C133.05 108.22 128.94 104.11 123.88 104.11C118.82 104.11 114.72 108.22 114.72 113.28C114.72 118.34 118.82 122.44 123.88 122.44Z" fill="#303833" stroke-width="1.53" stroke="#465345"/>
+<path id="Vector_108" d="M154.43 258.38C161.6 258.38 167.41 252.57 167.41 245.4C167.41 238.23 161.6 232.42 154.43 232.42C147.26 232.42 141.45 238.23 141.45 245.4C141.45 252.57 147.26 258.38 154.43 258.38Z" fill="#303833" stroke-width="1.53" stroke="#465345"/>
+<path id="Vector_109" d="M175.05 269.84C180.11 269.84 184.21 265.73 184.21 260.67C184.21 255.61 180.11 251.51 175.05 251.51C169.99 251.51 165.89 255.61 165.89 260.67C165.89 265.73 169.99 269.84 175.05 269.84Z" fill="#303833" stroke-width="1.53" stroke="#465345"/>
+<path id="Vector_110" d="M193.38 324.82C200.55 324.82 206.36 319.01 206.36 311.84C206.36 304.67 200.55 298.86 193.38 298.86C186.21 298.86 180.4 304.67 180.4 311.84C180.4 319.01 186.21 324.82 193.38 324.82Z" fill="#303833" stroke-width="1.53" stroke="#465345"/>
+<path id="Vector_111" d="M212.47 338.57C217.11 338.57 220.87 334.81 220.87 330.17C220.87 325.53 217.11 321.77 212.47 321.77C207.83 321.77 204.07 325.53 204.07 330.17C204.07 334.81 207.83 338.57 212.47 338.57Z" fill="#303833" stroke-width="1.53" stroke="#465345"/>
+<path id="Vector_112" d="M220.11 395.85C227.7 395.85 233.85 389.69 233.85 382.1C233.85 374.51 227.7 368.35 220.11 368.35C212.52 368.35 206.36 374.51 206.36 382.1C206.36 389.69 212.52 395.85 220.11 395.85Z" fill="#303833" stroke-width="1.53" stroke="#465345"/>
+<path id="Vector_113" d="M240.73 407.3C246.21 407.3 250.66 402.86 250.66 397.37C250.66 391.89 246.21 387.45 240.73 387.45C235.25 387.45 230.8 391.89 230.8 397.37C230.8 402.86 235.25 407.3 240.73 407.3Z" fill="#303833" stroke-width="1.53" stroke="#465345"/>
+<path id="Vector_114" d="M256 440.14C261.06 440.14 265.17 436.04 265.17 430.98C265.17 425.92 261.06 421.81 256 421.81C250.94 421.81 246.84 425.92 246.84 430.98C246.84 436.04 250.94 440.14 256 440.14Z" fill="#303833" stroke-width="1.53" stroke="#465345"/>
+<path id="Vector_115" d="M519.48 317.19C527.07 317.19 533.22 311.03 533.22 303.44C533.22 295.85 527.07 289.69 519.48 289.69C511.88 289.69 505.73 295.85 505.73 303.44C505.73 311.03 511.88 317.19 519.48 317.19Z" fill="#303833" stroke-width="1.53" stroke="#465345"/>
+<path id="Vector_116" d="M537.81 324.82C542.45 324.82 546.21 321.06 546.21 316.42C546.21 311.78 542.45 308.02 537.81 308.02C533.17 308.02 529.4 311.78 529.4 316.42C529.4 321.06 533.17 324.82 537.81 324.82Z" fill="#303833" stroke-width="1.53" stroke="#465345"/>
+</g>
+</g>
+</g>
+</g>
+<g id="Caba&#195;&#131;&#194;&#177;as 6 a 9, sala de masajes y muelle">
+<g id="Group_33">
+<g id="Group_34">
+<path id="CAB-6" d="M335.43 333.22L396.52 319.48L408.74 356.9L349.17 379.81L335.43 333.22Z" fill="#563345" stroke-width="2" stroke-linejoin="round" stroke="#766B76"/>
+<path id="CAB-7" d="M322.44 289.69L380.48 266.78L396.52 319.48L335.43 333.22L322.44 289.69Z" fill="#393741" stroke-width="2" stroke-linejoin="round" stroke="#766B76"/>
+<path id="CAB-8" d="M309.46 246.16L371.32 229.36L380.48 266.78L322.44 289.69L309.46 246.16Z" fill="#3D3941" stroke-width="2" stroke-linejoin="round" stroke="#766B76"/>
+<path id="CAB-9" d="M290.37 194.23L356.05 177.43L371.32 229.36L309.46 246.16L290.37 194.23Z" fill="#344654" stroke-width="2" stroke-linejoin="round" stroke="#766B76"/>
+<path id="Sala-de-masajes" d="M284.26 72.04L313.28 63.64L330.84 111.75L301.82 125.5L284.26 72.04Z" fill="#483640" stroke-width="1.87" stroke-linejoin="round" stroke="#89616F"/>
+<path id="Muelle" d="M32.1001 167.5L80.9801 149.17L97.0201 189.65L48.1401 211.03L32.1001 167.5Z" fill="#4C4139" stroke-width="1.87" stroke-linejoin="round" stroke="#87694D"/>
+</g>
+</g>
+</g>
+<g id="Referencia exterior &#195;&#130;&#194;&#183; Estaci&#195;&#131;&#194;&#179;n de trenes">
+<g id="Group_35">
+<g id="Group_36">
+<path id="Estaci&#195;&#131;&#194;&#179;n-de-trenes" d="M610.36 172.85L673.74 161.39L732.55 382.1L666.11 388.21L610.36 172.85Z" fill="#35323A" stroke-width="1.64" stroke-linejoin="round" stroke="#645B64"/>
+</g>
+</g>
+</g>
+<g id="Gu&#195;&#131;&#194;&#173;as de la zona norte">
+<path id="Vector_117" d="M335.81 93.19L324.74 93.42" stroke-width="1.2" stroke-linecap="round" stroke="#B98198" stroke-opacity="0.75"/>
+<path id="Vector_118" d="M364.42 128.72L321.68 122.44" stroke-width="1.2" stroke-linecap="round" stroke="#6A856D" stroke-opacity="0.75"/>
+<path id="Vector_119" d="M286.56 543.04L336.95 538.66" stroke-width="1.2" stroke-linecap="round" stroke="#6A856D" stroke-opacity="0.75"/>
+<path id="Vector_120" d="M716.8 270.84L703.53 270.6" stroke-width="1.2" stroke-linecap="round" stroke="#8F8179" stroke-opacity="0.75"/>
+</g>
+</g>
+</g>
+</g>
+</g>
+</g>
+<defs>
+<clipPath id="clip0_22_3">
+<rect width="1136" height="1578" fill="white"/>
+</clipPath>
+<clipPath id="clip1_22_3">
+<rect width="1136" height="1578" fill="white"/>
+</clipPath>
+</defs>
+</svg>
+</template>
+<script type="application/json" id="geometry">{"cabins":{"c1":{"title":"CAB 1","corners":[[431.79620361328125,770.4944085562101],[498.23352505610535,755.985107421875],[511.2155303955078,818.6041965279528],[450.1237405630258,827.0043182373047]],"center":[472.8422499069801,793.0220076858357],"dot":[489.854404256894,768.207284508982],"number":1},"c2":{"title":"CAB 2","corners":[[409.650390625,723.9118763913391],[474.56042592278845,699.4751586914062],[498.2334976196289,755.9850683725008],[431.7961673736572,770.4943695068359]],"center":[453.56012038526865,737.4666182405206],"dot":[467.63032509540693,712.012340342614],"number":2},"c3":{"title":"CAB 3","corners":[[389.7955627441406,662.0564690747308],[445.54182337855434,645.2562255859375],[474.5604248046875,699.4751932088611],[409.6503952988633,723.9119110107422]],"center":[429.88705155656146,682.6749497200678],"dot":[440.3757486772967,657.6044045502006],"number":3},"c4":{"title":"CAB 4","corners":[[368.4134216308594,615.4739253011982],[431.7961558729115,594.091796875],[445.54180908203125,645.2561756091171],[389.79554884504563,662.0564193725586]],"center":[408.886733857712,629.2195792894685],"dot":[424.2360466078957,605.6839650717745],"number":4},"c5":{"title":"CAB 5","corners":[[337.1039123535156,550.5639519868074],[399.7230031413417,533.0000610351562],[431.7961959838867,594.0918556495949],[368.41345774742865,615.4739837646484]],"center":[384.25914230654314,573.2824631090517],"dot":[394.6199290658582,546.2932537195418],"number":5},"c6":{"title":"CAB 6","corners":[[335.4262390136719,333.2234997326815],[396.5219790140788,319.4769592285156],[408.74112701416016,356.8980972676338],[349.1727805137634,379.80899810791016]],"center":[372.4655313889186,347.3518885841853],"dot":[388.58335129777595,328.6756859158866],"number":6},"c7":{"title":"CAB 7","corners":[[322.4433898925781,289.69279164281386],[380.4843413362798,266.7818908691406],[396.52197265625,319.47696264858905],[335.42623429445877,333.22350311279297]],"center":[358.71898454489167,302.29378706833415],"dot":[373.30177359512174,278.5008166148745],"number":7},"c8":{"title":"CAB 8","corners":[[309.4605407714844,246.1621060914631],[371.31997606831214,229.36077880859375],[380.48433685302734,266.7819168477119],[322.44338521649763,289.6928176879883]],"center":[345.9270597273304,257.9994048589393],"dot":[362.94031367578816,238.8115254052078],"number":8},"c9":{"title":"CAB 9","corners":[[290.3681335449219,194.2307100084093],[356.0460564955226,177.42938232421875],[371.3199920654297,229.36075880262587],[309.4605530073058,246.1620864868164]],"center":[331.798683778295,211.79573440551758],"dot":[348.0444234988375,188.77027851104737],"number":9},"c10":{"title":"CAB 10","corners":[[279.06671142578125,460.453515625],[318.01272890165257,453.5806884765625],[337.86756134033203,507.799658203125],[299.6851912659484,522.3089599609375]],"center":[308.65804823342853,486.03570556640625],"dot":[314.9256842811387,464.290844116211],"number":10}},"parking":{"p1":{"number":"1","corners":[[807.517,854.014],[828.88,849.518],[843.914,890.19],[823.383,894.514]],"center":[825.9235,872.0590000000001],"placement":{"car":[824.7647499999999,869.0150500000001],"label":[831.74815,887.3599220000001],"w":18.238957356436345,"h":33.0047087175391,"angle":-20.840484977363626}},"p2":{"number":"2","corners":[[783.513,859.068],[804.875,854.571],[820.741,895.071],[800.209,899.395]],"center":[802.3344999999999,877.02625],"placement":{"car":[801.1134249999999,873.9952375],"label":[808.4724369999999,892.2621395],"w":18.181168984723538,"h":33.1129997798628,"angle":-21.94255496706634}},"p3":{"number":"3","corners":[[759.508,864.121],[780.871,859.624],[797.567,899.951],[777.036,904.275]],"center":[778.7455,881.99275],"placement":{"car":[777.4621,878.9747125],"label":[785.196724,897.1634185],"w":18.115478735533557,"h":33.23310967608669,"angle":-23.037294699450204}},"p4":{"number":"4","corners":[[735.503,869.174],[756.866,864.677],[774.394,904.831],[753.863,909.155]],"center":[755.1565,886.95925],"placement":{"car":[753.8107000000001,883.9541875],"label":[761.921388,902.0646975],"w":18.04447550210385,"h":33.36557269767138,"angle":-24.12494761935565}},"p5":{"number":"5","corners":[[697.513,995.781],[704.745,1020.374],[748.485,1005.146],[741.836,981.789]],"center":[723.1447499999999,1000.7725],"placement":{"car":[719.8423875,1001.86825],"label":[739.7446254999999,995.26453],"w":21.350958137012608,"h":35.257980845244056,"angle":-108.35625258448464}},"p6":{"number":"6","corners":[[689.52,968.598],[696.751,993.19],[741.096,979.192],[734.447,955.835]],"center":[715.4535000000001,974.20375],"placement":{"car":[712.1058,975.2072875],"label":[732.2812720000001,969.1593015],"w":21.368685103741043,"h":35.41477905567115,"angle":-106.68711381877047}},"p7":{"number":"7","corners":[[834.311,1024.387],[856.074,1016.875],[871.454,1068.326],[851.13,1075.885]],"center":[853.24225,1046.36825],"placement":{"car":[854.4497125,1050.2288375],"label":[847.1727385,1026.9623635],"w":19.05533606711004,"h":40.989429197889635,"angle":162.63206476821037}},"p8":{"number":"8","corners":[[809.996,1032.781],[831.759,1025.268],[848.6,1076.826],[828.276,1084.385]],"center":[829.6577500000001,1054.815],"placement":{"car":[830.9747875,1058.683575],"label":[823.0374415000001,1035.368963],"w":19.074629530705014,"h":41.41107929762283,"angle":161.1991088254982}},"p9":{"number":"9","corners":[[785.68,1041.174],[807.443,1033.662],[825.746,1085.326],[805.422,1092.885]],"center":[806.07275,1063.2617500000001],"placement":{"car":[807.4994375,1067.1383125000002],"label":[798.9012675,1043.7755625000002],"w":19.081962199194702,"h":41.85836292379338,"angle":159.7949204097926}},"p10":{"number":"10","corners":[[681.526,941.414],[688.758,966.007],[733.708,953.238],[727.059,929.882]],"center":[707.76275,947.6352499999999],"placement":{"car":[704.3696375,948.5465374999999],"label":[724.8187955,943.0545115],"w":21.367513979933985,"h":35.60198866518543,"angle":-105.03317038013643}},"p11":{"number":"11","corners":[[673.533,914.231],[680.765,938.824],[726.32,927.285],[719.67,903.928]],"center":[700.072,921.067],"placement":{"car":[696.63355,921.886075],"label":[717.355942,916.949783],"w":21.350759480511886,"h":35.81788935103797,"angle":-103.39874899494103}}},"places":{"masajes":{"title":"Sala de masajes","center":[383,94],"w":134,"kind":"Recinto Haku","service":true,"shape":"M284.26 72.04L313.28 63.64L330.84 111.75L301.82 125.5L284.26 72.04Z"},"muelle":{"title":"Muelle","center":[65,180],"w":64,"kind":"Recinto Haku","shape":"M32.1001 167.5L80.9801 149.17L97.0201 189.65L48.1401 211.03L32.1001 167.5Z"},"recepcion":{"title":"Recepción","center":[613,870],"w":91,"kind":"Recinto Haku"},"lavanderia":{"title":"Lavandería","center":[522,959],"w":99,"kind":"Recinto Haku"},"porton":{"title":"Portón","center":[900,840],"w":64,"kind":"Recinto Haku"},"piscina":{"title":"Piscina","center":[765,1274],"w":72,"kind":"Recinto Haku","shape":"M694.03 1232.98L736.02 1223.81C739.08 1223.3 741.12 1224.83 742.13 1228.39L758.17 1299.41C759.19 1302.97 757.91 1305.26 754.35 1306.28L714.64 1315.44C711.59 1315.95 709.55 1314.68 708.54 1311.63L690.97 1238.32C690.46 1235.78 691.48 1233.99 694.03 1232.98Z"},"verde":{"title":"Áreas verdes","center":[612,1268],"w":102,"kind":"Recinto Haku"},"tonel":{"title":"Tinaja Tonel de Madera","center":[487,1391],"w":156,"kind":"Recinto Haku","service":true},"jacuzzi":{"title":"Tinaja Jacuzzi","center":[647,1499],"w":117,"kind":"Recinto Haku","service":true},"cocina":{"title":"Cocina","center":[846,1258],"w":67,"kind":"Recinto Haku","shape":"M770.39 1228.39L797.11 1225.34L809.33 1284.9L782.6 1294.06L770.39 1228.39Z"},"camarines":{"title":"Camarines y baños","center":[927,1386],"w":131,"kind":"Recinto Haku"},"galpon":{"title":"Galpón","center":[824,1168],"w":63,"kind":"Recinto Haku"},"bodega":{"title":"Bodega Sra. Naifi","center":[893,1450],"w":124,"kind":"Recinto Haku","shape":"M787.95 1421.58L823.08 1420.06L833 1463.58L803.22 1471.98L787.95 1421.58Z"},"casa":{"title":"Casa Sra. Naifi","center":[588,1073],"w":112,"kind":"Recinto Haku","shape":"M543.6 1012.3L681.05 1048.95L657.38 1146.69L520.69 1108.51L543.6 1012.3Z"},"torreon":{"title":"Torreón","center":[511,850],"w":68,"kind":"Recinto Haku"},"escalera":{"title":"Escalera al río","center":[420,1115],"w":107,"kind":"Recinto Haku"},"escalera-norte":{"title":"Escalera norte","center":[312,562],"w":104,"kind":"Recinto Haku"},"orilla":{"title":"Orilla del río","center":[306,1222],"w":92,"kind":"Recinto Haku"}}}</script>
+<script>
+const paints = {
+  dark: { border:'#766B76', accent:'#F0ADBF', pick:'#402631', sub:'#BAADB5', ink:'#F4ECEF', green:'#8ED2A6', orange:'#EFA976', yellow:'#EDC96F', body:'#9C4D65', windows:'#392A38', truck:'#4F7593', truckLine:'#A6CCEF', muted:'#776770', wheel:'#2C2530' },
+  light: { border:'#958990', accent:'#78263F', pick:'#F3E4E9', sub:'#665962', ink:'#2C2329', green:'#347B55', orange:'#B66024', yellow:'#9B761A', body:'#D399AA', windows:'#F9F0F3', truck:'#A2BCD0', truckLine:'#315E81', muted:'#A3939D', wheel:'#584551' },
+};
+
+const artShapes = {
+  'Sedán':['M7 3Q12 1 17 3Q20 5 20 11L19.5 47Q19.5 53 16.5 54H7.5Q4.5 53 4.5 47L4 11Q4 5 7 3Z','M6.8 14L17.2 14L18 20L6 20ZM6.6 38H17.4L17 44H7Z'],
+  'Hatchback':['M7 3H17Q20 4 20 11L19.5 49Q19 54 16.5 54H7Q4 53 4 48V11Q4 5 7 3Z','M6.6 14H17.4L18 20H6ZM6.4 41H17.6V47H6.4Z'],
+  'SUV':['M6 3H18Q20.6 4 20.6 9V49Q20.6 54 17.5 54H6.5Q3.4 54 3.4 49V9Q3.4 4 6 3Z','M6 12H18L18.8 19H5.2ZM6 40H18V47H6Z'],
+  'Camioneta':['M6 3H18Q20.7 4 20.7 9V52Q20.7 54 18.5 54H5.5Q3.3 54 3.3 52V9Q3.3 4 6 3Z','M6 12H18L19 18H5ZM6.3 30H17.7V51H6.3Z'],
+  'Station wagon':['M6 3H18Q20 4.5 20 10L20 50Q20 54 17 54H7Q4 54 4 50V10Q4 5 6 3Z','M6.4 13H17.6L18 19H6ZM6.3 43H17.7V49H6.3Z'],
+  'Van':['M6.5 3H17.5Q20.5 4 20.5 10V51Q20.5 54 17.5 54H6.5Q3.5 54 3.5 51V10Q3.5 4 6.5 3Z','M6 11H18L19 18H5ZM6 42H18V49H6Z'],
+  'Furgón':['M6 3H18Q20 3 20 9V18H21V53H3V18H4V9Q4 3 6 3Z','M6 9H18L19 16H5Z'],
+  'Minibús':['M6 3H18Q21 3 21 9V52Q21 54 18 54H6Q3 54 3 52V9Q3 3 6 3Z','M5.5 7H18.5L19 13H5ZM5.5 43H18.5V50H5.5Z'],
+  'Otro':['M6 3H18Q20.2 4 20.2 9V49Q20 54 17 54H7Q4 54 4 49V9Q4 4 6 3Z','M6.5 13H17.5L18 19H6ZM6.5 40H17.5V46H6.5Z'],
+};
+function vehicleArt(type,t,away){
+  const outline=away?t.sub:type==='Camioneta'?t.truckLine:t.accent;
+  const body=away?t.muted:type==='Camioneta'?t.truck:t.body;
+  if(type==='Moto')return '<rect x="10" y="1" width="4" height="14" rx="2" fill="'+t.wheel+'"/><rect x="10" y="42" width="4" height="13" rx="2" fill="'+t.wheel+'"/><path d="M8 13H16L16.7 28L14.5 45H9.5L7.3 28Z" fill="'+body+'" stroke="'+outline+'" stroke-width="1.2"/><path d="M5.5 15H18.5M9.5 29H14.5V40H9.5Z" fill="'+t.windows+'" stroke="'+outline+'" stroke-width="1.2"/>';
+  const [shell,windows]=artShapes[type];
+  const wheels=[[1.3,11],[19.2,11],[1.3,41],[19.2,41]].map(([x,y])=>'<rect x="'+x+'" y="'+y+'" width="3.5" height="8" rx="1.2" fill="'+t.wheel+'"/>').join('');
+  const details=type==='Camioneta'?'<path d="M9 32V48M12 32V48M15 32V48" fill="none" stroke="'+outline+'" stroke-width=".7" opacity=".55"/>':type==='Minibús'?'<path d="M6 19V39M18 19V39" fill="none" stroke="'+outline+'" stroke-width=".85" opacity=".7"/>':'';
+  return wheels+'<path d="'+shell+'" fill="'+body+'" stroke="'+outline+'" stroke-width="1.35" stroke-linejoin="round"/><path d="'+windows+'" fill="'+t.windows+'" stroke="'+outline+'" stroke-width=".8"/>'+details+'<path d="M7 7H9.5M14.5 7H17" fill="none" stroke="'+outline+'" stroke-width="1.35" stroke-linecap="round"/>';
+}
+'use strict';
+
+const MAP_CHANNEL = 'haiku:mapa:v1';
+const width = 1136, height = 1578;
+const svgNS = 'http://www.w3.org/2000/svg';
+const geometry = JSON.parse(document.getElementById('geometry').textContent);
+const byId = id => document.getElementById(id);
+const viewport = byId('viewport'), world = byId('world'), regions = byId('regions');
+const details = byId('details'), detailBody = byId('detail-body'), tooltip = byId('tooltip');
+const view = { x: 0, y: 0, scale: 1 };
+const state = { data: null, filter: 'all', selection: '', formOpen: false, placing: null, saving: false };
+const pending = new Map();
+let nextRequest = 0, frame = 0, measure = null, gesture = null, snapshotRequest = null;
+const pointsDown = new Map();
+
+const states = {
+  'libre-libre': ['Libre', 'free'],
+  'continua': ['Continúa', 'continuing'],
+  'libre-ingresa': ['Ingresa', 'arrival'],
+  'sale-ingresa': ['Sale e ingresa', 'arrival'],
+  'sale-libre': ['Sale', 'departure'],
+  'bloqueada': ['Bloqueada', 'blocked'],
+  'fullday': ['Full Day', 'full'],
+};
+const categories = { mantencion:'Mantención', aseo:'Aseo', peligro:'Peligro', areas_verdes:'Áreas verdes', general:'Tarea general' };
+const taskStates = { pendiente:'Pendiente', en_curso:'En curso', lista:'Lista' };
+const vehicleTypes = ['Sedán', 'Hatchback', 'SUV', 'Camioneta', 'Station wagon', 'Van', 'Furgón', 'Minibús', 'Moto', 'Otro'];
+const markerGlyphs = {
+  persona:'M0 -4a2.4 2.4 0 1 0 0 -4.8a2.4 2.4 0 0 0 0 4.8ZM-5 6V4a5 5 0 0 1 10 0v2Z',
+  mantencion:'M-2.6 -7l2.2 2.2l3.4-.8l.6-3.3a5 5 0 0 1-3 8.4l-5 5a1.8 1.8 0 0 1-2.5-2.5l5-5A5 5 0 0 1-2.6 -7Z',
+  aseo:'M-6 1h12l-2 6h-8ZM0 1v-9',
+  peligro:'M0 -8l8 14H-8Z M0 -3v4 M0 4h.01',
+  areas_verdes:'M-6 4c0-7 9-10 12-10c0 8-5 11-10 10M-6 7l8-8',
+  general:'M-5 -8h10v15h-10Z M-2 -3h4 M-2 1h4',
+};
+const markerColors = { persona:'#6da2be', mantencion:'#d4b16d', aseo:'#a6c6a5', peligro:'#e4957f', areas_verdes:'#9db686', general:'#c4a5be' };
+const empty = () => ({ cabanas:[], personas:[], elementos:[], agenda:[], catalogo:[], permisos:{} });
+const data = () => state.data || empty();
+const list = value => Array.isArray(value) ? value : [];
+const item = id => data().elementos.find(x => x.id === id);
+const bayRecord = n => data().elementos.find(x => x.tipo === 'vehiculo' && x.puesto === n);
+const cabinRow = n => data().cabanas.find(row => row.numero === n);
+const personName = e => data().personas.find(p => p.id === e.datos.persona_id && p.reserva_id === e.reserva_id)?.nombre || 'Huésped';
+const zones = geometry.places;
+const simpleDate = new Intl.DateTimeFormat('es-CL', { day:'numeric', month:'short', timeZone:'UTC' });
+const chileTime = new Intl.DateTimeFormat('es-CL', { hour:'2-digit', minute:'2-digit', hourCycle:'h23', timeZone:'America/Santiago' });
+const formatTime = v => v && Number.isFinite(Date.parse(v)) ? chileTime.format(new Date(v)) : '';
+const useTheme = () => document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light';
+
+function newId() {
+  if (crypto.randomUUID) return crypto.randomUUID();
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  bytes[6] = (bytes[6] & 15) | 64;
+  bytes[8] = (bytes[8] & 63) | 128;
+  const hex = Array.from(bytes, x => x.toString(16).padStart(2, '0')).join('');
+  return [hex.slice(0, 8), hex.slice(8, 12), hex.slice(12, 16), hex.slice(16, 20), hex.slice(20)].join('-');
+}
+function send(payload) {
+  const message = { channel:MAP_CHANNEL, ...payload };
+  if (window.ReactNativeWebView) window.ReactNativeWebView.postMessage(JSON.stringify(message));
+  else if (window.parent !== window) window.parent.postMessage(message, '*');
+}
+function request(method, args = {}) {
+  const id = ++nextRequest;
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      pending.delete(id);
+      reject(new Error('La consulta tardó demasiado. Vuelve a intentar.'));
+    }, 23000);
+    pending.set(id, { resolve, reject, timeout });
+    send({ type:'request', id, method, args });
+  });
+}
+function receive(message) {
+  if (message?.channel !== MAP_CHANNEL) return;
+  if (message.type === 'init' || message.type === 'theme') {
+    const theme = message.theme === 'dark' ? 'dark' : 'light';
+    if (theme !== useTheme()) applyTheme(theme);
+    if (message.type === 'init') void refresh();
+  } else if (message.type === 'refresh') {
+    if (!state.formOpen && !state.placing) void refresh();
+  } else if (message.type === 'reply') {
+    const wait = pending.get(message.id);
+    if (!wait) return;
+    pending.delete(message.id);
+    clearTimeout(wait.timeout);
+    if (message.error) {
+      const error = new Error(message.error.message || 'No se pudo completar el cambio.');
+      error.code = message.error.code;
+      wait.reject(error);
+    } else wait.resolve(message.data);
+  }
+}
+window.HaikuMap = { receive };
+window.addEventListener('message', e => { if (e.source === window.parent) receive(e.data); });
+if (window.parent !== window) window.addEventListener('blur', () => send({ type:'focus-lost' }));
+function status(value) {
+  byId('status').textContent = value;
+  byId('status').hidden = !value;
+}
+async function refresh(force = false) {
+  if (snapshotRequest) {
+    await snapshotRequest;
+    if (force === true) return refresh();
+    return;
+  }
+  snapshotRequest = fetchSnapshot();
+  try { await snapshotRequest; }
+  finally { snapshotRequest = null; }
+}
+async function fetchSnapshot() {
+  byId('reload').disabled = true;
+  if (!state.data) status('Cargando la operación de hoy…');
+  try {
+    const fresh = await request('snapshot');
+    if (!fresh || !/^\d{4}-\d{2}-\d{2}$/.test(fresh.fecha) || !Array.isArray(fresh.cabanas) || !Array.isArray(fresh.elementos)) {
+      throw new Error('El mapa recibió una respuesta incompleta.');
+    }
+    state.data = fresh;
+    byId('day').dateTime = fresh.fecha;
+    byId('day').textContent = simpleDate.format(new Date(fresh.fecha + 'T12:00:00Z'));
+    byId('add').disabled = !['vehiculo', 'persona', 'tarea', 'lavanderia'].some(k => fresh.permisos?.[k]);
+    status('');
+    draw();
+    if (state.selection && !state.formOpen && !state.placing && !details.querySelector('.guest-notes[open]')) {
+      showDetail(state.selection, false);
+    }
+  } catch (error) {
+    const forbidden = error.code === '42501' || error.code === 'UNAUTHORIZED';
+    if (forbidden) {
+      state.data = null;
+      byId('add').disabled = true;
+      closeDetail();
+      draw();
+    }
+    const reason = error.code === 'PGRST202' ? 'El mapa necesita la actualización de datos de Haku.' : error.message;
+    status(state.data ? 'Los datos mostrados corresponden a la última actualización.' : reason);
+  } finally {
+    byId('reload').disabled = false;
+  }
+}
+
+function createSvg(tag, attrs = {}, label) {
+  const node = document.createElementNS(svgNS, tag);
+  for (const [key, value] of Object.entries(attrs)) node.setAttribute(key, value);
+  if (label !== undefined) node.textContent = label;
+  return node;
+}
+function textAt(value, point, size) {
+  return createSvg('text', { x:point[0], y:point[1], 'font-size':size }, value);
+}
+function poly(corners) { return corners.map(p => p.join(',')).join(' '); }
+function region(id, label) {
+  return createSvg('g', {
+    class:'region', 'data-ref':id, role:'button', tabindex:0, 'aria-label':label,
+    'aria-current':String(state.selection === id)
+  });
+}
+function stay(row) {
+  if (!row) return null;
+  const kind = { continua:'continua', fullday:'fullday', 'libre-ingresa':'ingreso', 'sale-ingresa':'ingreso', 'sale-libre':'salida' }[row.estado_operativo];
+  if (!kind || !row[kind + '_reserva_id']) return null;
+  return { reserve:row[kind + '_reserva_id'], stay:row[kind + '_estadia_id'], title:row[kind + '_titular'], number:row.numero };
+}
+function cabinState(row) {
+  if (!row) return ['Sin datos', 'unknown'];
+  if (row.estado_operativo === 'sale-libre' && row.salida_checkout_en) return ['Check-out', 'checkout'];
+  if (row.ingreso_checkin_en && ['libre-ingresa','sale-ingresa'].includes(row.estado_operativo)) return ['Check-in', 'continuing'];
+  return states[row.estado_operativo] || ['Sin datos', 'unknown'];
+}
+function cleaning(row) {
+  if (row?.aseo_estado === 'completado' || row?.aseo_estado === 'verificado' || row?.aseo_ultimo_listo) return ['Lista', 'ready'];
+  if (row?.aseo_estado === 'en_curso' || row?.aseo_estado === 'en_proceso') return ['En proceso', 'working'];
+  if (['pendiente', 'asignado', 'solicitado'].includes(row?.aseo_estado)) return ['Pendiente', 'waiting'];
+  return [row?.aseo_estado === 'no_requiere' ? 'No requiere' : 'Sin registro', ''];
+}
+function applyTheme(theme) {
+  document.documentElement.dataset.theme = theme;
+  byId('base').replaceChildren(byId('art-' + theme).content.cloneNode(true));
+  draw();
+}
+function draw() {
+  const definitions = createSvg('defs');
+  const light = createSvg('radialGradient', { id:'cabin-light', cx:'.55', cy:'.43', r:'.64' });
+  light.append(createSvg('stop', { offset:'0%', 'stop-color':'#ffe3a3', 'stop-opacity':.20 }),
+    createSvg('stop', { offset:'100%', 'stop-color':'#ffe3a3', 'stop-opacity':0 }));
+  definitions.append(light);
+  const nodes = [definitions, createSvg('text', { x:95, y:942, class:'river' }, 'Río Maipo')];
+  const filter = state.filter;
+  for (const [ref, c] of Object.entries(geometry.cabins)) {
+    const row = cabinRow(c.number);
+    const [title, fill] = cabinState(row);
+    const enabled = filter === 'all' || filter === 'cabins';
+    const g = enabled ? region(ref, c.title + ' · ' + title) : createSvg('g', { class:'region', 'aria-hidden':'true', 'pointer-events':'none' });
+    const shape = createSvg('polygon', { points:poly(c.corners), class:'footprint', fill:'var(--' + fill + ')' });
+    if (!enabled) shape.style.pointerEvents = 'none';
+    g.append(shape);
+    if (row?.estado_operativo === 'continua' || row?.ingreso_checkin_en) {
+      g.append(createSvg('polygon', { points:poly(c.corners), fill:'url(#cabin-light)', 'pointer-events':'none' }));
+    }
+    if (enabled) {
+      const [, tone] = cleaning(row);
+      if (tone) g.append(
+        createSvg('circle', { cx:c.dot[0], cy:c.dot[1], r:9, opacity:.24, fill:'var(--' + tone + ')', 'pointer-events':'none' }),
+        createSvg('circle', { cx:c.dot[0], cy:c.dot[1], r:4.5, fill:'var(--' + tone + ')', 'pointer-events':'none' })
+      );
+      g.append(textAt(c.title, c.center, 16));
+    }
+    nodes.push(g);
+  }
+  if (filter === 'all' || filter === 'parking') {
+    for (const [ref, p] of Object.entries(geometry.parking)) {
+      const number = Number(p.number), car = bayRecord(number);
+      const g = region(ref, 'Puesto ' + number + (car ? ' · ' + car.datos.vehiculo : ''));
+      g.append(createSvg('polygon', { points:poly(p.corners), class:'hit' }));
+      if (car) drawCar(g, p, car);
+      g.append(textAt(String(number), car ? p.placement.label : p.center, car ? 10 : 13));
+      nodes.push(g);
+    }
+  }
+  for (const [ref, zone] of Object.entries(zones)) {
+    if (filter !== 'all' && !(filter === 'services' && zone.service)) continue;
+    const g = region(ref, zone.title), [x, y] = zone.center;
+    if (zone.shape) g.append(createSvg('path', { d:zone.shape, class:'hit' }));
+    if (zone.corners) g.append(createSvg('polygon', { points:poly(zone.corners), class:'hit' }));
+    g.append(createSvg('rect', { x:x-zone.w/2, y:y-12, width:zone.w, height:24, rx:6, class:'zone-tag' }));
+    g.append(textAt(zone.title, zone.center, 12.5));
+    nodes.push(g);
+  }
+  for (const element of data().elementos) {
+    if (element.tipo !== 'tarea' && element.tipo !== 'persona') continue;
+    if (filter !== 'all' && filter !== (element.tipo === 'tarea' ? 'tasks' : 'people')) continue;
+    const role = element.tipo === 'persona' ? 'persona' : element.datos.categoria;
+    const title = role === 'persona' ? personName(element) : categories[role] || 'Tarea';
+    const g = region('m-' + element.id, title);
+    g.setAttribute('transform', 'translate(' + element.x + ' ' + element.y + ')');
+    g.append(createSvg('circle', { r:18, class:'hit' }),
+      createSvg('circle', { r:13, fill:'var(--paper)', stroke:markerColors[role], 'stroke-width':2, 'pointer-events':'none', opacity:element.datos.estado === 'lista' ? .55 : 1 }),
+      createSvg('path', { d:markerGlyphs[role], fill:'none', stroke:markerColors[role], 'stroke-width':1.75, 'stroke-linejoin':'round', 'stroke-linecap':'round', 'pointer-events':'none' }));
+    nodes.push(g);
+  }
+  regions.replaceChildren(...nodes);
+}
+function drawCar(g, bay, row) {
+  const p = bay.placement, outside = row.datos.estacionado !== true;
+  const drawing = createSvg('g', {
+    transform:'translate(' + p.car.join(' ') + ') rotate(' + p.angle + ') scale(' + p.w / 24 + ' ' + p.h / 56 + ') translate(-12 -28)',
+    opacity:outside ? .42 : 1, 'pointer-events':'none',
+  });
+  const vehicle = vehicleTypes.includes(row.datos.vehiculo) ? row.datos.vehiculo : 'Otro';
+  // The approved vector icon library is static. Guest-entered values never form SVG markup.
+  drawing.innerHTML = vehicleArt(vehicle, paints[useTheme()], outside);
+  g.append(drawing);
+}
+function markSelection() {
+  for (const g of regions.querySelectorAll('[data-ref]')) g.setAttribute('aria-current', String(g.dataset.ref === state.selection));
+}
+
+function el(tag, text, cls) {
+  const node = document.createElement(tag);
+  if (text) node.textContent = text;
+  if (cls) node.className = cls;
+  return node;
+}
+function button(text, fn, cls) {
+  const node = el('button', text, cls);
+  node.type = 'button';
+  node.addEventListener('click', fn);
+  return node;
+}
+function lines(pairs) {
+  const result = el('dl', '', 'rows');
+  for (const [label, value] of pairs) {
+    if (!value) continue;
+    const row = el('div');
+    row.append(el('dt', label), el('dd', value));
+    result.append(row);
+  }
+  return result;
+}
+function actions(...buttons) {
+  const row = el('div', '', 'actions');
+  row.append(...buttons.filter(Boolean));
+  if (row.childElementCount) detailBody.append(row);
+}
+function showPanel(title, caption = '', focus = true) {
+  byId('detail-title').textContent = title;
+  byId('detail-caption').textContent = caption;
+  byId('detail-caption').hidden = !caption;
+  detailBody.replaceChildren();
+  details.hidden = false;
+  details.scrollTop = 0;
+  if (focus) byId('detail-title').focus({ preventScroll:true });
+}
+function closeDetail() {
+  details.hidden = true;
+  detailBody.replaceChildren();
+  state.formOpen = false;
+  state.selection = '';
+  markSelection();
+}
+function showDetail(id, focus = true) {
+  state.selection = id;
+  state.formOpen = false;
+  markSelection();
+  if (id === 'c11' || Object.hasOwn(geometry.cabins, id)) return showCabin(Number(id.slice(1)), focus);
+  if (Object.hasOwn(geometry.parking, id)) return showBay(Number(id.slice(1)), focus);
+  if (Object.hasOwn(zones, id)) return showZone(id, focus);
+  if (id.startsWith('m-')) {
+    const element = item(id.slice(2));
+    if (element) return showMarker(element, focus);
+  }
+  closeDetail();
+}
+function cabinGuest(ref) {
+  return data().personas.find(p => p.reserva_id === ref?.reserve && p.rol === 'titular');
+}
+function openGuest(person, reserve, stayId) {
+  send({ type:'navigate', method:'guest', args:{ id:person.id, reserva:reserve, estadia:stayId } });
+}
+function notesPanel(person, reserve) {
+  const section = el('details', '', 'guest-notes');
+  const result = el('div');
+  section.append(el('summary', 'Notas y preferencias'), result);
+  section.addEventListener('toggle', async () => {
+    if (!section.open) return;
+    result.replaceChildren(el('p', 'Cargando…', 'subtle'));
+    try {
+      const entries = list(await request('profile', { p_id:person.id, p_reserva:reserve }));
+      if (!entries.length) { result.replaceChildren(el('p','Sin registros para mostrar.','subtle')); return; }
+      const lines = el('ul', '', 'compact-list');
+      for (const entry of entries) lines.append(el('li',
+        ({ nota:'Nota', preferencia:'Preferencia', actividad:'Actividad' }[entry.tipo] || 'Registro') + ' · ' + entry.texto));
+      result.replaceChildren(lines);
+    } catch (error) { result.replaceChildren(el('p', error.message, 'form-error')); }
+  });
+  detailBody.append(section);
+}
+function showCabin(n, focus) {
+  const row = cabinRow(n), ref = stay(row);
+  const [reservation] = cabinState(row), [clean] = cleaning(row), guest = cabinGuest(ref);
+  showPanel('CAB ' + n, row?.nombre || '', focus);
+  if (n === 11) detailBody.append(el('p', 'Ubicación pendiente en el plano.', 'subtle'));
+  detailBody.append(lines([
+    ['Reserva', reservation], ['Huésped', ref?.title || guest?.nombre], ['Aseo', clean],
+    ['Asignada a', row?.aseo_asignado_nombre], ['Inicio del aseo', formatTime(row?.aseo_inicio)],
+    ['Aseo listo', formatTime(row?.aseo_fin || row?.aseo_ultimo_listo)], ['Observación', row?.aseo_nota],
+  ]));
+  if (row?.salida_reserva_id && row?.ingreso_reserva_id) {
+    detailBody.append(el('p', (row.salida_checkout_en ? 'Check-out' : 'Sale') + ' · ' + (row.salida_titular || 'Reserva anterior'), 'subtle'));
+  }
+  actions(
+    row && button('Gestionar aseo', () => send({ type:'navigate', method:'cleaning', args:{ number:n, fecha:data().fecha } })),
+    guest && button('Ver huésped', () => openGuest(guest, ref.reserve, ref.stay)),
+    guest && data().permisos.huesped && button('Nota o preferencia', () => guestForm(guest, ref.reserve, 'c' + n), 'primary')
+  );
+  if (guest) notesPanel(guest, ref.reserve);
+}
+function showBay(number, focus) {
+  const car = bayRecord(number), values = car?.datos || {};
+  showPanel('Puesto ' + number, car ? values.estacionado ? 'Estacionado' : 'Fuera del recinto' : 'Disponible', focus);
+  if (car) {
+    const guest = cabinGuest({ reserve:car.reserva_id });
+    detailBody.append(lines([
+      ['Vehículo', values.vehiculo], ['Patente', values.patente], ['Modelo', values.modelo], ['Color', values.color],
+      ['Huésped', guest?.nombre], ['Llegada', formatTime(values.llegada)], ['Última entrada', formatTime(values.ultima_entrada)],
+      ['Última salida', formatTime(values.ultima_salida)], ['Nota', values.nota]
+    ]));
+    actions(guest && button('Ver huésped', () => openGuest(guest, car.reserva_id)));
+    if (data().permisos.vehiculo) actions(
+      button(values.estacionado ? 'Marcar salida' : 'Marcar entrada',
+        () => confirmChange(car, values.estacionado ? 'salida' : 'entrada', 'p' + number,
+          values.estacionado ? 'Marcar salida ahora' : 'Marcar entrada ahora'), 'primary'),
+      button('Editar', () => vehicleForm(number, car)),
+      button('Quitar', () => confirmChange(car, 'retirar', 'p' + number, 'Quitar del puesto'))
+    );
+  } else if (data().permisos.vehiculo) actions(button('Registrar vehículo', () => vehicleForm(number), 'primary'));
+}
+function serviceGroup(code) {
+  if (code === 'tinajaTonel') return 'tonel';
+  if (code === 'tinajaJacuzzi') return 'jacuzzi';
+  return /^masaje/i.test(code) ? 'masajes' : '';
+}
+function showZone(id, focus) {
+  const zone = zones[id];
+  showPanel(zone.title, zone.service ? 'Agenda de hoy' : zone.kind, focus);
+  if (zone.service) {
+    const entries = data().agenda.filter(entry => serviceGroup(entry.codigo) === id);
+    if (entries.length) {
+      const rows = el('ul', '', 'compact-list');
+      for (const entry of entries) rows.append(el('li', [entry.hora?.slice(0, 5), entry.nombre, entry.numero && 'CAB ' + entry.numero].filter(Boolean).join(' · ')));
+      detailBody.append(rows);
+    } else detailBody.append(el('p', data().permisos.agenda ? 'Sin horas agendadas.' : 'Agenda no disponible para tu sesión.', 'subtle'));
+    if (data().permisos.servicio) actions(button('Reservar hora', () => serviceForm(id), 'primary'));
+    return;
+  }
+  if (id === 'lavanderia') {
+    const entry = data().elementos.find(e => e.tipo === 'lavanderia');
+    const values = entry?.datos || {};
+    const general = data().lavanderia;
+    detailBody.append(lines([
+      ['A cargo', values.encargado || general?.encargado], ['Canastas listas', values.canastas],
+      ['Lencería lista', values.lenceria], ['Lavando', values.lavando], ['Faltantes', values.faltantes], ['Nota de turno', general?.nota]
+    ]));
+    if (data().permisos.lavanderia) actions(button('Editar lavandería', () => laundryForm(entry), 'primary'));
+    return;
+  }
+  const people = data().elementos.filter(e => e.tipo === 'persona' && Math.hypot(e.x-zone.center[0], e.y-zone.center[1]) < (id === 'verde' ? 115 : 62));
+  if (people.length) actions(...people.map(e => button(personName(e), () => showDetail('m-' + e.id))));
+  if (data().permisos.persona && ['piscina','verde','muelle','orilla'].includes(id)) actions(button('Ubicar huésped', () => markerForm('persona', { x:zone.center[0], y:zone.center[1] })));
+  if (data().permisos.tarea) actions(button('Anotar tarea', () => placeMarker('tarea')));
+}
+function showMarker(entry, focus) {
+  if (entry.tipo === 'persona') {
+    showPanel(personName(entry), 'Ubicación registrada', focus);
+    if (data().permisos.huesped) actions(button('Nota o preferencia', () => guestForm({ id:entry.datos.persona_id, nombre:personName(entry) }, entry.reserva_id, 'm-' + entry.id), 'primary'));
+    actions(button('Ver huésped', () => openGuest({ id:entry.datos.persona_id }, entry.reserva_id)));
+  } else {
+    showPanel(categories[entry.datos.categoria] || 'Tarea', taskStates[entry.datos.estado] || '', focus);
+    detailBody.append(el('p', entry.datos.nota));
+    detailBody.append(lines([['Responsable', entry.datos.responsable]]));
+  }
+  if (data().permisos[entry.tipo]) actions(
+    entry.tipo === 'tarea' && button('Editar', () => markerForm(entry.tipo, entry, entry)),
+    button('Mover', () => placeMarker(entry.tipo, entry)),
+    button('Quitar', () => confirmChange(entry, 'retirar', 'm-' + entry.id, 'Quitar del mapa'))
+  );
+}
+
+function showAdd() {
+  if (state.saving) return;
+  state.formOpen = true;
+  showPanel('Agregar al mapa');
+  const allowed = data().permisos;
+  actions(
+    allowed.vehiculo && button('Vehículo', chooseBay),
+    allowed.persona && button('Ubicar huésped', () => placeMarker('persona')),
+    allowed.tarea && button('Tarea', () => placeMarker('tarea')),
+    allowed.lavanderia && button('Lavandería', () => showDetail('lavanderia'))
+  );
+}
+function chooseBay() {
+  showPanel('Elegir puesto', 'Vehículos');
+  const numbers = Object.keys(geometry.parking).map(ref => Number(ref.slice(1))).sort((a,b) => a-b);
+  const available = numbers.filter(n => !bayRecord(n));
+  if (!available.length) detailBody.append(el('p', 'Todos los puestos tienen un vehículo registrado.'));
+  else actions(...available.map(n => button(String(n), () => vehicleForm(n))));
+}
+function selectField(name, label, values, selected = '', required = false) {
+  const control = el('select');
+  control.name = name;
+  control.required = required;
+  for (const entry of values) {
+    const [id, title] = Array.isArray(entry) ? entry : [entry, entry];
+    const option = el('option', title);
+    option.value = id;
+    control.append(option);
+  }
+  control.value = selected;
+  return field(label, control);
+}
+function field(label, control) {
+  const wrapper = el('label', label);
+  control.setAttribute('aria-label', label);
+  wrapper.append(control);
+  return wrapper;
+}
+function input(name, title, value = '', options = {}) {
+  const control = el(options.multiline ? 'textarea' : 'input');
+  if (!options.multiline) control.type = options.type || 'text';
+  control.name = name;
+  control.value = value ?? '';
+  if (options.limit) control.maxLength = options.limit;
+  if (options.min !== undefined) control.min = options.min;
+  if (options.max !== undefined) control.max = options.max;
+  control.required = options.required === true;
+  return field(title, control);
+}
+function form(title, caption, fields, onSave, back, submitLabel = 'Guardar') {
+  state.formOpen = true;
+  showPanel(title, caption);
+  const box = el('form');
+  const feedback = el('p', '', 'form-error');
+  feedback.setAttribute('role', 'alert');
+  feedback.hidden = true;
+  const submit = el('button', submitLabel, 'primary');
+  submit.type = 'submit';
+  const controls = el('div', '', 'actions');
+  const cancel = button('Volver', () => back ? showDetail(back) : closeDetail());
+  controls.append(cancel, submit);
+  box.append(...fields, feedback, controls);
+  box.addEventListener('submit', async event => {
+    event.preventDefault();
+    if (submit.disabled) return;
+    const values = Object.fromEntries(new FormData(box));
+    state.saving = true;
+    submit.disabled = true;
+    cancel.disabled = true;
+    byId('close').disabled = true;
+    submit.textContent = 'Guardando…';
+    feedback.hidden = true;
+    try {
+      const next = await onSave(values);
+      state.formOpen = false;
+      state.selection = '';
+      await refresh(true);
+      if (next) showDetail(next);
+      else closeDetail();
+    } catch (error) {
+      feedback.textContent = error.message;
+      feedback.hidden = false;
+    } finally {
+      state.saving = false;
+      submit.disabled = false;
+      cancel.disabled = false;
+      byId('close').disabled = false;
+      submit.textContent = submitLabel;
+    }
+  });
+  detailBody.append(box);
+}
+function changes(type, entry) {
+  const id = entry?.id || newId();
+  let last = null;
+  return {
+    id,
+    run(action, values) {
+      const key = JSON.stringify([action, values]);
+      if (last?.key !== key) last = { key, operation:newId() };
+      return request('save', {
+        p_id:id, p_tipo:type, p_revision:entry?.revision || 0, p_accion:action,
+        p_datos:values, p_operacion:last.operation,
+      });
+    },
+  };
+}
+function confirmChange(entry, action, back, title) {
+  const change = changes(entry.tipo, entry);
+  form(title, '', [el('p', entry.tipo === 'vehiculo' ? entry.datos.patente : 'Confirma el cambio del marcador.')],
+    async () => { await change.run(action, {}); return back; }, back, 'Confirmar');
+}
+function vehicleForm(number, entry) {
+  const values = entry?.datos || {};
+  const change = changes('vehiculo', entry);
+  const slots = Object.keys(geometry.parking).map(k => Number(k.slice(1))).sort((a,b) => a-b)
+    .filter(n => n === number || !bayRecord(n)).map(n => [String(n), 'Puesto ' + n]);
+  const linked = new Map(data().personas.filter(p => p.rol === 'titular').map(p => [p.reserva_id, p.nombre]));
+  if (entry?.reserva_id && !linked.has(entry.reserva_id)) linked.set(entry.reserva_id, 'Estadía vinculada');
+  form(entry ? 'Editar vehículo' : 'Registrar vehículo', 'Puesto ' + number, [
+    selectField('puesto', 'Puesto', slots, String(number), true),
+    selectField('vehiculo', 'Tipo de vehículo', vehicleTypes, values.vehiculo || 'Sedán', true),
+    input('patente','Patente',values.patente,{limit:14,required:true}),
+    input('modelo','Modelo',values.modelo,{limit:80}),
+    input('color','Color',values.color,{limit:45}),
+    selectField('reserva_id', 'Estadía', [['','Sin vínculo'], ...linked], entry?.reserva_id || ''),
+    ...(!entry ? [selectField('estacionado','Presencia',[['true','Estacionado'],['false','Fuera del recinto']],'true')] : []),
+    input('hora','Hora de llegada (Chile)','',{type:'time'}),
+    input('nota','Nota',values.nota,{multiline:true,limit:500}),
+  ], async ({ hora, ...fields }) => {
+    if (hora) fields.llegada = data().fecha + 'T' + hora;
+    await change.run('guardar', fields);
+    return 'p' + fields.puesto;
+  }, 'p' + number);
+}
+function getTargets() {
+  const targets = [];
+  for (const row of data().cabanas) {
+    for (const flag of ['continua', 'ingreso', 'fullday', 'salida']) {
+      if (flag === 'salida' && row.salida_checkout_en) continue;
+      const reserve = row[flag + '_reserva_id'], id = row[flag + '_estadia_id'];
+      if (!reserve || !id || targets.some(t => t.id === id)) continue;
+      targets.push({ reserve, id, row, flag, title:'CAB ' + row.numero + ' · ' + (row[flag + '_titular'] || 'Reserva') });
+    }
+  }
+  return targets;
+}
+function markerForm(kind, at, entry) {
+  const change = changes(kind, entry), d = entry?.datos || {};
+  const guests = data().personas.filter(p => p.hospedado === true);
+  const personKey = d.persona_id ? d.persona_id + '/' + entry.reserva_id : '';
+  const fields = kind === 'persona'
+    ? [selectField('persona', 'Huésped', [['','Selecciona un huésped'], ...guests.map(p => [p.id + '/' + p.reserva_id, p.nombre])], personKey, true)]
+    : [
+      selectField('categoria', 'Categoría', Object.entries(categories), d.categoria || 'mantencion', true),
+      selectField('estado', 'Estado', Object.entries(taskStates), d.estado || 'pendiente', true),
+      input('responsable','Responsable',d.responsable,{limit:80}),
+      input('nota','Nota de la tarea',d.nota,{multiline:true,limit:500,required:true}),
+    ];
+  form(kind === 'persona' ? 'Ubicar huésped' : entry ? 'Editar tarea' : 'Anotar tarea', '', fields, async values => {
+    if (kind === 'persona') {
+      const [id, reservation] = values.persona.split('/');
+      values = { persona_id:id, reserva_id:reservation };
+    }
+    await change.run('guardar', { ...values, x:at.x, y:at.y });
+    return 'm-' + change.id;
+  }, entry ? 'm-' + entry.id : '');
+}
+function laundryForm(entry) {
+  const change = changes('lavanderia', entry), values = entry?.datos || {};
+  const labels = [['encargado','A cargo'], ['canastas','Canastas listas'], ['lenceria','Lencería lista'], ['lavando','En lavado'], ['faltantes','Faltantes']];
+  form('Lavandería', 'Operación de hoy', labels.map(([id, label]) =>
+    input(id, label, values[id] || (id === 'encargado' ? data().lavanderia?.encargado : ''), {limit:500,multiline:id !== 'encargado'})),
+    async fields => { await change.run('guardar', fields); return 'lavanderia'; }, 'lavanderia');
+}
+function guestForm(person, reserve, back) {
+  const record = newId();
+  form('Nota del huésped', person.nombre, [
+    selectField('categoria','Tipo',[['nota','Nota de esta estadía'],['preferencia','Preferencia'],['actividad','Actividad']],'nota'),
+    input('texto','Detalle','',{multiline:true,limit:1000,required:true}),
+  ], async fields => {
+    await request('guest', { p_id:person.id, p_reserva:reserve, p_accion:'registro',
+      p_datos:{ ...fields, id:record, fuente:'Observación', solo_estadia:fields.categoria === 'nota' } });
+    return back;
+  }, back);
+}
+function serviceForm(zone) {
+  const catalog = data().catalogo.filter(c => serviceGroup(c.codigo) === zone);
+  const targets = getTargets();
+  if (!catalog.length || !targets.length) {
+    detailBody.append(el('p', 'Debe haber una estadía de hoy y un servicio activo para reservar.', 'subtle'));
+    return;
+  }
+  form('Reservar hora', zones[zone].title, [
+    selectField('estadia', 'Estadía', [['','Selecciona una estadía'], ...targets.map(t => [t.id,t.title])],'',true),
+    selectField('codigo','Servicio', catalog.map(c => [c.codigo, c.nombre + (c.minutos ? ' · ' + c.minutos + ' min' : '')]), catalog[0].codigo, true),
+    input('hora','Hora','',{type:'time',required:true}),
+    input('personas','Personas','1',{type:'number',min:'1',max:'99',required:true}),
+    input('observaciones','Observaciones','',{multiline:true,limit:300}),
+    el('p', 'La hora se agrega con el cobro normal del catálogo.', 'form-note'),
+  ], async fields => {
+    const target = targets.find(t => t.id === fields.estadia);
+    if (!target) throw new Error('Selecciona una estadía.');
+    await request('service', {
+      p_reserva_id:target.reserve, p_estadia_id:target.id, p_codigo_servicio:fields.codigo,
+      p_fecha_servicio:data().fecha, p_hora:fields.hora, p_cantidad:1, p_personas:Number(fields.personas),
+      p_tipo_cobro:'normal', p_observaciones:fields.observaciones || null,
+    });
+    return zone;
+  }, zone, 'Agendar');
+}
+function placeMarker(kind, entry) {
+  closeDetail();
+  state.placing = { kind, entry };
+  byId('placement').hidden = false;
+  viewport.classList.add('placing');
+}
+function cancelPlacement() {
+  state.placing = null;
+  byId('placement').hidden = true;
+  viewport.classList.remove('placing');
+}
+function pickAt(position, reference) {
+  if (state.saving) return;
+  if (!state.placing) { if (reference) showDetail(reference); return; }
+  const x = (position.x-view.x)/view.scale, y = (position.y-view.y)/view.scale;
+  if (x < 0 || x > width || y < 0 || y > height) return;
+  const { kind, entry } = state.placing;
+  cancelPlacement();
+  markerForm(kind, { x:+x.toFixed(2), y:+y.toFixed(2) }, entry);
+}
+
+const clamp = (n, min, max) => Math.max(min, Math.min(max, n));
+function renderCamera() {
+  if (frame) return;
+  frame = requestAnimationFrame(() => {
+    frame = 0;
+    world.style.transform = 'translate3d(' + view.x + 'px,' + view.y + 'px,0) scale(' + view.scale + ')';
+    viewport.dataset.scale = view.scale.toFixed(5);
+    viewport.dataset.x = view.x.toFixed(3);
+    viewport.dataset.y = view.y.toFixed(3);
+  });
+}
+function fitScale() { return Math.min((measure[0]-18)/width, (measure[1]-18)/height); }
+function boundsCamera() {
+  for (const [i, axis] of ['x','y'].entries()) {
+    const space = measure[i], extent = [width,height][i]*view.scale, margin = Math.min(120, space*.24);
+    view[axis] = extent > space ? clamp(view[axis], space-extent-margin, margin)
+      : clamp(view[axis], (space-extent)/2-margin, (space-extent)/2+margin);
+  }
+  renderCamera();
+}
+function center(at, scale) {
+  if (!measure) return;
+  view.scale = scale;
+  view.x = measure[0]/2-at[0]*scale;
+  view.y = measure[1]/2-at[1]*scale;
+  boundsCamera();
+}
+function zoomAt(scale, point) {
+  const factor = clamp(scale, Math.max(.12,fitScale()*.64),3.2) / view.scale;
+  view.scale *= factor;
+  view.x = point.x-(point.x-view.x)*factor;
+  view.y = point.y-(point.y-view.y)*factor;
+  boundsCamera();
+}
+function mapPoint(e) {
+  const r = viewport.getBoundingClientRect();
+  return { x:e.clientX-r.left, y:e.clientY-r.top };
+}
+function pan(id, p, ref, moved = false) { gesture = { type:'pan', id, p, x:view.x, y:view.y, ref, moved }; }
+function pinch() {
+  const [[aid,a],[bid,b]] = pointsDown;
+  const x = (a.x+b.x)/2, y = (a.y+b.y)/2;
+  gesture = { type:'pinch', aid, bid, scale:view.scale, span:Math.max(1,Math.hypot(a.x-b.x,a.y-b.y)),
+    worldX:(x-view.x)/view.scale, worldY:(y-view.y)/view.scale };
+  viewport.dataset.dragging = 'true';
+  tooltip.hidden = true;
+}
+function findRef(target) { return target.closest?.('[data-ref]')?.dataset.ref; }
+function tooltipFor(id) {
+  if (id?.startsWith('c') && Object.hasOwn(geometry.cabins,id)) {
+    const row = cabinRow(Number(id.slice(1)));
+    return ['CAB '+row?.numero, cabinState(row)[0], 'Aseo ' + cleaning(row)[0].toLowerCase()].map((v,i) => i===0 && !row ? geometry.cabins[id].title : v).join(' · ');
+  }
+  if (Object.hasOwn(geometry.parking,id)) {
+    const car = bayRecord(Number(id.slice(1)));
+    return 'Puesto ' + id.slice(1) + ' · ' + (car ? car.datos.vehiculo + (car.datos.estacionado ? ' estacionado' : ' fuera') : 'Disponible');
+  }
+  if (Object.hasOwn(zones,id)) {
+    const count = zones[id].service && data().agenda.filter(s => serviceGroup(s.codigo) === id).length;
+    return zones[id].title + (count ? ' · ' + count + ' en agenda' : '');
+  }
+  if (id?.startsWith('m-')) {
+    const e = item(id.slice(2));
+    if (e) return e.tipo === 'persona' ? personName(e) : (categories[e.datos.categoria] || 'Tarea') + ' · ' + (taskStates[e.datos.estado] || '');
+  }
+  return '';
+}
+viewport.addEventListener('pointerdown', e => {
+  if (!measure || e.target.closest('button') || (e.pointerType==='mouse' && e.button!==0)) return;
+  const p = mapPoint(e);
+  pointsDown.set(e.pointerId,p);
+  viewport.setPointerCapture(e.pointerId);
+  tooltip.hidden = true;
+  if (pointsDown.size===1) pan(e.pointerId,p,findRef(e.target));
+  if (pointsDown.size===2) pinch();
+});
+viewport.addEventListener('pointermove', e => {
+  const p = mapPoint(e);
+  if (!pointsDown.has(e.pointerId) || !gesture) {
+    if (e.pointerType!=='mouse' || state.placing) return;
+    const title = tooltipFor(findRef(e.target));
+    tooltip.hidden = !title;
+    if (title) {
+      tooltip.textContent = title;
+      tooltip.style.left = clamp(p.x+13, 4, Math.max(4, viewport.clientWidth-235)) + 'px';
+      tooltip.style.top = clamp(p.y+14, 4, viewport.clientHeight-42) + 'px';
+    }
+    return;
+  }
+  pointsDown.set(e.pointerId,p);
+  if (gesture.type === 'pinch') {
+    const a = pointsDown.get(gesture.aid), b = pointsDown.get(gesture.bid);
+    if (!a || !b) return;
+    view.scale = clamp(gesture.scale*Math.hypot(a.x-b.x,a.y-b.y)/gesture.span,Math.max(.12,fitScale()*.64),3.2);
+    view.x = (a.x+b.x)/2-gesture.worldX*view.scale;
+    view.y = (a.y+b.y)/2-gesture.worldY*view.scale;
+  } else {
+    if (gesture.id !== e.pointerId) return;
+    const dx = p.x-gesture.p.x, dy = p.y-gesture.p.y;
+    if (!gesture.moved && Math.hypot(dx,dy)<5) return;
+    gesture.moved = true;
+    viewport.dataset.dragging = 'true';
+    view.x = gesture.x+dx;
+    view.y = gesture.y+dy;
+  }
+  boundsCamera();
+});
+function release(e, allowClick) {
+  if (!pointsDown.has(e.pointerId)) return;
+  const ref = gesture?.type === 'pan' && gesture.id === e.pointerId && !gesture.moved ? gesture.ref || '' : null;
+  pointsDown.delete(e.pointerId);
+  if (pointsDown.size >= 2) return pinch();
+  if (pointsDown.size === 1) {
+    const [[id,p]] = pointsDown;
+    return pan(id,p,'',true);
+  }
+  gesture = null;
+  viewport.dataset.dragging = 'false';
+  if (allowClick && ref !== null) pickAt(mapPoint(e),ref);
+}
+viewport.addEventListener('pointerup', e => release(e,true));
+viewport.addEventListener('pointercancel', e => release(e,false));
+viewport.addEventListener('lostpointercapture', e => release(e,false));
+viewport.addEventListener('pointerleave', () => { tooltip.hidden = true; });
+viewport.addEventListener('wheel', e => {
+  if (!e.ctrlKey || !measure) return;
+  e.preventDefault();
+  if (pointsDown.size) return;
+  const dy = e.deltaY*(e.deltaMode===1?16:e.deltaMode===2?measure[1]:1);
+  zoomAt(view.scale*Math.exp(-dy*.0021),mapPoint(e));
+},{ passive:false });
+viewport.addEventListener('keydown', e => {
+  if (e.target.closest('button')) return;
+  const ref = findRef(e.target);
+  if (ref && ['Enter',' '].includes(e.key)) { e.preventDefault(); showDetail(ref); return; }
+  if (e.key === 'Escape') { if (state.placing) cancelPlacement(); else closeDetail(); return; }
+  if (!measure) return;
+  if (['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key)) {
+    e.preventDefault();
+    view.x += e.key==='ArrowLeft'?42:e.key==='ArrowRight'?-42:0;
+    view.y += e.key==='ArrowUp'?42:e.key==='ArrowDown'?-42:0;
+    boundsCamera();
+  }
+  if (['+','=', '-'].includes(e.key)) { e.preventDefault(); zoomBy(e.key === '-' ? 1/1.24 : 1.24); }
+});
+function zoomBy(factor) {
+  if (measure) zoomAt(view.scale*factor,{ x:measure[0]/2, y:measure[1]/2 });
+}
+new ResizeObserver(() => {
+  const next = [viewport.clientWidth,viewport.clientHeight];
+  if (next.some(v => v<60)) return;
+  if (!measure) {
+    measure = next;
+    center([568,844],Math.max(fitScale(),Math.min(next[0]/820,next[1]/980,.8)));
+  } else {
+    view.x += (next[0]-measure[0])/2;
+    view.y += (next[1]-measure[1])/2;
+    measure = next;
+    boundsCamera();
+  }
+}).observe(viewport);
+byId('reload').onclick = refresh;
+byId('add').onclick = showAdd;
+byId('close').onclick = closeDetail;
+byId('cancel-placement').onclick = cancelPlacement;
+byId('cabin11').onclick = () => showDetail('c11');
+byId('plus').onclick = () => zoomBy(1.24);
+byId('minus').onclick = () => zoomBy(1/1.24);
+byId('center').onclick = () => { if (measure) center([width/2,height/2],fitScale()); };
+for (const button of document.querySelectorAll('[data-sector]')) button.onclick = () => {
+  if (measure) center(button.dataset.sector==='north'?[372,420]:[659,1188],Math.max(.5,fitScale()*1.35));
+};
+for (const button of byId('filters').querySelectorAll('button')) button.onclick = () => {
+  state.filter = button.dataset.filter;
+  for (const other of byId('filters').querySelectorAll('button')) other.setAttribute('aria-pressed', String(other === button));
+  draw();
+};
+applyTheme(useTheme());
+if (window.parent === window && !window.ReactNativeWebView) status('Abre el mapa desde Haku para consultar la operación.');
+send({ type:'ready' });
+</script>
+</body>
+</html>

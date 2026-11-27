@@ -45,3 +45,29 @@ test('cerrar sesión con un diálogo suspendido no lo vuelve a abrir',async()=>{
  const f=await fixture();f.click('[data-action="share"]');await tick();f.window.HAIKU_PRIVACIDAD.bloquearAhora();
  f.window.haikuSesion=null;f.callbacks.forEach(cb=>cb('SIGNED_OUT',null));await tick();assert.equal(f.dialog.open,false);assert.equal(f.dialog.textContent,'');
 });
+
+test('el mapa interno conserva el foco y salir de Haku activa la protección', async () => {
+ const f = await fixture();
+ const section = f.document.createElement('section');
+ section.id = 'seccion-mapa';
+ const map = f.document.createElement('iframe');
+ map.setAttribute('data-haiku-mapa-interno', '');
+ section.append(map);
+ f.document.body.append(section);
+ let inside = true;
+ Object.defineProperties(f.document, {
+  visibilityState: { value: 'visible' },
+  hasFocus: { value: () => inside },
+  activeElement: { value: map },
+ });
+ f.window.dispatchEvent(new f.window.Event('blur'));
+ for (const [id, timer] of f.timers) if (timer.ms === 0) {
+  f.timers.delete(id);
+  timer.fn();
+ }
+ assert.equal(f.overlay.hidden, true);
+ inside = false;
+ f.window.HAIKU_PRIVACIDAD.verificarFocoMapa();
+ assert.equal(f.overlay.hidden, false);
+ assert.equal(f.window.HAIKU_PRIVACIDAD.estado().modo, 'cortina');
+});

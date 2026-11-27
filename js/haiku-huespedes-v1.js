@@ -879,5 +879,12 @@
             dismissDialogs();
         }
     });
+    window.HAIKU_HUESPEDES_MAPA_V1 = Object.freeze({
+        abrir(id, reserva, estadia) {
+            if (!allowed()) return;
+            menu.click();
+            return openProfile(id, reserva, false, estadia);
+        }
+    });
     if(window.haikuSesion) session();
 })();
