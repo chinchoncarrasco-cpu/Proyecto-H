@@ -1037,6 +1037,7 @@
                         cuerpoAviso.insertBefore(estadoGuardado,bloquePendientes);
                     }
                     estadoGuardado.textContent=pasosIncorporacion.comprobar;
+                    bloquePendientes.hidden=true;
                     for(const b of acciones){b.disabled=true;b.incorporacionBloqueada=true;}
                     cerrar.disabled=true;
                     for(const b of botonesIncorporar){b.textContent='Incorporando…';b.setAttribute('aria-busy','true');}
@@ -1075,7 +1076,10 @@
                             if(vistaFechas)vistaFechas.hidden=true;
                             nodo(estadoGuardado,'p','haku-libro-auto__aviso','Abre «Ver informe» para revisar los casos antes de confirmar de nuevo.');
                             for(const b of botonesIncorporar)b.hidden=true;
-                        }else for(const b of botonesIncorporar)b.textContent='Reintentar';
+                        }else{
+                            if(!confirmado)bloquePendientes.hidden=!pendientesIniciales.length;
+                            for(const b of botonesIncorporar)b.textContent='Reintentar';
+                        }
                     }finally{
                         guardando=false;cerrar.disabled=false;
                         for(const b of acciones){b.incorporacionBloqueada=finalizado&&botonesIncorporar.includes(b);b.disabled=b.incorporacionBloqueada||consultando();}
