@@ -14,6 +14,8 @@
         save: "haiku_mapa_guardar_v1",
         guest: "haiku_huesped_guardar_v1",
         profile: "haiku_mapa_huesped_v1",
+        guestDetail: "haiku_huesped_perfil_v1",
+        cleaning: "haiku_mapa_aseo_v1",
         service: "haiku_registrar_servicio",
     });
     const identity = () => window.haikuSesion?.auth?.id;
@@ -56,7 +58,7 @@
         frame.setAttribute("data-haiku-mapa-interno", "");
         frame.setAttribute("sandbox", "allow-scripts allow-forms");
         frame.referrerPolicy = "no-referrer";
-        frame.src = "assets/mapa/recinto.html?v=3";
+        frame.src = "assets/mapa/recinto.html?v=4";
         user = identity();
         // Read today's map while the sandboxed document loads.
         initialSnapshot = query("snapshot", {});
@@ -110,8 +112,10 @@
         if (source !== frame || user !== identity() || !allowed() || isPrivate()) return;
         const {data,error} = result;
         post({type:"reply",id:msg.id,data,error:error ? {message:error.message,code:error.code} : null});
-        if (!error && msg.method === "service") {
-            document.dispatchEvent(new CustomEvent("haiku:resumen-datos-actualizados", {detail:{fecha:msg.args.p_fecha_servicio}}));
+        const fecha = msg.method === "service" ? msg.args.p_fecha_servicio
+            : msg.method === "cleaning" && msg.args.p_cambios ? msg.args.p_fecha : null;
+        if (!error && fecha) {
+            document.dispatchEvent(new CustomEvent("haiku:resumen-datos-actualizados", {detail:{fecha}}));
         }
     });
 

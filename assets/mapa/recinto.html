@@ -170,6 +170,20 @@ footer .web-help {margin-left:auto}
 .guest-notes {border-top:1px solid var(--line); padding:7px 0 2px}
 .guest-notes summary {cursor:pointer; font-weight:650}
 .guest-notes > div {padding-top:5px}
+.cabin-summary, .cabin-extra > div, .cabin-extra-content {display:grid; gap:8px; min-width:0}
+.cabin-extra {border-top:1px solid var(--line); padding-top:8px; scroll-margin-top:60px}
+.cabin-extra h3 {color:var(--ink)}
+.cabin-actions button[aria-expanded="true"] {border-color:var(--accent); background:var(--tint)}
+.cabin-fields {display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px}
+.cabin-extra .check {display:flex; align-items:center; gap:7px; width:fit-content}
+.cabin-extra .check input {width:16px; min-height:0; accent-color:var(--accent)}
+.guest-tags {display:flex; flex-wrap:wrap; gap:4px}
+.guest-tags span {padding:2px 7px; border-radius:5px; background:var(--tint); font-size:12px; overflow-wrap:anywhere}
+@media (max-width:740px) {
+  .cabin-extra {padding-top:6px}
+  .cabin-staff {grid-template-columns:1fr}
+  .cabin-extra .check {min-height:34px}
+}
 </style>
 </head>
 <body>
@@ -986,7 +1000,7 @@ function receive(message) {
     if (theme !== useTheme()) applyTheme(theme);
     if (message.type === 'init') void refresh();
   } else if (message.type === 'refresh') {
-    if (!state.formOpen && !state.placing) void refresh();
+    if (!state.formOpen && !state.placing && !state.saving) void refresh();
   } else if (message.type === 'reply') {
     const wait = pending.get(message.id);
     if (!wait) return;
@@ -1030,8 +1044,15 @@ async function fetchSnapshot() {
     byId('add').disabled = !['vehiculo', 'persona', 'tarea', 'lavanderia'].some(k => fresh.permisos?.[k]);
     status('');
     draw();
-    if (state.selection && !state.formOpen && !state.placing && !details.querySelector('.guest-notes[open]')) {
-      showDetail(state.selection, false);
+    if (state.selection && !state.formOpen && !state.placing) {
+      const summary = detailBody.querySelector('.cabin-summary');
+      const pane = detailBody.querySelector('.cabin-extra');
+      const number = Number(state.selection.slice(1));
+      if (summary && pane?.dataset.context === cabinContext(number) && (!pane.hidden || details.querySelector('.guest-notes[open]'))) {
+        summary.replaceWith(cabinSummary(number));
+      } else {
+        showDetail(state.selection, false);
+      }
     }
   } catch (error) {
     const forbidden = error.code === '42501' || error.code === 'UNAUTHORIZED';
@@ -1237,6 +1258,10 @@ function showDetail(id, focus = true) {
 function cabinGuest(ref) {
   return data().personas.find(p => p.reserva_id === ref?.reserve && p.rol === 'titular');
 }
+function cabinContext(n) {
+  const ref = stay(cabinRow(n));
+  return [data().fecha, ref?.reserve, ref?.stay, cabinGuest(ref)?.id].join('/');
+}
 function openGuest(person, reserve, stayId) {
   send({ type:'navigate', method:'guest', args:{ id:person.id, reserva:reserve, estadia:stayId } });
 }
@@ -1258,25 +1283,178 @@ function notesPanel(person, reserve) {
   });
   detailBody.append(section);
 }
-function showCabin(n, focus) {
+function cabinSummary(n) {
   const row = cabinRow(n), ref = stay(row);
   const [reservation] = cabinState(row), [clean] = cleaning(row), guest = cabinGuest(ref);
-  showPanel('CAB ' + n, row?.nombre || '', focus);
-  if (n === 11) detailBody.append(el('p', 'Ubicación pendiente en el plano.', 'subtle'));
-  detailBody.append(lines([
+  const summary = el('div', '', 'cabin-summary');
+  if (n === 11) summary.append(el('p', 'Ubicación pendiente en el plano.', 'subtle'));
+  summary.append(lines([
     ['Reserva', reservation], ['Huésped', ref?.title || guest?.nombre], ['Aseo', clean],
     ['Asignada a', row?.aseo_asignado_nombre], ['Inicio del aseo', formatTime(row?.aseo_inicio)],
     ['Aseo listo', formatTime(row?.aseo_fin || row?.aseo_ultimo_listo)], ['Observación', row?.aseo_nota],
   ]));
   if (row?.salida_reserva_id && row?.ingreso_reserva_id) {
-    detailBody.append(el('p', (row.salida_checkout_en ? 'Check-out' : 'Sale') + ' · ' + (row.salida_titular || 'Reserva anterior'), 'subtle'));
+    summary.append(el('p', (row.salida_checkout_en ? 'Check-out' : 'Sale') + ' · ' + (row.salida_titular || 'Reserva anterior'), 'subtle'));
   }
-  actions(
-    row && button('Gestionar aseo', () => send({ type:'navigate', method:'cleaning', args:{ number:n, fecha:data().fecha } })),
-    guest && button('Ver huésped', () => openGuest(guest, ref.reserve, ref.stay)),
-    guest && data().permisos.huesped && button('Nota o preferencia', () => guestForm(guest, ref.reserve, 'c' + n), 'primary')
-  );
+  return summary;
+}
+function showCabin(n, focus) {
+  const row = cabinRow(n), ref = stay(row), guest = cabinGuest(ref);
+  showPanel('CAB ' + n, row?.nombre || '', focus);
+  detailBody.append(cabinSummary(n));
+  const pane = el('section', '', 'cabin-extra');
+  pane.id = 'cabin-extra';
+  pane.hidden = true;
+  pane.dataset.context = cabinContext(n);
+  const controls = el('div', '', 'actions cabin-actions');
+  function disclosure(label, title, render) {
+    const trigger = button(label, () => {
+      if (state.saving) return;
+      const open = trigger.getAttribute('aria-expanded') !== 'true';
+      for (const peer of controls.querySelectorAll('[aria-expanded]')) peer.setAttribute('aria-expanded','false');
+      trigger.setAttribute('aria-expanded', String(open));
+      pane.hidden = !open;
+      pane.replaceChildren();
+      if (!open) return;
+      const body = el('div'), heading = el('h3', title);
+      heading.id = 'cabin-extra-title';
+      body.append(heading);
+      pane.setAttribute('aria-labelledby', heading.id);
+      pane.append(body);
+      render(body);
+      if (innerWidth <= 740) pane.scrollIntoView({block:'nearest'});
+    });
+    trigger.setAttribute('aria-expanded', 'false');
+    trigger.setAttribute('aria-controls', pane.id);
+    controls.append(trigger);
+  }
+  if (row) disclosure('Gestionar aseo', 'Aseo de la cabaña', body => cabinCleaning(body, n, data().fecha));
+  if (guest) disclosure('Ver huésped', 'Ficha del huésped', body => cabinProfile(body, guest, ref));
+  if (guest && data().permisos.huesped) controls.append(button('Nota o preferencia', () => guestForm(guest, ref.reserve, 'c' + n), 'primary'));
+  if (controls.childElementCount) detailBody.append(controls, pane);
   if (guest) notesPanel(guest, ref.reserve);
+}
+function cabinCleaning(body, n, date) {
+  const slot = el('div', '', 'cabin-extra-content');
+  body.append(slot, button('Abrir en Cabañas', () => send({type:'navigate', method:'cleaning', args:{number:n, fecha:date}})));
+  const target = {p_numero:n,p_fecha:date};
+  async function load() {
+    const loading = el('p', 'Cargando aseo…', 'subtle');
+    loading.setAttribute('role','status');
+    slot.replaceChildren(loading);
+    try {
+      const record = await request('cleaning', target);
+      if (!slot.isConnected) return;
+      if (!record?.puede_leer) slot.replaceChildren(el('p','La ficha de aseo requiere permiso de lectura.','subtle'));
+      else if (record.puede_editar) edit(record);
+      else slot.replaceChildren(lines([
+        ['Estado', cleaning({aseo_estado:record.estado})[0]], ['Encargado', record.encargado], ['Revisor', record.revisor],
+        ['IN', formatTime(record.inicio)], ['OUT', formatTime(record.fin)], ['Observación', record.observacion],
+      ]));
+    } catch (error) {
+      if (slot.isConnected) slot.replaceChildren(el('p', error.message, 'form-error'), button('Reintentar', load));
+    }
+  }
+  function edit(record, message = '') {
+    const box = el('form');
+    const staff = el('div', '', 'cabin-fields cabin-staff'), hours = el('div', '', 'cabin-fields');
+    staff.append(input('encargado','Encargado',record.encargado,{limit:80}), input('revisor','Revisor',record.revisor,{limit:80}));
+    hours.append(input('inicio','Hora IN',formatTime(record.inicio),{type:'time'}), input('fin','Hora OUT',formatTime(record.fin),{type:'time'}));
+    const check = el('input');
+    check.type = 'checkbox';
+    check.name = 'no_requiere';
+    check.checked = record.estado === 'no_requiere';
+    const noCleaning = field('No requiere aseo', check);
+    noCleaning.className = 'check';
+    const feedback = el('div');
+    const status = el('p', message, 'subtle');
+    status.setAttribute('role','status');
+    feedback.append(status);
+    const save = el('button','Guardar aseo','primary');
+    save.type = 'submit';
+    box.append(staff, hours, input('observacion','Observación',record.observacion,{multiline:true,limit:1000}), noCleaning, feedback, save);
+    const fields = [...box.querySelectorAll('input,textarea')];
+    const values = () => Object.fromEntries(fields.map(control => [control.name, control.type === 'checkbox' ? control.checked : control.value.trim()]));
+    const original = values();
+    const changes = () => Object.fromEntries(Object.entries(values()).filter(([key,value]) => value !== original[key]));
+    function sync() {
+      const haveHours = Boolean(box.elements.inicio.value || box.elements.fin.value);
+      box.elements.inicio.disabled = check.checked;
+      box.elements.fin.disabled = check.checked;
+      check.disabled = haveHours && !check.checked;
+      save.disabled = !Object.keys(changes()).length;
+    }
+    box.addEventListener('input', sync);
+    box.addEventListener('submit', async event => {
+      event.preventDefault();
+      if (save.disabled || state.saving) return;
+      state.saving = true;
+      const patch = changes();
+      const disabled = fields.map(control => control.disabled);
+      fields.forEach(control => { control.disabled = true; });
+      save.disabled = byId('close').disabled = true;
+      save.textContent = 'Guardando…';
+      try {
+        const next = await request('cleaning', { ...target, p_version:record.version, p_cambios:patch });
+        if (slot.isConnected) edit(next, 'Aseo guardado.');
+        await refresh(true);
+      } catch (error) {
+        if (slot.isConnected) {
+          const alert = el('p', error.message, 'form-error');
+          alert.setAttribute('role','alert');
+          feedback.replaceChildren(alert);
+          if (error.code === '40001') feedback.append(button('Actualizar aseo', load));
+        }
+      } finally {
+        state.saving = false;
+        byId('close').disabled = false;
+        fields.forEach((control, index) => { control.disabled = disabled[index]; });
+        save.textContent = 'Guardar aseo';
+        sync();
+      }
+    });
+    slot.replaceChildren(box);
+    sync();
+  }
+  void load();
+}
+async function cabinProfile(body, guest, ref) {
+  const slot = el('div', '', 'cabin-extra-content');
+  const full = button('Abrir ficha completa', () => openGuest(guest, ref.reserve, ref.stay));
+  body.append(el('strong', guest.nombre), slot, full);
+  async function load() {
+    const loading = el('p','Cargando ficha…','subtle');
+    loading.setAttribute('role','status');
+    slot.replaceChildren(loading);
+    try {
+      const profile = await request('guestDetail', {p_id:guest.id,p_reserva:ref.reserve,p_historial:false});
+      if (!slot.isConnected) return;
+      const person = profile.persona || {}, visit = profile.visita || {};
+      const exact = list(profile.estadias).find(stay => stay.id === ref.stay);
+      const date = day => /^\d{4}-\d{2}-\d{2}$/.test(day || '') ? simpleDate.format(new Date(day + 'T12:00:00Z')) : '';
+      const tags = list(profile.etiquetas).filter(tag => tag.nombre);
+      const others = list(profile.integrantes).filter(p => p.id !== guest.id && p.rol !== 'borrador' && p.nombre);
+      slot.replaceChildren(lines([
+        ['Ingreso', date(exact?.fecha_ingreso || visit.ingreso)], ['Salida', date(exact?.fecha_salida || visit.salida)],
+        ['Teléfono', person.telefono], ['Correo', person.correo], ['País', person.nacionalidad], ['Idioma', person.idioma],
+      ]));
+      if (tags.length) {
+        const badges = el('div','','guest-tags');
+        badges.append(...tags.map(tag => el('span',tag.nombre)));
+        slot.append(badges);
+      }
+      if (person.descripcion) slot.append(el('p',person.descripcion,'subtle'));
+      if (others.length) {
+        const members = el('ul','','compact-list');
+        members.append(...others.map(p => el('li',[p.nombre,p.apellido].filter(Boolean).join(' '))));
+        slot.append(el('h3','Acompañantes'), members);
+      }
+      if (!slot.textContent.trim()) slot.replaceChildren(el('p','Sin datos adicionales en esta ficha.','subtle'));
+    } catch (error) {
+      if (slot.isConnected) slot.replaceChildren(el('p',error.message,'form-error'), button('Reintentar',load));
+    }
+  }
+  await load();
 }
 function showBay(number, focus) {
   const car = bayRecord(number), values = car?.datos || {};
