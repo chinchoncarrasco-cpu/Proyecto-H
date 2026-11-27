@@ -356,17 +356,15 @@
     }
 
     function salidaDeHaiku() {
-        if (!armado || !configurado) return;
+        if (!armado || !configurado || fueraDesde !== null) return;
         if (["setup", "verificando", "pin", "rescate"].includes(modoActual)) return;
 
-        if (!fueraDesde) {
-            fueraDesde = Date.now();
-            escribirSesion("fueraDesde", fueraDesde);
-        }
+        const marca = Date.now();
+        fueraDesde = marca;
+        escribirSesion("fueraDesde", marca);
 
         mostrarOverlay("cortina");
 
-        const marca = fueraDesde;
         clearTimeout(timerBloqueo);
         timerBloqueo = setTimeout(() => {
             if (!armado || !configurado) return;
@@ -375,8 +373,19 @@
         }, GRACIA_MS + 30);
     }
 
+    function haikuTieneFoco() {
+        return document.visibilityState === "visible" && document.hasFocus();
+    }
+
+    function comprobarSalidaDeHaiku() {
+        // El foco puede seguir dentro de Haku al pasar del mapa al panel o viceversa.
+        setTimeout(() => {
+            if (!haikuTieneFoco()) salidaDeHaiku();
+        }, 0);
+    }
+
     function regresoAHaiku() {
-        if (!armado || !configurado) return;
+        if (!armado || !configurado || !haikuTieneFoco()) return;
 
         clearTimeout(timerBloqueo);
         timerBloqueo = null;
@@ -651,20 +660,7 @@
         }
     });
 
-    const selectorMapa = "#seccion-mapa iframe[data-haiku-mapa-interno]";
-    window.addEventListener("blur", () => {
-        // El navegador puede enviar blur al transferir el foco al mapa interno.
-        // Se espera ese cambio de foco sólo cuando el mapa ya está montado.
-        if (!document.querySelector(selectorMapa)) {
-            salidaDeHaiku();
-            return;
-        }
-        setTimeout(() => {
-            if (document.visibilityState === "visible" && document.hasFocus()
-                && document.activeElement?.matches(selectorMapa)) return;
-            salidaDeHaiku();
-        }, 0);
-    });
+    window.addEventListener("blur", comprobarSalidaDeHaiku);
     window.addEventListener("focus", regresoAHaiku);
 
     document.addEventListener("visibilitychange", () => {
@@ -685,9 +681,7 @@
     }
 
     window.HAIKU_PRIVACIDAD = {
-        verificarFocoMapa() {
-            if (document.visibilityState === "hidden" || !document.hasFocus()) salidaDeHaiku();
-        },
+        verificarFocoMapa: comprobarSalidaDeHaiku,
         bloquearAhora() {
             if (!armado || !configurado) return false;
             marcarBloqueado();
