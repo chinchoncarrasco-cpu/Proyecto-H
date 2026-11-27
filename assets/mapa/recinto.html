@@ -79,7 +79,10 @@ h1 {font-size:clamp(17px, 2.6vw, 25px); letter-spacing:-.025em; margin-right:aut
 #viewport {flex:1; min-width:0; position:relative; overflow:hidden; isolation:isolate; background:var(--map); touch-action:none; cursor:grab; outline-offset:-3px}
 #viewport[data-dragging="true"] {cursor:grabbing}
 #viewport.placing, #viewport.placing .region {cursor:crosshair}
-#world {position:absolute; inset:0; width:100%; height:100%; pointer-events:none; user-select:none}
+/* Let the browser redraw the vectors at the current zoom scale. */
+#world {position:absolute; width:1136px; height:1578px; transform-origin:0 0; user-select:none}
+#base, #regions {position:absolute; inset:0; width:1136px; height:1578px; pointer-events:none}
+#base svg {display:block}
 .region {cursor:pointer; pointer-events:all; outline:none}
 .region .hit {fill:transparent; stroke:transparent; stroke-width:1.8}
 .region[aria-current="true"] .hit, .region:focus-visible .hit {fill:var(--tint); fill-opacity:.18; stroke:var(--accent); stroke-width:3}
@@ -176,12 +179,10 @@ footer .web-help {margin-left:auto}
   </header>
   <div class="content">
     <section id="viewport" aria-label="Plano de Haku" tabindex="0">
-      <svg id="world">
-        <g id="camera">
-          <g id="base" aria-hidden="true"></g>
-          <svg id="regions" width="1136" height="1578" viewBox="0 0 1136 1578" aria-label="Ubicaciones del recinto"></svg>
-        </g>
-      </svg>
+      <div id="world">
+        <div id="base" aria-hidden="true"></div>
+        <svg id="regions" viewBox="0 0 1136 1578" aria-label="Ubicaciones del recinto"></svg>
+      </div>
       <div id="tooltip" role="tooltip" hidden></div>
       <div id="placement" hidden><span>Elige la ubicación en el mapa</span><button id="cancel-placement" type="button">Cancelar</button></div>
       <nav class="viewport-tools" aria-label="Navegación del plano">
@@ -873,7 +874,7 @@ const width = 1136, height = 1578;
 const svgNS = 'http://www.w3.org/2000/svg';
 const geometry = JSON.parse(document.getElementById('geometry').textContent);
 const byId = id => document.getElementById(id);
-const viewport = byId('viewport'), camera = byId('camera'), regions = byId('regions');
+const viewport = byId('viewport'), world = byId('world'), regions = byId('regions');
 const details = byId('details'), detailBody = byId('detail-body'), tooltip = byId('tooltip');
 const view = { x: 0, y: 0, scale: 1 };
 const state = { data: null, filter: 'all', selection: '', formOpen: false, placing: null, saving: false };
@@ -1657,8 +1658,7 @@ function renderCamera() {
   if (frame) return;
   frame = requestAnimationFrame(() => {
     frame = 0;
-    // Keep the camera in SVG so lines and text are painted at the current zoom.
-    camera.setAttribute('transform', 'translate(' + view.x + ' ' + view.y + ') scale(' + view.scale + ')');
+    world.style.transform = 'translate3d(' + view.x + 'px,' + view.y + 'px,0) scale(' + view.scale + ')';
     viewport.dataset.scale = view.scale.toFixed(5);
     viewport.dataset.x = view.x.toFixed(3);
     viewport.dataset.y = view.y.toFixed(3);
