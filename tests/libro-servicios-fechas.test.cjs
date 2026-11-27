@@ -29,6 +29,32 @@ test('Ignacio: real service text survives semantic parsing and resolves date, ti
     assert.ok(item.razones.some(x => /cobrable o cortesía/i.test(x)));
 });
 
+test('el nombre junto del Jacuzzi o Tonel conserva su horario, fecha y condición por pagar', () => {
+    const estadia = { ...reserva, titular: 'Persona de prueba', cabana: 10,
+        fecha_checkin: '2026-11-28', fecha_checkout: '2026-11-29', noches: 1 };
+    for (const [texto, concepto, codigo] of [
+        ['TinajaJacuzzi 22:15 hrs por pagar', 'jacuzzi', 'tinajaJacuzzi'],
+        ['1HRA TINAJATONEL 22:15 hrs por pagar', 'tonel', 'tinajaTonel']
+    ]) {
+        const servicios = S.servicios(texto, { origen_campo: 'notas_reserva' });
+        assert.equal(servicios.length, 1, texto);
+        const [s] = servicios;
+        assert.equal(s.texto_original, texto);
+        assert.equal(s.concepto, concepto);
+        assert.equal(s.hora, '22:15');
+        assert.equal(s.hora_fin, null);
+        const item = P.prepararServicio(estadia, s, asociacion);
+        assert.equal(item.fecha, '2026-11-28');
+        assert.equal(item.hora, '22:15');
+        assert.deepEqual(Array.from(item.razones), []);
+        assert.equal(item.payload.codigo_servicio, codigo);
+        assert.equal(item.payload.tipo_cobro, 'normal');
+    }
+    for (const texto of ['TinajaJacuzzi', 'TinajaTonel por coordinar']) {
+        assert.equal(S.clasificarFragmentoServicio(texto, { origen_campo: 'notas_reserva' }).semantica, 'NO_SERVICIO');
+    }
+});
+
 test('partial dates work with weekday variants, Unicode dashes and no weekday', () => {
     for (const texto of ['tonel a las 22.15 el sab 12-09', 'tonel a las 22.15 el sábado 12-09',
         'tonel a las 22.15 el sáb 12–09', '12-09', 'a las 10.09 el sáb 12-09',
