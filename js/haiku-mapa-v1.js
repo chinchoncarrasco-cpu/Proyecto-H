@@ -15,6 +15,7 @@
         guest: "haiku_huesped_guardar_v1",
         profile: "haiku_mapa_huesped_v1",
         guestDetail: "haiku_huesped_perfil_v1",
+        guestSearch: "haiku_huesped_directorio_v1",
         cleaning: "haiku_mapa_aseo_v1",
         service: "haiku_registrar_servicio",
     });
@@ -25,6 +26,8 @@
     const isOpen = () => !document.hidden && section.getClientRects().length > 0;
     const theme = () => root.dataset.haikuTema === "oscuro" ? "dark" : "light";
     const uuid = value => typeof value === "string" && /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(value);
+    const guestMethods = new Set(["guestTags","guestSigned","guestPhoto","guestVehiclePhotos"]);
+    const canReadGuest = () => window.haikuTienePermiso?.("huespedes.ver");
     let frame = null, user = null, ready = false, initialSnapshot = null;
 
     function post(message) {
@@ -48,6 +51,49 @@
         }
     }
 
+    function photoPath(value) {
+        if (typeof value !== "string" || !value.endsWith(".jpg")) return false;
+        const parts = value.slice(0,-4).split("/");
+        return parts.length === 2 && parts.every(uuid);
+    }
+
+    function readPhoto(value) {
+        if (value === null || photoPath(value)) return value;
+        const jpeg = value?.jpeg;
+        if (typeof jpeg !== "string" || !jpeg.startsWith("/9j/") || jpeg.length > Math.ceil(5242880 / 3) * 4) {
+            throw new Error("La foto no tiene un formato válido.");
+        }
+        const bytes = Uint8Array.from(atob(jpeg), character => character.charCodeAt(0));
+        return new Blob([bytes], {type:"image/jpeg"});
+    }
+
+    async function guestQuery(method, args) {
+        try {
+            if (method === "guestTags") return await client.from("haiku_huesped_etiquetas").select("id,grupo,nombre").order("nombre");
+            const api = window.HAIKU_HUESPEDES_API;
+            if (!api) throw new Error("La ficha se está iniciando. Vuelve a intentar.");
+            if (method === "guestSigned" && photoPath(args.path)) return {data:await api.signed(args.path)};
+            if (method === "guestPhoto" && uuid(args.id) && (args.reserva === null || uuid(args.reserva))
+                && ["persona","mascota"].includes(args.target?.kind)
+                && (args.target.kind === "persona" || uuid(args.target.id))) {
+                const image = readPhoto(args.image);
+                if (typeof image === "string") throw new Error("La foto no tiene un formato válido.");
+                return {data:await api.photo({persona:{id:args.id},visita:{reserva_id:args.reserva}}, args.target, image)};
+            }
+            if (method === "guestVehiclePhotos" && args.args?.p_accion === "vehiculo" && uuid(args.args.p_id)
+                && uuid(args.args.p_reserva) && Array.isArray(args.additional)) {
+                const save = fotos => api.rpc("guardar", {...args.args,p_datos:{...args.args.p_datos,fotos}});
+                return {data:await api.vehiclePhotos(save, {
+                    primary:readPhoto(args.primary), additional:args.additional.map(readPhoto),
+                    positionY:args.positionY, expected:args.expected,
+                })};
+            }
+            throw new Error("La solicitud de la ficha no tiene un formato válido.");
+        } catch (error) {
+            return {error:{message:error.message || "No se pudo completar el cambio.",code:error.code}};
+        }
+    }
+
     function sync() {
         const permitted = allowed(), unlocked = !isPrivate(), open = isOpen();
         menu.hidden = !permitted;
@@ -58,7 +104,7 @@
         frame.setAttribute("data-haiku-mapa-interno", "");
         frame.setAttribute("sandbox", "allow-scripts allow-forms");
         frame.referrerPolicy = "no-referrer";
-        frame.src = "assets/mapa/recinto.html?v=4";
+        frame.src = "assets/mapa/recinto.html?v=5";
         user = identity();
         // Read today's map while the sandboxed document loads.
         initialSnapshot = query("snapshot", {});
@@ -72,9 +118,11 @@
 
     function navigate(method, args) {
         if (method === "guest" && uuid(args.id) && uuid(args.reserva)) {
-            if (window.haikuTienePermiso?.("huespedes.ver")) {
+            if (canReadGuest()) {
                 window.HAIKU_HUESPEDES_MAPA_V1?.abrir(args.id, args.reserva, args.estadia);
             }
+        } else if (method === "reservation" && uuid(args.id) && canReadGuest()) {
+            window.HAIKU_RESUMEN_RESERVA_SITES_V1?.abrirPorId(args.id, frame);
         } else if (method === "cleaning" && Number.isInteger(args.number) && args.number >= 1 && args.number <= 11
             && typeof args.fecha === "string" && /^\d{4}-\d{2}-\d{2}$/.test(args.fecha)) {
             if (typeof fechaSeleccionada !== "undefined" && fechaSeleccionada !== args.fecha) {
@@ -104,11 +152,16 @@
             navigate(msg.method, msg.args);
             return;
         }
-        if (msg.type !== "request" || !Number.isSafeInteger(msg.id) || !Object.hasOwn(rpc,msg.method)
+        const guestMethod = guestMethods.has(msg.method);
+        if (msg.type !== "request" || !Number.isSafeInteger(msg.id) || (!Object.hasOwn(rpc,msg.method) && !guestMethod)
             || !msg.args || typeof msg.args !== "object" || !isOpen()) return;
+        if ((guestMethod || ["guestDetail","guestSearch"].includes(msg.method)) && !canReadGuest()) {
+            post({type:"reply",id:msg.id,error:{message:"Esta ficha requiere permiso para ver Huéspedes.",code:"42501"}});
+            return;
+        }
         const first = msg.method === "snapshot" ? initialSnapshot : null;
         if (first) initialSnapshot = null;
-        const result = await (first || query(msg.method, msg.args));
+        const result = await (first || (guestMethod ? guestQuery(msg.method, msg.args) : query(msg.method, msg.args)));
         if (source !== frame || user !== identity() || !allowed() || isPrivate()) return;
         const {data,error} = result;
         post({type:"reply",id:msg.id,data,error:error ? {message:error.message,code:error.code} : null});
