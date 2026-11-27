@@ -42,7 +42,7 @@
         frame.setAttribute("data-haiku-mapa-interno", "");
         frame.setAttribute("sandbox", "allow-scripts allow-forms");
         frame.referrerPolicy = "no-referrer";
-        frame.src = "assets/mapa/recinto.html?v=1";
+        frame.src = "assets/mapa/recinto.html?v=2";
         container.append(frame);
         empty.hidden = true;
         user = identity();
