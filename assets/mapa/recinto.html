@@ -29,6 +29,8 @@
   --ready: #318051;
   --working: #bd5e26;
   --waiting: #986d0d;
+  --parking-reserved: #f7c999;
+  --parking-reserved-outline: #a95417;
   --vehicle-body: #d399aa;
   --vehicle-outline: var(--accent);
   --vehicle-windows: #f9f0f3;
@@ -57,6 +59,8 @@
   --ready: #8ed2a6;
   --working: #efa976;
   --waiting: #edc96f;
+  --parking-reserved: #764c33;
+  --parking-reserved-outline: #efa976;
   --vehicle-body: #9c4d65;
   --vehicle-outline: #f0adbf;
   --vehicle-windows: #392a38;
@@ -95,14 +99,16 @@ h1 {font-size:clamp(17px, 2.6vw, 25px); letter-spacing:-.025em; margin-right:aut
 .region {cursor:pointer; pointer-events:all; outline:none}
 .region .hit {fill:transparent; stroke:transparent; stroke-width:1.8}
 .region[aria-current="true"] .hit, .region:focus-visible .hit {fill:var(--tint); fill-opacity:.18; stroke:var(--accent); stroke-width:3}
+.region[data-parking-reserved] .hit {fill:var(--parking-reserved); fill-opacity:1; stroke:var(--parking-reserved-outline)}
 .region .footprint {stroke:var(--outline); stroke-width:2; stroke-linejoin:round}
 .region[aria-current="true"] .footprint, .region:focus-visible .footprint {stroke:var(--accent); stroke-width:3}
 .region text, .river {fill:var(--ink); font-weight:700; text-anchor:middle; dominant-baseline:central; paint-order:stroke; stroke:var(--map); stroke-width:1.8; pointer-events:none}
+.region .parking-name {pointer-events:painted}
 .region .zone-tag {fill:var(--paper); stroke:var(--line); stroke-width:1.25}
 .region[aria-current="true"] .zone-tag, .region:focus-visible .zone-tag {stroke:var(--accent); stroke-width:2.5}
 .river {fill:var(--sub); font-size:19px; font-weight:500; text-anchor:start}
 #tooltip, #placement {position:absolute; z-index:2; color:var(--ink); background:var(--paper); border:1px solid var(--line); border-radius:9px; box-shadow:0 5px 18px #1610182c}
-#tooltip {padding:6px 9px; pointer-events:none; max-width:min(230px,75vw); font-size:12px}
+#tooltip {padding:6px 9px; pointer-events:none; width:max-content; max-width:min(290px,calc(100% - 8px)); overflow-wrap:anywhere; font-size:12px}
 #placement {top:8px; left:8px; padding:5px 6px 5px 10px; display:flex; align-items:center; gap:8px}
 .viewport-tools {position:absolute; z-index:1; inset:auto 8px 8px; display:flex; justify-content:space-between; pointer-events:none}
 .viewport-tools div {display:flex; gap:4px}
@@ -463,6 +469,11 @@ textarea {min-height:59px; resize:vertical}
 <path id="Puesto-9" d="M785.68 1041.174L807.443 1033.662L825.746 1085.326L805.422 1092.885Z" fill="#FFFBF0" stroke-width="1.77" stroke-linejoin="round" stroke="#A38B69"/>
 <path id="Puesto-8" d="M809.996 1032.781L831.759 1025.268L848.6 1076.826L828.276 1084.385Z" fill="#FFFBF0" stroke-width="1.77" stroke-linejoin="round" stroke="#A38B69"/>
 <path id="Puesto-7" d="M834.311 1024.387L856.074 1016.875L871.454 1068.326L851.13 1075.885Z" fill="#FFFBF0" stroke-width="1.77" stroke-linejoin="round" stroke="#A38B69"/>
+<path id="Puesto-7B" d="M821.18 982.39L842.94 974.88L855.18 1014.01L833.42 1021.52Z" fill="#FFFBF0" stroke-width="1.65" stroke-linejoin="round" stroke="#A38B69" stroke-dasharray="3.5 2"/>
+<path id="Puesto-8B" d="M795.82 991.13L817.58 983.62L830.79 1022.43L809.03 1029.94Z" fill="#FFFBF0" stroke-width="1.65" stroke-linejoin="round" stroke="#A38B69" stroke-dasharray="3.5 2"/>
+<path id="Puesto-9B" d="M770.48 999.88L792.25 992.37L806.41 1030.85L784.64 1038.36Z" fill="#FFFBF0" stroke-width="1.65" stroke-linejoin="round" stroke="#A38B69" stroke-dasharray="3.5 2"/>
+<path id="Puesto-Adicional" d="M838.78 939.54L856.85 934.68L871.44 976.37L853.37 982.63Z" fill="#FFFBF0" stroke-width="1.65" stroke-linejoin="round" stroke="#A38B69"/>
+<path id="Puesto-Dueña" d="M717.16 1024.32L722.03 1041.7L758.17 1031.27L753.3 1013.9Z" fill="#F4E4E9" stroke-width="1.65" stroke-linejoin="round" stroke="#9E6279"/>
 </g>
 </g>
 <g id="Caminos y l&#195;&#131;&#194;&#173;neas de referencia">
@@ -783,6 +794,11 @@ textarea {min-height:59px; resize:vertical}
 <path id="Puesto-9" d="M785.68 1041.174L807.443 1033.662L825.746 1085.326L805.422 1092.885Z" fill="#47403F" stroke-width="1.77" stroke-linejoin="round" stroke="#8A765A"/>
 <path id="Puesto-8" d="M809.996 1032.781L831.759 1025.268L848.6 1076.826L828.276 1084.385Z" fill="#47403F" stroke-width="1.77" stroke-linejoin="round" stroke="#8A765A"/>
 <path id="Puesto-7" d="M834.311 1024.387L856.074 1016.875L871.454 1068.326L851.13 1075.885Z" fill="#47403F" stroke-width="1.77" stroke-linejoin="round" stroke="#8A765A"/>
+<path id="Puesto-7B" d="M821.18 982.39L842.94 974.88L855.18 1014.01L833.42 1021.52Z" fill="#47403F" stroke-width="1.65" stroke-linejoin="round" stroke="#8A765A" stroke-dasharray="3.5 2"/>
+<path id="Puesto-8B" d="M795.82 991.13L817.58 983.62L830.79 1022.43L809.03 1029.94Z" fill="#47403F" stroke-width="1.65" stroke-linejoin="round" stroke="#8A765A" stroke-dasharray="3.5 2"/>
+<path id="Puesto-9B" d="M770.48 999.88L792.25 992.37L806.41 1030.85L784.64 1038.36Z" fill="#47403F" stroke-width="1.65" stroke-linejoin="round" stroke="#8A765A" stroke-dasharray="3.5 2"/>
+<path id="Puesto-Adicional" d="M838.78 939.54L856.85 934.68L871.44 976.37L853.37 982.63Z" fill="#47403F" stroke-width="1.65" stroke-linejoin="round" stroke="#8A765A"/>
+<path id="Puesto-Dueña" d="M717.16 1024.32L722.03 1041.7L758.17 1031.27L753.3 1013.9Z" fill="#50343E" stroke-width="1.65" stroke-linejoin="round" stroke="#AB7588"/>
 </g>
 </g>
 <g id="Caminos y l&#195;&#131;&#194;&#173;neas de referencia">
@@ -933,7 +949,13 @@ textarea {min-height:59px; resize:vertical}
 </defs>
 </svg>
 </template>
-<script type="application/json" id="geometry">{"cabins":{"c1":{"title":"CAB 1","corners":[[431.79620361328125,770.4944085562101],[498.23352505610535,755.985107421875],[511.2155303955078,818.6041965279528],[450.1237405630258,827.0043182373047]],"center":[472.8422499069801,793.0220076858357],"dot":[489.854404256894,768.207284508982],"number":1},"c2":{"title":"CAB 2","corners":[[409.650390625,723.9118763913391],[474.56042592278845,699.4751586914062],[498.2334976196289,755.9850683725008],[431.7961673736572,770.4943695068359]],"center":[453.56012038526865,737.4666182405206],"dot":[467.63032509540693,712.012340342614],"number":2},"c3":{"title":"CAB 3","corners":[[389.7955627441406,662.0564690747308],[445.54182337855434,645.2562255859375],[474.5604248046875,699.4751932088611],[409.6503952988633,723.9119110107422]],"center":[429.88705155656146,682.6749497200678],"dot":[440.3757486772967,657.6044045502006],"number":3},"c4":{"title":"CAB 4","corners":[[368.4134216308594,615.4739253011982],[431.7961558729115,594.091796875],[445.54180908203125,645.2561756091171],[389.79554884504563,662.0564193725586]],"center":[408.886733857712,629.2195792894685],"dot":[424.2360466078957,605.6839650717745],"number":4},"c5":{"title":"CAB 5","corners":[[337.1039123535156,550.5639519868074],[399.7230031413417,533.0000610351562],[431.7961959838867,594.0918556495949],[368.41345774742865,615.4739837646484]],"center":[384.25914230654314,573.2824631090517],"dot":[394.6199290658582,546.2932537195418],"number":5},"c6":{"title":"CAB 6","corners":[[335.4262390136719,333.2234997326815],[396.5219790140788,319.4769592285156],[408.74112701416016,356.8980972676338],[349.1727805137634,379.80899810791016]],"center":[372.4655313889186,347.3518885841853],"dot":[388.58335129777595,328.6756859158866],"number":6},"c7":{"title":"CAB 7","corners":[[322.4433898925781,289.69279164281386],[380.4843413362798,266.7818908691406],[396.52197265625,319.47696264858905],[335.42623429445877,333.22350311279297]],"center":[358.71898454489167,302.29378706833415],"dot":[373.30177359512174,278.5008166148745],"number":7},"c8":{"title":"CAB 8","corners":[[309.4605407714844,246.1621060914631],[371.31997606831214,229.36077880859375],[380.48433685302734,266.7819168477119],[322.44338521649763,289.6928176879883]],"center":[345.9270597273304,257.9994048589393],"dot":[362.94031367578816,238.8115254052078],"number":8},"c9":{"title":"CAB 9","corners":[[290.3681335449219,194.2307100084093],[356.0460564955226,177.42938232421875],[371.3199920654297,229.36075880262587],[309.4605530073058,246.1620864868164]],"center":[331.798683778295,211.79573440551758],"dot":[348.0444234988375,188.77027851104737],"number":9},"c10":{"title":"CAB 10","corners":[[279.06671142578125,460.453515625],[318.01272890165257,453.5806884765625],[337.86756134033203,507.799658203125],[299.6851912659484,522.3089599609375]],"center":[308.65804823342853,486.03570556640625],"dot":[314.9256842811387,464.290844116211],"number":10},"c11":{"title":"CAB 11","corners":[[459.5,935.6],[528.5,912.5],[544.4,991.7],[476,1013]],"center":[502.1,963.2],"dot":[518,929],"number":11}},"parking":{"p1":{"number":"1","corners":[[807.517,854.014],[828.88,849.518],[843.914,890.19],[823.383,894.514]],"center":[825.9235,872.0590000000001],"placement":{"car":[824.7647499999999,869.0150500000001],"label":[831.74815,887.3599220000001],"w":18.238957356436345,"h":33.0047087175391,"angle":-20.840484977363626}},"p2":{"number":"2","corners":[[783.513,859.068],[804.875,854.571],[820.741,895.071],[800.209,899.395]],"center":[802.3344999999999,877.02625],"placement":{"car":[801.1134249999999,873.9952375],"label":[808.4724369999999,892.2621395],"w":18.181168984723538,"h":33.1129997798628,"angle":-21.94255496706634}},"p3":{"number":"3","corners":[[759.508,864.121],[780.871,859.624],[797.567,899.951],[777.036,904.275]],"center":[778.7455,881.99275],"placement":{"car":[777.4621,878.9747125],"label":[785.196724,897.1634185],"w":18.115478735533557,"h":33.23310967608669,"angle":-23.037294699450204}},"p4":{"number":"4","corners":[[735.503,869.174],[756.866,864.677],[774.394,904.831],[753.863,909.155]],"center":[755.1565,886.95925],"placement":{"car":[753.8107000000001,883.9541875],"label":[761.921388,902.0646975],"w":18.04447550210385,"h":33.36557269767138,"angle":-24.12494761935565}},"p5":{"number":"5","corners":[[697.513,995.781],[704.745,1020.374],[748.485,1005.146],[741.836,981.789]],"center":[723.1447499999999,1000.7725],"placement":{"car":[719.8423875,1001.86825],"label":[739.7446254999999,995.26453],"w":21.350958137012608,"h":35.257980845244056,"angle":-108.35625258448464}},"p6":{"number":"6","corners":[[689.52,968.598],[696.751,993.19],[741.096,979.192],[734.447,955.835]],"center":[715.4535000000001,974.20375],"placement":{"car":[712.1058,975.2072875],"label":[732.2812720000001,969.1593015],"w":21.368685103741043,"h":35.41477905567115,"angle":-106.68711381877047}},"p7":{"number":"7","corners":[[834.311,1024.387],[856.074,1016.875],[871.454,1068.326],[851.13,1075.885]],"center":[853.24225,1046.36825],"placement":{"car":[854.4497125,1050.2288375],"label":[847.1727385,1026.9623635],"w":19.05533606711004,"h":40.989429197889635,"angle":162.63206476821037}},"p8":{"number":"8","corners":[[809.996,1032.781],[831.759,1025.268],[848.6,1076.826],[828.276,1084.385]],"center":[829.6577500000001,1054.815],"placement":{"car":[830.9747875,1058.683575],"label":[823.0374415000001,1035.368963],"w":19.074629530705014,"h":41.41107929762283,"angle":161.1991088254982}},"p9":{"number":"9","corners":[[785.68,1041.174],[807.443,1033.662],[825.746,1085.326],[805.422,1092.885]],"center":[806.07275,1063.2617500000001],"placement":{"car":[807.4994375,1067.1383125000002],"label":[798.9012675,1043.7755625000002],"w":19.081962199194702,"h":41.85836292379338,"angle":159.7949204097926}},"p10":{"number":"10","corners":[[681.526,941.414],[688.758,966.007],[733.708,953.238],[727.059,929.882]],"center":[707.76275,947.6352499999999],"placement":{"car":[704.3696375,948.5465374999999],"label":[724.8187955,943.0545115],"w":21.367513979933985,"h":35.60198866518543,"angle":-105.03317038013643}},"p11":{"number":"11","corners":[[673.533,914.231],[680.765,938.824],[726.32,927.285],[719.67,903.928]],"center":[700.072,921.067],"placement":{"car":[696.63355,921.886075],"label":[717.355942,916.949783],"w":21.350759480511886,"h":35.81788935103797,"angle":-103.39874899494103}}},"places":{"masajes":{"title":"Sala de masajes","center":[383,94],"w":134,"kind":"Recinto Haku","service":true,"shape":"M284.26 72.04L313.28 63.64L330.84 111.75L301.82 125.5L284.26 72.04Z"},"muelle":{"title":"Muelle","center":[65,180],"w":64,"kind":"Recinto Haku","shape":"M32.1001 167.5L80.9801 149.17L97.0201 189.65L48.1401 211.03L32.1001 167.5Z"},"recepcion":{"title":"Recepción","center":[613,870],"w":91,"kind":"Recinto Haku"},"lavanderia":{"title":"Lavandería","center":[598.5,958],"w":99,"kind":"Recinto Haku","shape":"M554.79 917.63L624.16 915.07L642.15 995.99L572.14 1001.77L554.79 917.63Z"},"porton":{"title":"Portón","center":[900,840],"w":64,"kind":"Recinto Haku"},"piscina":{"title":"Piscina","center":[765,1274],"w":72,"kind":"Recinto Haku","shape":"M694.03 1232.98L736.02 1223.81C739.08 1223.3 741.12 1224.83 742.13 1228.39L758.17 1299.41C759.19 1302.97 757.91 1305.26 754.35 1306.28L714.64 1315.44C711.59 1315.95 709.55 1314.68 708.54 1311.63L690.97 1238.32C690.46 1235.78 691.48 1233.99 694.03 1232.98Z"},"verde":{"title":"Áreas verdes","center":[612,1268],"w":102,"kind":"Recinto Haku"},"tonel":{"title":"Tinaja Tonel de Madera","center":[487,1391],"w":156,"kind":"Recinto Haku","service":true},"jacuzzi":{"title":"Tinaja Jacuzzi","center":[647,1499],"w":117,"kind":"Recinto Haku","service":true},"cocina":{"title":"Cocina","center":[846,1258],"w":67,"kind":"Recinto Haku","shape":"M770.39 1228.39L797.11 1225.34L809.33 1284.9L782.6 1294.06L770.39 1228.39Z"},"camarines":{"title":"Camarines y baños","center":[927,1386],"w":131,"kind":"Recinto Haku"},"galpon":{"title":"Galpón","center":[824,1168],"w":63,"kind":"Recinto Haku"},"bodega":{"title":"Bodega Sra. Naifi","center":[893,1450],"w":124,"kind":"Recinto Haku","shape":"M787.95 1421.58L823.08 1420.06L833 1463.58L803.22 1471.98L787.95 1421.58Z"},"casa":{"title":"Casa Sra. Naifi","center":[588,1073],"w":112,"kind":"Recinto Haku","shape":"M543.6 1012.3L681.05 1048.95L657.38 1146.69L520.69 1108.51L543.6 1012.3Z"},"torreon":{"title":"Torreón","center":[511,850],"w":68,"kind":"Recinto Haku"},"escalera":{"title":"Escalera al río","center":[420,1115],"w":107,"kind":"Recinto Haku"},"escalera-norte":{"title":"Escalera norte","center":[312,562],"w":104,"kind":"Recinto Haku"},"orilla":{"title":"Orilla del río","center":[306,1222],"w":92,"kind":"Recinto Haku"}}}</script>
+<script type="application/json" id="geometry">{"cabins":{"c1":{"title":"CAB 1","corners":[[431.79620361328125,770.4944085562101],[498.23352505610535,755.985107421875],[511.2155303955078,818.6041965279528],[450.1237405630258,827.0043182373047]],"center":[472.8422499069801,793.0220076858357],"dot":[489.854404256894,768.207284508982],"number":1},"c2":{"title":"CAB 2","corners":[[409.650390625,723.9118763913391],[474.56042592278845,699.4751586914062],[498.2334976196289,755.9850683725008],[431.7961673736572,770.4943695068359]],"center":[453.56012038526865,737.4666182405206],"dot":[467.63032509540693,712.012340342614],"number":2},"c3":{"title":"CAB 3","corners":[[389.7955627441406,662.0564690747308],[445.54182337855434,645.2562255859375],[474.5604248046875,699.4751932088611],[409.6503952988633,723.9119110107422]],"center":[429.88705155656146,682.6749497200678],"dot":[440.3757486772967,657.6044045502006],"number":3},"c4":{"title":"CAB 4","corners":[[368.4134216308594,615.4739253011982],[431.7961558729115,594.091796875],[445.54180908203125,645.2561756091171],[389.79554884504563,662.0564193725586]],"center":[408.886733857712,629.2195792894685],"dot":[424.2360466078957,605.6839650717745],"number":4},"c5":{"title":"CAB 5","corners":[[337.1039123535156,550.5639519868074],[399.7230031413417,533.0000610351562],[431.7961959838867,594.0918556495949],[368.41345774742865,615.4739837646484]],"center":[384.25914230654314,573.2824631090517],"dot":[394.6199290658582,546.2932537195418],"number":5},"c6":{"title":"CAB 6","corners":[[335.4262390136719,333.2234997326815],[396.5219790140788,319.4769592285156],[408.74112701416016,356.8980972676338],[349.1727805137634,379.80899810791016]],"center":[372.4655313889186,347.3518885841853],"dot":[388.58335129777595,328.6756859158866],"number":6},"c7":{"title":"CAB 7","corners":[[322.4433898925781,289.69279164281386],[380.4843413362798,266.7818908691406],[396.52197265625,319.47696264858905],[335.42623429445877,333.22350311279297]],"center":[358.71898454489167,302.29378706833415],"dot":[373.30177359512174,278.5008166148745],"number":7},"c8":{"title":"CAB 8","corners":[[309.4605407714844,246.1621060914631],[371.31997606831214,229.36077880859375],[380.48433685302734,266.7819168477119],[322.44338521649763,289.6928176879883]],"center":[345.9270597273304,257.9994048589393],"dot":[362.94031367578816,238.8115254052078],"number":8},"c9":{"title":"CAB 9","corners":[[290.3681335449219,194.2307100084093],[356.0460564955226,177.42938232421875],[371.3199920654297,229.36075880262587],[309.4605530073058,246.1620864868164]],"center":[331.798683778295,211.79573440551758],"dot":[348.0444234988375,188.77027851104737],"number":9},"c10":{"title":"CAB 10","corners":[[279.06671142578125,460.453515625],[318.01272890165257,453.5806884765625],[337.86756134033203,507.799658203125],[299.6851912659484,522.3089599609375]],"center":[308.65804823342853,486.03570556640625],"dot":[314.9256842811387,464.290844116211],"number":10},"c11":{"title":"CAB 11","corners":[[459.5,935.6],[528.5,912.5],[544.4,991.7],[476,1013]],"center":[502.1,963.2],"dot":[518,929],"number":11}},"parking":{"p1":{"number":"1","corners":[[807.517,854.014],[828.88,849.518],[843.914,890.19],[823.383,894.514]],"center":[825.9235,872.0590000000001],"placement":{"car":[824.7647499999999,869.0150500000001],"label":[831.74815,887.3599220000001],"w":18.238957356436345,"h":33.0047087175391,"angle":-20.840484977363626}},"p2":{"number":"2","corners":[[783.513,859.068],[804.875,854.571],[820.741,895.071],[800.209,899.395]],"center":[802.3344999999999,877.02625],"placement":{"car":[801.1134249999999,873.9952375],"label":[808.4724369999999,892.2621395],"w":18.181168984723538,"h":33.1129997798628,"angle":-21.94255496706634}},"p3":{"number":"3","corners":[[759.508,864.121],[780.871,859.624],[797.567,899.951],[777.036,904.275]],"center":[778.7455,881.99275],"placement":{"car":[777.4621,878.9747125],"label":[785.196724,897.1634185],"w":18.115478735533557,"h":33.23310967608669,"angle":-23.037294699450204}},"p4":{"number":"4","corners":[[735.503,869.174],[756.866,864.677],[774.394,904.831],[753.863,909.155]],"center":[755.1565,886.95925],"placement":{"car":[753.8107000000001,883.9541875],"label":[761.921388,902.0646975],"w":18.04447550210385,"h":33.36557269767138,"angle":-24.12494761935565}},"p5":{"number":"5","corners":[[697.513,995.781],[704.745,1020.374],[748.485,1005.146],[741.836,981.789]],"center":[723.1447499999999,1000.7725],"placement":{"car":[719.8423875,1001.86825],"label":[739.7446254999999,995.26453],"w":21.350958137012608,"h":35.257980845244056,"angle":-108.35625258448464}},"p6":{"number":"6","corners":[[689.52,968.598],[696.751,993.19],[741.096,979.192],[734.447,955.835]],"center":[715.4535000000001,974.20375],"placement":{"car":[712.1058,975.2072875],"label":[732.2812720000001,969.1593015],"w":21.368685103741043,"h":35.41477905567115,"angle":-106.68711381877047}},"p7":{"number":"7","corners":[[834.311,1024.387],[856.074,1016.875],[871.454,1068.326],[851.13,1075.885]],"center":[853.24225,1046.36825],"placement":{"car":[854.4497125,1050.2288375],"label":[847.1727385,1026.9623635],"w":19.05533606711004,"h":40.989429197889635,"angle":162.63206476821037}},"p8":{"number":"8","corners":[[809.996,1032.781],[831.759,1025.268],[848.6,1076.826],[828.276,1084.385]],"center":[829.6577500000001,1054.815],"placement":{"car":[830.9747875,1058.683575],"label":[823.0374415000001,1035.368963],"w":19.074629530705014,"h":41.41107929762283,"angle":161.1991088254982}},"p9":{"number":"9","corners":[[785.68,1041.174],[807.443,1033.662],[825.746,1085.326],[805.422,1092.885]],"center":[806.07275,1063.2617500000001],"placement":{"car":[807.4994375,1067.1383125000002],"label":[798.9012675,1043.7755625000002],"w":19.081962199194702,"h":41.85836292379338,"angle":159.7949204097926}},"p10":{"number":"10","corners":[[681.526,941.414],[688.758,966.007],[733.708,953.238],[727.059,929.882]],"center":[707.76275,947.6352499999999],"placement":{"car":[704.3696375,948.5465374999999],"label":[724.8187955,943.0545115],"w":21.367513979933985,"h":35.60198866518543,"angle":-105.03317038013643}},"p11":{"number":"11","corners":[[673.533,914.231],[680.765,938.824],[726.32,927.285],[719.67,903.928]],"center":[700.072,921.067],"placement":{"car":[696.63355,921.886075],"label":[717.355942,916.949783],"w":21.350759480511886,"h":35.81788935103797,"angle":-103.39874899494103}},
+  "p12":{"number":"12","label":"7B","corners":[[821.18,982.39],[842.94,974.88],[855.18,1014.01],[833.42,1021.52]],"center":[838.18,998.2],"placement":{"car":[838.78,1000.11],"label":[833.7,983.88],"w":17,"h":30,"angle":162.63}},
+  "p13":{"number":"13","label":"8B","corners":[[795.82,991.13],[817.58,983.62],[830.79,1022.43],[809.03,1029.94]],"center":[813.31,1006.78],"placement":{"car":[813.95,1008.67],"label":[808.48,992.58],"w":17,"h":30,"angle":161.2}},
+  "p14":{"number":"14","label":"9B","corners":[[770.48,999.88],[792.25,992.37],[806.41,1030.85],[784.64,1038.36]],"center":[788.44,1015.37],"placement":{"car":[789.13,1017.25],"label":[783.26,1001.29],"w":17,"h":30,"angle":159.79}},
+  "p15":{"number":"15","label":"Adicional","title":"Adicional","corners":[[838.78,939.54],[856.85,934.68],[871.44,976.37],[853.37,982.63]],"center":[855.11,958.3],"labelAt":[893.68,956.91],"placement":{"car":[855.11,958.3],"label":[893.68,956.91],"w":15,"h":34,"angle":-18.99}},
+  "p16":{"number":"16","label":"Dueña","title":"Dueña","owner":true,"corners":[[717.16,1024.32],[722.03,1041.7],[758.17,1031.27],[753.3,1013.9]],"center":[737.66,1027.8],"labelAt":[738.71,1048.64],"placement":{"car":[737.66,1027.8],"label":[738.71,1048.64],"w":14,"h":29,"angle":-106.09}}
+},"places":{"masajes":{"title":"Sala de masajes","center":[383,94],"w":134,"kind":"Recinto Haku","service":true,"shape":"M284.26 72.04L313.28 63.64L330.84 111.75L301.82 125.5L284.26 72.04Z"},"muelle":{"title":"Muelle","center":[65,180],"w":64,"kind":"Recinto Haku","shape":"M32.1001 167.5L80.9801 149.17L97.0201 189.65L48.1401 211.03L32.1001 167.5Z"},"recepcion":{"title":"Recepción","center":[613,870],"w":91,"kind":"Recinto Haku"},"lavanderia":{"title":"Lavandería","center":[598.5,958],"w":99,"kind":"Recinto Haku","shape":"M554.79 917.63L624.16 915.07L642.15 995.99L572.14 1001.77L554.79 917.63Z"},"porton":{"title":"Portón","center":[900,840],"w":64,"kind":"Recinto Haku"},"piscina":{"title":"Piscina","center":[765,1274],"w":72,"kind":"Recinto Haku","shape":"M694.03 1232.98L736.02 1223.81C739.08 1223.3 741.12 1224.83 742.13 1228.39L758.17 1299.41C759.19 1302.97 757.91 1305.26 754.35 1306.28L714.64 1315.44C711.59 1315.95 709.55 1314.68 708.54 1311.63L690.97 1238.32C690.46 1235.78 691.48 1233.99 694.03 1232.98Z"},"verde":{"title":"Áreas verdes","center":[612,1268],"w":102,"kind":"Recinto Haku"},"tonel":{"title":"Tinaja Tonel de Madera","center":[487,1391],"w":156,"kind":"Recinto Haku","service":true},"jacuzzi":{"title":"Tinaja Jacuzzi","center":[647,1499],"w":117,"kind":"Recinto Haku","service":true},"cocina":{"title":"Cocina","center":[846,1258],"w":67,"kind":"Recinto Haku","shape":"M770.39 1228.39L797.11 1225.34L809.33 1284.9L782.6 1294.06L770.39 1228.39Z"},"camarines":{"title":"Camarines y baños","center":[927,1386],"w":131,"kind":"Recinto Haku"},"galpon":{"title":"Galpón","center":[824,1168],"w":63,"kind":"Recinto Haku"},"bodega":{"title":"Bodega Sra. Naifi","center":[893,1450],"w":124,"kind":"Recinto Haku","shape":"M787.95 1421.58L823.08 1420.06L833 1463.58L803.22 1471.98L787.95 1421.58Z"},"casa":{"title":"Casa Sra. Naifi","center":[588,1073],"w":112,"kind":"Recinto Haku","shape":"M543.6 1012.3L681.05 1048.95L657.38 1146.69L520.69 1108.51L543.6 1012.3Z"},"torreon":{"title":"Torreón","center":[511,850],"w":68,"kind":"Recinto Haku"},"escalera":{"title":"Escalera al río","center":[420,1115],"w":107,"kind":"Recinto Haku"},"escalera-norte":{"title":"Escalera norte","center":[312,562],"w":104,"kind":"Recinto Haku"},"orilla":{"title":"Orilla del río","center":[306,1222],"w":92,"kind":"Recinto Haku"}}}</script>
 <script>
 const artShapes = {
   'Sedán':['M7 3Q12 1 17 3Q20 5 20 11L19.5 47Q19.5 53 16.5 54H7.5Q4.5 53 4.5 47L4 11Q4 5 7 3Z','M6.8 14L17.2 14L18 20L6 20ZM6.6 38H17.4L17 44H7Z'],
@@ -978,12 +1000,16 @@ const MAP_CHANNEL = 'haiku:mapa:v1';
 const width = 1136, height = 1578;
 const svgNS = 'http://www.w3.org/2000/svg';
 const geometry = JSON.parse(document.getElementById('geometry').textContent);
+const parkingSlot = n => geometry.parking['p' + n];
+const parkingNumbers = Object.values(geometry.parking).map(bay => Number(bay.number)).sort((a,b) => a-b);
+const parkingTitle = n => parkingSlot(n)?.title || 'Puesto ' + (parkingSlot(n)?.label || n);
 const byId = id => document.getElementById(id);
 const viewport = byId('viewport'), world = byId('world'), regions = byId('regions');
 const details = byId('details'), detailBody = byId('detail-body'), tooltip = byId('tooltip');
 const view = { x: 0, y: 0, scale: 1 };
 const state = { data: null, filter: 'all', selection: '', formOpen: false, placing: null, saving: false };
 const pending = new Map();
+const cabinReservationCache = new Map();
 let nextRequest = 0, frame = 0, measure = null, gesture = null, snapshotRequest = null;
 let guestAssets, disposeGuest, reservationRules;
 const pointsDown = new Map();
@@ -1033,12 +1059,20 @@ const list = value => Array.isArray(value) ? value : [];
 const item = id => data().elementos.find(x => x.id === id);
 const bayRecord = n => data().elementos.find(x => x.tipo === 'vehiculo' && x.puesto === n);
 const cabinRow = n => data().cabanas.find(row => row.numero === n);
+function bayReserved(n, car = bayRecord(n)) {
+  if (car) return false;
+  const row = cabinRow(n);
+  if (row?.estado_operativo === 'fullday') return Boolean(data().ocupacion_estadias?.[row.fullday_estadia_id]?.por_llegar);
+  if (!row?.ingreso_estadia_id || !['libre-ingresa','sale-ingresa'].includes(row.estado_operativo)) return false;
+  return data().ocupacion_estadias?.[row.ingreso_estadia_id]?.por_llegar ?? !row.ingreso_checkin_en;
+}
 const personName = e => data().personas.find(p => p.id === e.datos.persona_id && p.reserva_id === e.reserva_id)?.nombre || 'Huésped';
 const zones = geometry.places;
 const simpleDate = new Intl.DateTimeFormat('es-CL', { day:'numeric', month:'short', timeZone:'UTC' });
 const chileTime = new Intl.DateTimeFormat('es-CL', { hour:'2-digit', minute:'2-digit', hourCycle:'h23', timeZone:'America/Santiago' });
 const formatTime = v => v && Number.isFinite(Date.parse(v)) ? chileTime.format(new Date(v)) : '';
 const useTheme = () => document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light';
+const accessDenied = error => ['42501','UNAUTHORIZED','PGRST301','PGRST302','PGRST303'].includes(error.code);
 
 function newId() {
   if (crypto.randomUUID) return crypto.randomUUID();
@@ -1110,6 +1144,9 @@ async function fetchSnapshot() {
       throw new Error('El mapa recibió una respuesta incompleta.');
     }
     state.data = fresh;
+    for (const [number, cached] of cabinReservationCache) {
+      if (cached.context !== cabinContext(number)) cabinReservationCache.delete(number);
+    }
     byId('day').dateTime = fresh.fecha;
     byId('day').textContent = simpleDate.format(new Date(fresh.fecha + 'T12:00:00Z'));
     byId('add').disabled = !['vehiculo', 'persona', 'tarea', 'lavanderia'].some(k => fresh.permisos?.[k]);
@@ -1120,17 +1157,17 @@ async function fetchSnapshot() {
       const pane = detailBody.querySelector('.cabin-extra');
       const number = Number(state.selection.slice(1));
       const reservations = detailBody.querySelector('.cabin-reservations');
-      const editingStatus = state.saving || reservations?.querySelector('details[open]');
-      if (summary && pane?.dataset.context === cabinContext(number) && (!pane.hidden || editingStatus || details.querySelector('.guest-notes[open]'))) {
-        summary.replaceWith(cabinSummary(number));
-        if (!editingStatus) void reservations?.reload();
+      if (summary && pane?.dataset.context === cabinContext(number)) {
+        const updated = cabinSummary(number);
+        if (!summary.isEqualNode(updated)) summary.replaceWith(updated);
+        if (!state.saving) void reservations?.reload();
       } else {
         showDetail(state.selection, false);
       }
     }
   } catch (error) {
-    const forbidden = error.code === '42501' || error.code === 'UNAUTHORIZED';
-    if (forbidden) {
+    if (accessDenied(error)) {
+      cabinReservationCache.clear();
       state.data = null;
       byId('add').disabled = true;
       closeDetail();
@@ -1215,10 +1252,15 @@ function draw() {
   if (filter === 'all' || filter === 'parking') {
     for (const [ref, p] of Object.entries(geometry.parking)) {
       const number = Number(p.number), car = bayRecord(number);
-      const g = region(ref, 'Puesto ' + number + (car ? ' · ' + car.datos.vehiculo : ''));
+      const reserved = bayReserved(number,car);
+      const g = region(ref, parkingTitle(number) + (car ? ' · ' + car.datos.vehiculo : reserved ? ' · Reservado para Cab ' + number : ''));
+      g.toggleAttribute('data-parking-reserved',reserved);
       g.append(createSvg('polygon', { points:poly(p.corners), class:'hit' }));
       if (car) drawCar(g, p, car);
-      g.append(textAt(String(number), car ? p.placement.label : p.center, car ? 10 : 13));
+      const label = textAt(p.label || String(number), p.labelAt || (car ? p.placement.label : p.center),
+        p.labelAt || car ? 10 : 13);
+      if (p.labelAt) label.classList.add('parking-name');
+      g.append(label);
       nodes.push(g);
     }
   }
@@ -1335,9 +1377,17 @@ function showDetail(id, focus = true) {
 function cabinGuest(ref) {
   return data().personas.find(p => p.reserva_id === ref?.reserve && p.rol === 'titular');
 }
+function cabinStayCounts(ref) {
+  const counts = data().ocupacion_estadias?.[ref?.stay];
+  if (!counts) return '';
+  const {huespedes,noches} = counts;
+  return huespedes + (huespedes === 1 ? ' huésped' : ' huéspedes') + ' · '
+    + noches + (noches === 1 ? ' noche' : ' noches');
+}
 function cabinContext(n) {
   const row = cabinRow(n), ref = stay(row);
-  return [data().fecha, ref?.reserve, ref?.stay, row?.salida_estadia_id, cabinGuest(ref)?.id].join('/');
+  return [data().fecha, ref?.reserve, ref?.stay, row?.ingreso_estadia_id, row?.salida_estadia_id,
+    cabinGuest(ref)?.id, Boolean(data().permisos.huesped)].join('/');
 }
 function openGuest(person, reserve, stayId) {
   send({ type:'navigate', method:'guest', args:{ id:person.id, reserva:reserve, estadia:stayId } });
@@ -1369,7 +1419,7 @@ function cabinSummary(n) {
   const [reservation] = cabinState(row), [clean] = cleaning(row), guest = cabinGuest(ref);
   const summary = el('div', '', 'cabin-summary');
   summary.append(lines([
-    ['Operación', reservation], ['Huésped', ref?.title || guest?.nombre], ['Aseo', clean],
+    ['Operación', reservation], ['Huésped', ref?.title || guest?.nombre], ['Estadía', cabinStayCounts(ref)], ['Aseo', clean],
     ['Asignada a', row?.aseo_asignado_nombre], ['Inicio del aseo', formatTime(row?.aseo_inicio)],
     ['Aseo listo', formatTime(row?.aseo_fin || row?.aseo_ultimo_listo)], ['Observación', row?.aseo_nota],
   ]));
@@ -1404,7 +1454,9 @@ function cabinReservations(n, row) {
   const requestArgs = {p_numero:n,p_fecha:data().fecha,p_estadias:[...new Set([
     stay(row)?.stay, row.salida_estadia_id,
   ].filter(Boolean))]};
-  let manual, loadVersion = 0;
+  const context = cabinContext(n);
+  let manual = window.HAIKU_RESERVA_ESTADO_MANUAL_V1;
+  let rendered, loadFailed = false, loadVersion = 0;
 
   function message(text, error = false) {
     const target = panel.isConnected ? feedback
@@ -1446,6 +1498,7 @@ function cabinReservations(n, row) {
       function reset() { confirm.hidden = true; menu.hidden = false; }
       function choose(option) {
         if (state.saving) return;
+        loadFailed = false;
         message('');
         if (['hospedada','checked_out'].includes(option.valor)) {
           void save(ficha,estadia,option.valor,picker);
@@ -1474,19 +1527,42 @@ function cabinReservations(n, row) {
       return picker;
     }));
   }
+  function update(value, reconcile = false) {
+    const signature = JSON.stringify(value);
+    if (reconcile || rendered !== signature) {
+      const focusedStay = list.contains(document.activeElement)
+        ? document.activeElement.closest('.reservation-picker')?.dataset.stay : null;
+      render(value);
+      rendered = signature;
+      if (focusedStay) [...list.querySelectorAll('.reservation-picker')]
+        .find(picker => picker.dataset.stay === focusedStay)?.querySelector('summary')?.focus({preventScroll:true});
+    }
+    cabinReservationCache.set(n,{context,value});
+  }
   async function load(reconcile = false) {
     const version = ++loadVersion;
     try {
       const [rules,value] = await Promise.all([loadReservationRules(),request('reservationState',requestArgs)]);
       if (!panel.isConnected || version !== loadVersion) return false;
-      if (!reconcile && list.querySelector('details[open]')) return false;
       manual = rules;
-      render(value);
+      update(value,reconcile);
+      if (loadFailed) message('');
+      loadFailed = false;
       return true;
     } catch (error) {
       if (!panel.isConnected || version !== loadVersion) return false;
-      list.hidden = true;
-      if (reconcile || (requestArgs.p_estadias.length && !['42501','PGRST202'].includes(error.code))) {
+      const denied = accessDenied(error);
+      if (denied) {
+        cabinReservationCache.clear();
+        list.replaceChildren();
+        panel.removeAttribute('data-multiple');
+        rendered = undefined;
+        loadFailed = false;
+        message('');
+      }
+      if (rendered === undefined) list.hidden = true;
+      if (reconcile || (!denied && error.code !== 'PGRST202' && (rendered !== undefined || requestArgs.p_estadias.length))) {
+        loadFailed = true;
         message('No se pudo consultar el estado. Actualiza el mapa.',true);
       }
       return false;
@@ -1494,6 +1570,7 @@ function cabinReservations(n, row) {
   }
   async function save(ficha, estadia, to, picker) {
     if (state.saving || !panel.isConnected || data().fecha !== requestArgs.p_fecha) return;
+    ++loadVersion;
     state.saving = true;
     byId('close').disabled = true;
     const restoreFocus = picker.contains(document.activeElement);
@@ -1510,7 +1587,7 @@ function cabinReservations(n, row) {
       const fresh = value.fichas.find(item => item.estadia_id === estadia.id && item.reserva?.id === ficha.reserva.id);
       const freshStay = fresh?.estadias.find(item => item.id === estadia.id && item.cabana_numero === n);
       if (!freshStay || manual.actual(fresh,freshStay) !== to) throw new Error('No se pudo verificar el estado nuevo. Actualiza el mapa.');
-      if (panel.isConnected) render(value);
+      if (panel.isConnected) update(value);
       await refresh(true);
       message(manual.etiqueta(to) + ' guardado.');
     } catch (error) {
@@ -1535,6 +1612,17 @@ function cabinReservations(n, row) {
     }
   }
   panel.reload = load;
+  const cached = cabinReservationCache.get(n);
+  if (manual && cached?.context === context) {
+    update(cached.value);
+  } else if (requestArgs.p_estadias.length) {
+    const loading = el('span','Cargando…','reservation-tag');
+    loading.setAttribute('role','status');
+    const placeholder = el('div','','reservation-readonly');
+    placeholder.append(el('span','Estado de reserva','reservation-label'),loading);
+    list.append(placeholder);
+    list.hidden = false;
+  }
   queueMicrotask(load);
   return panel;
 }
@@ -1677,7 +1765,7 @@ function loadGuestAssets() {
       sheet.href = '../../css/' + name + '.css?v=mapa1';
       return sheet;
     }),
-    Object.assign(el('script'), {src:'../../js/haiku-huespedes-v1.js?v=mapa3'}),
+    Object.assign(el('script'), {src:'../../js/haiku-huespedes-v1.js?v=mapa4'}),
   ];
   guestAssets = Promise.all(assets.map(load)).catch(error => {
     assets.forEach(node => node.remove());
@@ -1737,7 +1825,10 @@ async function cabinProfile(body, guest, ref) {
 }
 function showBay(number, focus) {
   const car = bayRecord(number), values = car?.datos || {};
-  showPanel('Puesto ' + number, car ? values.estacionado ? 'Estacionado' : 'Fuera del recinto' : 'Disponible', focus);
+  const caption = car ? values.estacionado ? 'Estacionado' : 'Fuera del recinto'
+    : parkingSlot(number).owner ? 'Uso de la dueña'
+    : bayReserved(number,car) ? 'Reservado para Cab ' + number : 'Disponible';
+  showPanel(parkingTitle(number), caption, focus);
   if (car) {
     const guest = cabinGuest({ reserve:car.reserva_id });
     detailBody.append(lines([
@@ -1820,10 +1911,9 @@ function showAdd() {
 }
 function chooseBay() {
   showPanel('Elegir puesto', 'Vehículos');
-  const numbers = Object.keys(geometry.parking).map(ref => Number(ref.slice(1))).sort((a,b) => a-b);
-  const available = numbers.filter(n => !bayRecord(n));
+  const available = parkingNumbers.filter(n => !bayRecord(n));
   if (!available.length) detailBody.append(el('p', 'Todos los puestos tienen un vehículo registrado.'));
-  else actions(...available.map(n => button(String(n), () => vehicleForm(n))));
+  else actions(...available.map(n => button(parkingSlot(n).label || String(n), () => vehicleForm(n))));
 }
 function selectField(name, label, values, selected = '', required = false) {
   const control = el('select');
@@ -2057,8 +2147,8 @@ function vehicleForm(number, entry) {
   const model = input('modelo','Modelo',values.modelo,{limit:120});
   const plate = input('patente','Patente',values.patente,{limit:30,required:true});
   const type = vehicleTypeField(values.vehiculo || 'Sedán', color.querySelector('input'));
-  const slots = Object.keys(geometry.parking).map(k => Number(k.slice(1))).sort((a,b) => a-b)
-    .filter(n => n === number || !bayRecord(n)).map(n => [String(n), 'Puesto ' + n]);
+  const slots = parkingNumbers.filter(n => n === number || !bayRecord(n)).map(n => [String(n), parkingTitle(n)]);
+  const spotField = selectField('puesto', 'Puesto', slots, String(number), true);
   const stays = getTargets();
   function stayLabel(reserve, name) {
     const numbers = [...new Set(stays.filter(stay => stay.reserve === reserve).map(stay => stay.row.numero))];
@@ -2071,11 +2161,13 @@ function vehicleForm(number, entry) {
   }
   const stayField = selectField('reserva_id', 'Estadía', [['','Sin vínculo'], ...linked], entry?.reserva_id || '');
   const choice = selectField('vehiculo_id','Vehículo de la estadía',[['','Registrar otro vehículo']], '');
+  const spot = spotField.querySelector('select');
   const reservation = stayField.querySelector('select'), vehicles = choice.querySelector('select');
   const status = el('p', '', 'subtle');
   status.setAttribute('role','status');
   status.hidden = choice.hidden = true;
   let candidates = [], selected, sequence = 0;
+  let previousReserve = reservation.value;
 
   function fill(vehicle) {
     type.select(vehicle?.tipo || values.vehiculo || 'Sedán');
@@ -2120,12 +2212,25 @@ function vehicleForm(number, entry) {
   }
 
   reservation.addEventListener('change', loadVehicles);
+  function syncSpot() {
+    const owner = parkingSlot(spot.value)?.owner === true;
+    if (owner === reservation.disabled) return;
+    if (owner) {
+      previousReserve = reservation.value;
+      reservation.value = '';
+    } else {
+      reservation.value = previousReserve;
+    }
+    stayField.hidden = reservation.disabled = owner;
+    void loadVehicles();
+  }
+  spot.addEventListener('change',syncSpot);
   vehicles.addEventListener('change', () => {
     selected = candidates.find(vehicle => vehicle.id === vehicles.value);
     fill(selected);
   });
-  form(entry ? 'Editar vehículo' : 'Registrar vehículo', 'Puesto ' + number, [
-    selectField('puesto', 'Puesto', slots, String(number), true),
+  form(entry ? 'Editar vehículo' : 'Registrar vehículo', parkingTitle(number), [
+    spotField,
     stayField, status, choice, type.element, plate, model,
     color,
     ...(!entry ? [selectField('estacionado','Presencia',[['true','Estacionado'],['false','Fuera del recinto']],'true')] : []),
@@ -2140,7 +2245,8 @@ function vehicleForm(number, entry) {
     await change.run('guardar', fields);
     return 'p' + fields.puesto;
   }, 'p' + number);
-  void loadVehicles();
+  if (parkingSlot(number).owner) syncSpot();
+  else void loadVehicles();
 }
 function getTargets() {
   const targets = [];
@@ -2289,12 +2395,15 @@ function pinch() {
 function findRef(target) { return target.closest?.('[data-ref]')?.dataset.ref; }
 function tooltipFor(id) {
   if (id?.startsWith('c') && Object.hasOwn(geometry.cabins,id)) {
-    const row = cabinRow(Number(id.slice(1)));
-    return ['CAB '+row?.numero, cabinState(row)[0], 'Aseo ' + cleaning(row)[0].toLowerCase()].map((v,i) => i===0 && !row ? geometry.cabins[id].title : v).join(' · ');
+    const ref = stay(cabinRow(Number(id.slice(1))));
+    if (!ref) return '';
+    return [ref.title || cabinGuest(ref)?.nombre,cabinStayCounts(ref)].filter(Boolean).join(' · ');
   }
   if (Object.hasOwn(geometry.parking,id)) {
-    const car = bayRecord(Number(id.slice(1)));
-    return 'Puesto ' + id.slice(1) + ' · ' + (car ? car.datos.vehiculo + (car.datos.estacionado ? ' estacionado' : ' fuera') : 'Disponible');
+    const number = Number(id.slice(1)), car = bayRecord(number);
+    if (car) return [car.datos.vehiculo,car.datos.patente].filter(Boolean).join(' ');
+    if (parkingSlot(number).owner) return 'Dueña';
+    return bayReserved(number,car) ? 'Cab ' + number + ' · Reservado' : parkingTitle(number) + ' · Disponible';
   }
   if (Object.hasOwn(zones,id)) {
     const count = zones[id].service && data().agenda.filter(s => serviceGroup(s.codigo) === id).length;
@@ -2322,9 +2431,9 @@ viewport.addEventListener('pointermove', e => {
     const title = tooltipFor(findRef(e.target));
     tooltip.hidden = !title;
     if (title) {
-      tooltip.textContent = title;
-      tooltip.style.left = clamp(p.x+13, 4, Math.max(4, viewport.clientWidth-235)) + 'px';
-      tooltip.style.top = clamp(p.y+14, 4, viewport.clientHeight-42) + 'px';
+      if (tooltip.textContent !== title) tooltip.textContent = title;
+      tooltip.style.left = clamp(p.x+13, 4, viewport.clientWidth-tooltip.offsetWidth-4) + 'px';
+      tooltip.style.top = clamp(p.y+14, 4, viewport.clientHeight-tooltip.offsetHeight-4) + 'px';
     }
     return;
   }
