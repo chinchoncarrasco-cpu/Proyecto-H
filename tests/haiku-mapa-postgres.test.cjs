@@ -121,7 +121,7 @@ test('Mapa y Huéspedes comparten vehículos y conservan las reglas de estadías
         const photo = actor + '/' + additional + '.jpg';
         await db.query('update public.haiku_huesped_vehiculos set foto=$2, fotos_adicionales=array[$3] where id=$1',
             [matched,photo,actor + '/' + uuid(26) + '.jpg']);
-        await db.exec(read('supabase/migrations/20261127194617_haiku_vehiculos_mapa_huespedes.sql'));
+        await db.exec(read('supabase/migrations/20261127200953_haiku_vehiculos_mapa_huespedes.sql'));
         await db.exec('set role authenticated');
         const afterMigration = (await profile()).vehiculos;
         const fromMap = afterMigration.find(v => v.patente === 'QAAB47');
