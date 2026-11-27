@@ -1487,7 +1487,7 @@ function loadGuestAssets() {
       sheet.href = '../../css/' + name + '.css?v=mapa1';
       return sheet;
     }),
-    Object.assign(el('script'), {src:'../../js/haiku-huespedes-v1.js?v=mapa1'}),
+    Object.assign(el('script'), {src:'../../js/haiku-huespedes-v1.js?v=mapa2'}),
   ];
   guestAssets = Promise.all(assets.map(load)).catch(error => {
     assets.forEach(node => node.remove());
@@ -1760,7 +1760,13 @@ function vehicleTypeField(selected, colorInput) {
     } else return;
     event.preventDefault();
   });
-  return wrapper;
+  return {
+    element:wrapper,
+    select(type) {
+      const index = vehicleTypes.indexOf(type);
+      choose(index < 0 ? vehicleTypes.indexOf('Otro') : index);
+    },
+  };
 }
 function vehicleTypeIcon(type) {
   const icon = createSvg('svg', { class:'vehicle-type-art', viewBox:'0 0 24 56', 'aria-hidden':'true' });
@@ -1850,7 +1856,10 @@ function confirmChange(entry, action, back, title) {
 function vehicleForm(number, entry) {
   const values = entry?.datos || {};
   const change = changes('vehiculo', entry);
-  const color = input('color','Color',values.color,{limit:45});
+  const color = input('color','Color',values.color,{limit:80});
+  const model = input('modelo','Modelo',values.modelo,{limit:120});
+  const plate = input('patente','Patente',values.patente,{limit:30,required:true});
+  const type = vehicleTypeField(values.vehiculo || 'Sedán', color.querySelector('input'));
   const slots = Object.keys(geometry.parking).map(k => Number(k.slice(1))).sort((a,b) => a-b)
     .filter(n => n === number || !bayRecord(n)).map(n => [String(n), 'Puesto ' + n]);
   const stays = getTargets();
@@ -1863,21 +1872,78 @@ function vehicleForm(number, entry) {
   if (entry?.reserva_id && !linked.has(entry.reserva_id)) {
     linked.set(entry.reserva_id, stayLabel(entry.reserva_id, 'Estadía vinculada'));
   }
+  const stayField = selectField('reserva_id', 'Estadía', [['','Sin vínculo'], ...linked], entry?.reserva_id || '');
+  const choice = selectField('vehiculo_id','Vehículo de la estadía',[['','Registrar otro vehículo']], '');
+  const reservation = stayField.querySelector('select'), vehicles = choice.querySelector('select');
+  const status = el('p', '', 'subtle');
+  status.setAttribute('role','status');
+  status.hidden = choice.hidden = true;
+  let candidates = [], selected, sequence = 0;
+
+  function fill(vehicle) {
+    type.select(vehicle?.tipo || values.vehiculo || 'Sedán');
+    plate.querySelector('input').value = vehicle ? vehicle.patente ?? '' : values.patente ?? '';
+    model.querySelector('input').value = vehicle ? vehicle.modelo ?? '' : values.modelo ?? '';
+    const colorInput = color.querySelector('input');
+    colorInput.value = vehicle ? vehicle.color ?? '' : values.color ?? '';
+    colorInput.dispatchEvent(new Event('input'));
+  }
+
+  async function loadVehicles() {
+    const revision = ++sequence;
+    if (selected) fill();
+    selected = undefined;
+    candidates = [];
+    vehicles.options.length = 1;
+    vehicles.value = '';
+    status.hidden = choice.hidden = true;
+    const reserve = reservation.value;
+    if (!reserve || (reserve === entry?.reserva_id && entry.vehiculo_id)) return;
+    const guest = cabinGuest({ reserve });
+    if (!guest) return;
+    status.textContent = 'Buscando vehículos de la estadía…';
+    status.hidden = false;
+    try {
+      const profile = await request('guestDetail', {p_id:guest.id,p_reserva:reserve});
+      if (!reservation.isConnected || revision !== sequence) return;
+      const assigned = new Set(data().elementos.filter(e => e.tipo === 'vehiculo' && e.id !== entry?.id)
+        .map(e => e.vehiculo_id));
+      candidates = list(profile.vehiculos).filter(vehicle => !vehicle.estacionamiento && !assigned.has(vehicle.id));
+      for (const vehicle of candidates) {
+        const option = el('option', [vehicle.modelo || vehicle.tipo, vehicle.patente].filter(Boolean).join(' · '));
+        option.value = vehicle.id;
+        vehicles.append(option);
+      }
+      choice.hidden = !candidates.length;
+      status.hidden = true;
+    } catch {
+      if (!reservation.isConnected || revision !== sequence) return;
+      status.textContent = 'No se pudieron consultar los vehículos de esta estadía.';
+    }
+  }
+
+  reservation.addEventListener('change', loadVehicles);
+  vehicles.addEventListener('change', () => {
+    selected = candidates.find(vehicle => vehicle.id === vehicles.value);
+    fill(selected);
+  });
   form(entry ? 'Editar vehículo' : 'Registrar vehículo', 'Puesto ' + number, [
     selectField('puesto', 'Puesto', slots, String(number), true),
-    vehicleTypeField(values.vehiculo || 'Sedán', color.querySelector('input')),
-    input('patente','Patente',values.patente,{limit:14,required:true}),
-    input('modelo','Modelo',values.modelo,{limit:80}),
+    stayField, status, choice, type.element, plate, model,
     color,
-    selectField('reserva_id', 'Estadía', [['','Sin vínculo'], ...linked], entry?.reserva_id || ''),
     ...(!entry ? [selectField('estacionado','Presencia',[['true','Estacionado'],['false','Fuera del recinto']],'true')] : []),
     input('hora','Hora de llegada (Chile)','',{type:'time'}),
     input('nota','Nota',values.nota,{multiline:true,limit:500}),
-  ], async ({ hora, ...fields }) => {
+  ], async ({ hora, vehiculo_id, ...fields }) => {
     if (hora) fields.llegada = data().fecha + 'T' + hora;
+    if (selected && selected.id === vehiculo_id) {
+      fields.vehiculo_id = vehiculo_id;
+      fields.vehiculo_version = selected.fecha;
+    }
     await change.run('guardar', fields);
     return 'p' + fields.puesto;
   }, 'p' + number);
+  void loadVehicles();
 }
 function getTargets() {
   const targets = [];
