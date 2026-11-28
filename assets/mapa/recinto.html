@@ -1308,9 +1308,16 @@ function region(id, label) {
     'aria-current':String(state.selection === id)
   });
 }
+function hasHostedDeparture(row) {
+  return ['sale-ingresa','sale-libre'].includes(row.estado_operativo)
+    && Boolean(row.salida_reserva_id && row.salida_estadia_id)
+    && data().ocupacion_estadias?.[row.salida_estadia_id]?.hospedada === true
+    && !isCheckedOut(row.salida_estadia_id, row.salida_checkout_en);
+}
 function stay(row) {
   if (!row) return null;
-  const kind = { continua:'continua', fullday:'fullday', 'libre-ingresa':'ingreso', 'sale-ingresa':'ingreso', 'sale-libre':'salida' }[row.estado_operativo];
+  const kind = hasHostedDeparture(row) ? 'salida'
+    : { continua:'continua', fullday:'fullday', 'libre-ingresa':'ingreso', 'sale-ingresa':'ingreso', 'sale-libre':'salida' }[row.estado_operativo];
   if (!kind || !row[kind + '_reserva_id']) return null;
   return { reserve:row[kind + '_reserva_id'], stay:row[kind + '_estadia_id'], title:row[kind + '_titular'], number:row.numero };
 }
@@ -1319,6 +1326,7 @@ function isCheckedOut(stayId, checkoutTime) {
 }
 function cabinState(row) {
   if (!row) return ['Sin datos', 'unknown'];
+  if (hasHostedDeparture(row)) return ['Hospedado', 'continuing'];
   const checkoutTime = row.estado_operativo === 'sale-libre' ? row.salida_checkout_en : null;
   if (isCheckedOut(stay(row)?.stay, checkoutTime)) return ['Check-out', 'checkout'];
   if (row.ingreso_checkin_en && ['libre-ingresa','sale-ingresa'].includes(row.estado_operativo)) return ['Check-in', 'continuing'];
@@ -1352,7 +1360,7 @@ function draw() {
     const shape = createSvg('polygon', { points:poly(c.corners), class:'footprint', fill:'var(--' + fill + ')' });
     if (!enabled) shape.style.pointerEvents = 'none';
     g.append(shape);
-    if (fill !== 'checkout' && (row?.estado_operativo === 'continua' || row?.ingreso_checkin_en)) {
+    if (fill !== 'checkout' && (fill === 'continuing' || row?.ingreso_checkin_en)) {
       g.append(createSvg('polygon', { points:poly(c.corners), fill:'url(#cabin-light)', 'pointer-events':'none' }));
     }
     if (enabled) {
@@ -1542,7 +1550,7 @@ function cabinSummary(n) {
     ['Asignada a', row?.aseo_asignado_nombre], ['Inicio del aseo', formatTime(row?.aseo_inicio)],
     ['Aseo listo', formatTime(row?.aseo_fin || row?.aseo_ultimo_listo)], ['Observación', row?.aseo_nota],
   ]));
-  if (row?.salida_reserva_id && row?.ingreso_reserva_id) {
+  if (row?.salida_reserva_id && row?.ingreso_reserva_id && !hasHostedDeparture(row)) {
     const outgoing = isCheckedOut(row.salida_estadia_id, row.salida_checkout_en) ? 'Check-out' : 'Sale';
     summary.append(el('p', outgoing + ' · ' + (row.salida_titular || 'Reserva anterior'), 'subtle cabin-outgoing'));
   }
@@ -1571,8 +1579,9 @@ function cabinReservations(n, row) {
   feedback.dataset.reservationFeedback = '';
   feedback.hidden = list.hidden = true;
   panel.append(list,feedback);
+  const firstStayId = row.estado_operativo === 'sale-ingresa' ? row.ingreso_estadia_id : stay(row)?.stay;
   const requestArgs = {p_numero:n,p_fecha:data().fecha,p_estadias:[...new Set([
-    stay(row)?.stay, row.salida_estadia_id,
+    firstStayId, row.salida_estadia_id,
   ].filter(Boolean))]};
   const context = cabinContext(n);
   let manual = window.HAIKU_RESERVA_ESTADO_MANUAL_V1;
