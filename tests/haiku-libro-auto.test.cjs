@@ -348,9 +348,9 @@ test('una sincronización sin cambios queda en silencio y conserva los pendiente
     assert.equal(informe.pendientesSinVerificar,false);
     assert.equal(informe.nuevas[0].id,anterior.id);
 });
-test('Incorporar comprueba sólo lo seleccionado y conserva los 21 casos anteriores',async()=>{
+test('Incorporar coteja sólo lo seleccionado y conserva los ingresos anteriores en la lista',async()=>{
     const seleccionada={...row,id:'fila-lista'};
-    const anteriores=Array.from({length:21},(_,i)=>({id:`anterior-${i}`,tipo:'modificacion',
+    const anteriores=Array.from({length:21},(_,i)=>({id:`anterior-${i}`,tipo:i<6?'nueva':'modificacion',
         actual:{...row,id:i===0?seleccionada.id:`anterior-${i}`,titular:`Caso anterior ${i+1}`},
         detectado_en:'2026-11-26T20:00:00Z',detectado_generacion:1,cambios:[]}));
     const h=interfaz(async()=>res({nuevas:[{actual:seleccionada}],libro_actual:{generacion:2},
@@ -366,8 +366,9 @@ test('Incorporar comprueba sólo lo seleccionado y conserva los 21 casos anterio
     },enriquecer:async items=>items};
     h.window.HAIKU_LIBRO_CONSULTAS={revalidarCambiosDetectados:async rows=>{
         proyecto.push(Array.from(rows,r=>r.actual.titular));
-        const nueva=rows.find(r=>r.tipo==='nueva');
-        const items=rows.filter(r=>r!==nueva||!guardada).map(r=>({...r,accionable:r===nueva}));
+        const nueva=rows.find(r=>r.actual.titular===seleccionada.titular);
+        const items=rows.filter(r=>r!==nueva||!guardada).map(r=>({...r,accionable:r===nueva,
+            altaSinCoincidencia:r.tipo==='nueva'}));
         return {items,resueltos:guardada&&nueva?[nueva.id]:[],reservas:nueva&&!guardada?[nueva.actual]:[],comparacion:[],q:{}};
     },prepararIncorporacion:async entrada=>{
         assert.deepEqual(Array.from(entrada.reservas,r=>r.titular),[seleccionada.titular]);
@@ -377,13 +378,14 @@ test('Incorporar comprueba sólo lo seleccionado y conserva los 21 casos anterio
     }};
     const api=h.window.HAIKU_ASISTENTE_LIBRO_ACTUALIZACION_V1;
     const aviso=await api.obtenerResultadoAviso({soloCambiosNuevos:true});
-    assert.equal(aviso.incorporacion.pendientes.length,21);assert.equal(aviso.incorporacion.listos.length,1);
+    assert.equal(aviso.incorporacion.pendientes.length,6);assert.equal(aviso.incorporacion.listos.length,1);
+    assert.equal(aviso.modificadas.length,15,'el informe conserva las diferencias fuera de la lista');
     const fin=await api.incorporarDesdeAviso(aviso);
     assert.equal(fin.reservas_creadas,1);
     assert.deepEqual(proyecto.map(x=>x.length),[22,1,1]);
     assert.deepEqual(proyecto.slice(1),[[seleccionada.titular],[seleccionada.titular]]);
     assert.deepEqual(cotejos,[22,1,1]);
-    assert.deepEqual(Array.from(fin.pendientes,x=>x.titular),anteriores.map(x=>x.actual.titular));
+    assert.deepEqual(Array.from(fin.pendientes,x=>x.titular),anteriores.slice(0,6).map(x=>x.actual.titular));
     assert.equal(registro.cambios.filter(x=>x.id.startsWith('anterior-')).length,21);
 });
 test('aviso en segundo plano conserva conversación, borrador y posición y espera al terminar para abrir',async()=>{
@@ -418,7 +420,7 @@ test('Incorporar espera a la consulta, entrega el aviso exacto y conserva el bor
     const boton=h.nodos().find(x=>x.textContent==='Incorporar');assert.ok(boton);assert.equal(boton.disabled,true);
     const bloque=h.nodos().find(x=>x.className==='haku-libro-auto__pendientes');
     const acceso=()=>h.nodos().find(x=>x.className==='haku-libro-casos__abrir');
-    assert.equal(bloque.hidden,false);assert.equal(acceso()['aria-label'],'21 casos pendientes');
+    assert.equal(bloque.hidden,false);assert.equal(acceso()['aria-label'],'21 pendientes de ingreso');
     boton.dispatchEvent({type:'click'});assert.equal(entregados.length,0);
     ocupado=false;h.ids['haiku-asistente-texto'].dispatchEvent({type:'input'});
     assert.equal(boton.disabled,false);boton.dispatchEvent({type:'click'});
@@ -434,7 +436,7 @@ test('Incorporar espera a la consulta, entrega el aviso exacto y conserva el bor
     assert.equal(boton.textContent,'Incorporado');assert.equal(boton.disabled,true);
     assert.equal(boton.hidden,true);
     assert.equal(boton['aria-busy'],undefined);
-    assert.equal(bloque.hidden,false);assert.equal(acceso()['aria-label'],'1 caso pendiente');
+    assert.equal(bloque.hidden,false);assert.equal(acceso()['aria-label'],'1 pendiente de ingreso');
     assert.equal(h.ids['haiku-asistente-texto'].value,'Mi consulta pendiente');
     assert.equal(h.document.body.children.length,1);assert.equal(h.abierto(),0);
     const recibo=h.nodos().find(x=>x.className==='haku-libro-auto__recibo');

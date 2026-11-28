@@ -2471,6 +2471,7 @@
                     const estado = !identidadSegura ? 'revisar' : item.estado === 'existente' ? 'en_sistema' :
                         item.estado === 'listo' ? 'faltante' : item.servicio_existente ? 'diferente' : 'revisar';
                     const detalle = { estado, canonico:true, item_id:item.item_id, reserva:r,
+                        ingresoPendiente:identidadSegura && motorServicios.esOperacionPorIngresar?.(item) === true,
                         servicio:item.servicio, texto:item.texto, sistema:item.servicio_existente,
                         lectura:{nombre:item.mapa?.nombre,fecha:item.fecha,hora:item.hora,
                             cantidad:item.payload?.cantidad,cortesia:item.payload?.tipo_cobro==='cortesia',
@@ -3307,6 +3308,7 @@
                     const accionable=resultado?.estado==='sin_coincidencia'&&evaluacion.accionable&&
                         (!registro.fuente_vigente||registro.fuente_vigente.estado==='verificada');
                     const item={...registro,estado:accionable?'pendiente':'revision',accionable,revision:evaluacion.revision,
+                        altaSinCoincidencia:resultado?.estado==='sin_coincidencia'&&!canceladas.length,
                         ...(accionable?{vistaIncorporacion:vistaIncorporacionHistorial(evaluacion.propuesta)}:{}),
                         proyecto:canceladas.length?'Encontré una reserva cancelada y otras estadías de esta persona. Revisa cuál corresponde antes de guardar cambios.':resultado?.estado||'sin coincidencia'};
                     items.push(item);

@@ -344,7 +344,7 @@
         return { ...rango, hojas, reservas, reservasMesAnterior, archivo: estado.nombre, generacion: estado.generacion, version_libro: estado.version || null, revision_focal:Boolean(focal) };
     }
 
-    function fuenteHistorial({reservas,generacion,aprobacionManual=false,alVolver,alGuardar}={}){
+    function fuenteHistorial({reservas,generacion,aprobacionManual=false,alVolver,alGuardar,idsIngreso}={}){
         if(!Array.isArray(reservas)||!reservas.length||generacion==null)throw Error('No hay fichas identificadas para revisar servicios.');
         if(aprobacionManual && (!esAdministrador() || reservas.length!==1))throw Error('La aprobación manual requiere un administrador y una sola reserva.');
         const fechas=reservas.flatMap(r=>[r.fecha_checkin,r.fecha_checkout]).filter(f=>/^\d{4}-\d{2}-\d{2}$/.test(f||'')).sort();
@@ -352,7 +352,8 @@
         const formato=f=>f.split('-').reverse().join('/');
         const descripcion=`Libro: compara servicios del ${formato(fechas[0])} al ${formato(fechas.at(-1))}`;
         const fuente=Object.freeze({descripcion});
-        entradasHistorial.set(fuente,{descripcion,generacion,aprobacionManual,alVolver,alGuardar,claves:[...new Set(reservas.map(claveFicha))]});
+        entradasHistorial.set(fuente,{descripcion,generacion,aprobacionManual,alVolver,alGuardar,
+            claves:[...new Set(reservas.map(claveFicha))],idsIngreso:idsIngreso&&new Set(idsIngreso)});
         return fuente;
     }
     function notificarGuardadoHistorial(fuente){
@@ -1306,9 +1307,12 @@
         const faltantes = turnos.filter((_, i) => !candidatos.some(s => corresponde(s) &&
             inicio(s) <= inicios[i] && fin(s) != null && fin(s) >= inicios[i] + duracion));
         const horarios = candidatos.map(s => [horaCorta(s.hora_inicio), horaCorta(s.hora_fin)].filter(Boolean).join('–'));
+        const cantidadYaRegistrada = unico && corresponde(unico) && Number(unico.cantidad) === turnos.length;
         return {
             estado:'revisar', candidatos,
-            motivo: faltantes.length === 1 ? `Falta el turno de las ${faltantes[0]} en la agenda de Proyecto H.`
+            motivo: faltantes.length === 1 && cantidadYaRegistrada
+                ? `Los dos masajes figuran en el horario ${horarios[0]}. Revisa cómo distribuirlos entre las ${turnos.join(' y ')} en la agenda.`
+                : faltantes.length === 1 ? `Falta el turno de las ${faltantes[0]} en la agenda de Proyecto H.`
                 : faltantes.length === 2 ? 'Falta comprobar ambos turnos en la agenda de Proyecto H.'
                 : 'Revisa los registros de ambos turnos en la agenda de Proyecto H.',
             diferencia:{ servicio:unico, filas:[{ campo:'turnos', etiqueta:'Turnos', libro:turnos.join(' y '),
@@ -1920,7 +1924,17 @@
     async function construir(texto, overrides = new Map(), manuales = new Map(), conservarConsulta = false) {
         const cliente = root.haikuSupabase;
         if (!cliente) throw new Error("No está disponible la conexión con Proyecto H.");
-        return construirPlan(await leerLibro(texto, conservarConsulta), cliente, texto, overrides, manuales);
+        const plan = await construirPlan(await leerLibro(texto, conservarConsulta), cliente, texto, overrides, manuales);
+        const idsIngreso = entradasHistorial.get(texto)?.idsIngreso;
+        if (idsIngreso) plan.items = plan.items.filter(item => idsIngreso.has(item.item_id) &&
+            (item.estado === 'existente' || esOperacionPorIngresar(item)));
+        return plan;
+    }
+
+    function esOperacionPorIngresar(item) {
+        if (item.kind === 'nota') return item.estado === 'listo';
+        return item.semantica === 'SERVICIO_REAL' && ['listo','revisar'].includes(item.estado) &&
+            !item.servicio_existente && !item.candidatosRevision?.length;
     }
 
     // La comparación mensual consume el mismo plan, con las filas ya leídas
@@ -3313,7 +3327,7 @@
     }
 
     const api = Object.freeze({ version: "2.0.0", procesando:()=>ocupado, esConsultaServicios, rangoDesdeTexto, construir, compararReservas, abrirRevisionHistorial, prepararHistorial, prepararServicioEnLinea,
-        fuenteServicioIncorporado,
+        fuenteServicioIncorporado, esOperacionPorIngresar,
         consultaVista:card=>fuentesPorVista.get(card)||null,revalidarVista, firmaConfirmacionServicio, procesar, renderizarResultadoServicios });
     root.HAIKU_LIBRO_SERVICIOS_SCOPE_V2 = api;
     root.HAIKU_LIBRO_SERVICIOS_SCOPE_V1 = api;
