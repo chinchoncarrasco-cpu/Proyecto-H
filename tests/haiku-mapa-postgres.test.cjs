@@ -157,7 +157,7 @@ test('Mapa y Huéspedes comparten vehículos y conservan las reglas de estadías
         await db.exec(read('supabase/migrations/20261127223323_haiku_mapa_ocupacion_estadias.sql'));
         await db.exec(read('supabase/migrations/20261127223413_haiku_mapa_puestos_adicionales.sql'));
         await db.exec(read('supabase/migrations/20261127233716_haiku_mapa_hospedaje_estacionamientos.sql'));
-        const checkoutMigration = read('supabase/migrations/20261128024159_haiku_mapa_checkout_estadia.sql');
+        const checkoutMigration = read('supabase/migrations/20261128030143_haiku_mapa_checkout_estadia.sql');
         await db.exec(checkoutMigration);
         await db.exec(checkoutMigration);
         await db.exec('set role authenticated');
