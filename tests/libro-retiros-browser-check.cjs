@@ -11,21 +11,20 @@ const scripts=['haiku-libro-semantica-v1','haiku-fullday-tarifa-v1','haiku-libro
 const html='<!doctype html><html lang="es"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'+
  css.map(s=>`<link rel="stylesheet" href="/css/${s}.css">`).join('')+
  '<style>body{margin:0}main{padding:12px;min-width:0}#vista{min-width:0;width:100%}nav{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}.haku-libro-auto{position:relative!important;inset:auto!important;width:100%!important;max-width:none!important}</style>'+
- '<body><main><h1>Libro · cambios y retiros sintéticos</h1><nav>'+['Mensual','Acción rápida','Haku Chat','Haku Burbuja'].map((v,i)=>`<button data-vista="${i}">${v}</button>`).join('')+'</nav><div id="vista"></div></main></body></html>';
+ '<body><main><h1>Libro · cambios y retiros sintéticos</h1><nav>'+['Mensual','Acción rápida','Haku Chat','Haku Burbuja'].map((v,i)=>`<button data-vista="${i}">${v}</button>`).join('')+'</nav><div id="vista"></div>'+
+ '<div id="haku-chat-prueba" hidden><input id="haiku-asistente-texto" hidden><button id="haiku-asistente-enviar" hidden></button><div id="haiku-asistente-mensajes"></div></div></main></body></html>';
 const server=http.createServer((req,res)=>{
  const u=new URL(req.url,'http://localhost');if(u.pathname==='/')return res.writeHead(200,{'Content-Type':'text/html;charset=utf-8'}).end(html);
  if(!/^\/(js|css)\/[a-z0-9-]+\.(js|css)$/.test(u.pathname))return res.writeHead(404).end();
  let source=fs.readFileSync(path.join(root,u.pathname),'utf8');
  if(u.pathname==='/js/haiku-libro-consultas-v1.js')source=source.replace('const apiConsultas = Object.freeze({ interpretar,','const apiConsultas = Object.freeze({ renderizarComparacion, renderizarIncorporacion, interpretar,');
- if(u.pathname==='/js/supabase-asistente-libro-auto-v1.js')source=source.replace('Object.freeze({resumir,crearControlador})','Object.freeze({resumir,crearControlador,montarVistaPendientes})');
- if(u.pathname==='/js/supabase-asistente-libro-actualizacion-v1.js')source=source.replace('Object.freeze({esConsulta,','Object.freeze({clasificarIncorporacionAviso,esConsulta,');
  res.writeHead(200,{'Content-Type':u.pathname.endsWith('.js')?'application/javascript;charset=utf-8':'text/css;charset=utf-8'}).end(source);
 });
 (async()=>{
  await new Promise(ok=>server.listen(0,'127.0.0.1',ok));const origin='http://127.0.0.1:'+server.address().port;
  let browser;const resultados=[],regresiones=[];
  try{
-  browser=await chromium.launch({headless:true});
+  browser=await chromium.launch({headless:true,executablePath:process.env.HAKU_CHROMIUM_PATH});
   for(const width of [1440,390])for(const tema of ['claro','oscuro']){
    const context=await browser.newContext({viewport:{width,height:1000}}),externos=[],errors=[];
    await context.route('**/*',route=>{if(new URL(route.request().url()).origin===origin)return route.continue();externos.push(route.request().url());return route.abort();});
@@ -39,6 +38,7 @@ const server=http.createServer((req,res)=>{
     globalThis.f=fixture;globalThis.haikuSupabase=clienteLectura(fixture.db);
     globalThis.HAIKU_LIBRO_RESERVA_V1=crearLibroPrueba(fixture.data,fixture.previa,fixture.registros);
     globalThis.haikuTienePermiso=()=>true;globalThis.haikuSesion={auth:{id:'usuario-sintetico'},usuario:{activo:true},roles:[{codigo:'administrador'}]};
+    globalThis.HAIKU_ASISTENTE={abrir:()=>{document.getElementById('haku-chat-prueba').hidden=false;}};
    },{fixture,libro:R.libro.toString(),cliente:F.cliente.toString(),tema});
    for(const script of scripts)await page.addScriptTag({url:origin+'/js/'+script+'.js'});
    await page.evaluate(async()=>{
@@ -49,21 +49,15 @@ const server=http.createServer((req,res)=>{
     globalThis.pendientes=await Q.revalidarCambiosDetectados(f.registros,haikuSupabase,{generacion:1});
     globalThis.abrirVista=async index=>{
      const out=document.querySelector('#vista');out.className='';out.replaceChildren();
+     document.getElementById('haku-chat-prueba').hidden=true;
+     document.getElementById('haiku-asistente-mensajes').replaceChildren();
      if(index===0)HAIKU_LIBRO_INFORME_READONLY_V1.renderizar(document,out,dto);
      if(index===1)Q.renderizarComparacion(out,resultado);
      if(index===2){out.innerHTML=A.renderizarPendientes(pendientes);
       for(const [i,item]of pendientes.items.entries())Q.renderizarCambiosLibro(out.querySelectorAll('.haku-pendiente-detalle')[i],item.retirosServicios);
      }
-     if(index===3){
-      const nodo=(p,t,c,texto)=>{const e=document.createElement(t);if(c)e.className=c;if(texto!==undefined)e.textContent=texto;p.append(e);return e;};
-      const boton=(p,c,texto)=>nodo(p,'button',c,texto);
-      const toast=nodo(out,'aside','haku-libro-auto haku-libro-auto--con-pendientes'),aviso=nodo(toast,'div'),cuerpoAviso=nodo(aviso,'div');
-      const panel=nodo(toast,'section','haku-libro-casos');panel.id='casos-retiros';
-      const api=HAIKU_ASISTENTE_LIBRO_AUTO_V1.montarVistaPendientes({panel,toast,aviso,cuerpoAviso,
-       pendientes:A.clasificarIncorporacionAviso(pendientes).pendientes,nodo,boton,
-       botonInforme:p=>boton(p,'','Ver informe'),cerrar(){},revisar(){},posicionar(){},abrir:boton(aviso,'','Abrir'),
-       icono:(p,n)=>nodo(p,'span','',n==='volver'?'←':'⌄')});api.abrir();api.adaptar();
-     }
+     if(index===3)dispatchEvent(new CustomEvent('haiku:libro-version-cargada',{
+      detail:{carga_manual:true,tenia_anterior:true,generacion:1}}));
      globalThis.cambiosPlegados=Array.from(out.querySelectorAll('details.haku-retiros-libro'))
       .map(d=>({abierto:d.open,titulo:d.querySelector('summary').textContent,enRevision:!!d.closest('.haku-comparacion-sites-seccion')}));
      for(const d of out.querySelectorAll('details'))d.open=true;
@@ -79,8 +73,18 @@ const server=http.createServer((req,res)=>{
      assert.ok(acordeon);assert.equal(acordeon.abierto,false);assert.match(acordeon.titulo,/^Cambios detectados/);
      if(view===1)assert.equal(acordeon.enRevision,true);
     }
-    if(view===3){await page.locator('.haku-libro-casos__fila').first().click();await page.evaluate(()=>{for(const d of document.querySelectorAll('details'))d.open=true;});}
-    const text=await page.locator('#vista').innerText();assert.match(text,/Aurora Ficción/);assert.match(text,/18:00/);assert.match(text,/19:00/);assert.match(text,/retir|continúa activo/i);
+    if(view===3){
+     const aviso=page.locator('body > .haku-libro-auto'), informe=aviso.getByRole('button',{name:'Ver informe',exact:true});
+     await informe.waitFor();
+     assert.equal(await aviso.locator('.haku-libro-casos__abrir').count(),0,'los retiros y cambios de registros no son ingresos pendientes');
+     assert.doesNotMatch(await aviso.innerText(),/Falta comprobarlos en Proyecto H/);
+     await informe.click();
+     await page.locator('#haku-chat-prueba').getByText('Revisado en Proyecto H',{exact:true}).waitFor();
+     await page.locator('#haku-chat-prueba .haku-libro-pendientes-zona .haku-pendiente-item').first().waitFor();
+     await page.evaluate(()=>{for(const d of document.querySelectorAll('#haku-chat-prueba details'))d.open=true;});
+    }
+    const text=await page.locator(view===3?'#haku-chat-prueba':'#vista').innerText();
+    assert.match(text,/Aurora Ficción/);assert.match(text,/18:00/);assert.match(text,/19:00/);assert.match(text,/retir|continúa activo/i);
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,`sin desborde ${view}/${width}/${tema}`);
     await page.screenshot({path:path.join(evidencia,`vista-${view}-${width}-${tema}.png`),fullPage:true});
     resultados.push({view:['Mensual','Acción rápida','Haku Chat','Haku Burbuja'][view],width,tema,result:'PASS'});
@@ -144,6 +148,8 @@ const server=http.createServer((req,res)=>{
     const datos=await page.evaluate(async f=>{
      globalThis.haikuSupabase=clienteLectura(f.db);globalThis.HAIKU_LIBRO_RESERVA_V1=crearLibroPrueba(f.data,f.previa,f.registros);
      const Q=HAIKU_LIBRO_CONSULTAS,A=HAIKU_ASISTENTE_LIBRO_ACTUALIZACION_V1,out=document.querySelector('#vista');out.replaceChildren();out.className='';
+     document.getElementById('haku-chat-prueba').hidden=true;
+     document.getElementById('haiku-asistente-mensajes').replaceChildren();
      const snapshot=JSON.stringify(haikuSupabase.db),d=await HAIKU_LIBRO_DIFERENCIAS_V1.compararUltimasVersiones({libro:HAIKU_LIBRO_RESERVA_V1,fechaReferencia:'2026-10-03'});
      const cache=A.crearCachePendientes(),p=await cache.obtener(d,{revalidar:true});out.innerHTML=A.renderizarPendientes(p);
      let notas=null,retiros=[];const servicio=f.caso==='servicio-ilegible';
@@ -165,7 +171,7 @@ const server=http.createServer((req,res)=>{
       globalThis.QReaparecida=Q;globalThis.planReaparecida=null;
       globalThis.HAIKU_LIBRO_CONSULTAS={...Q,abrirPreparacionComparacion:async(...args)=>{
        const r=await Q.abrirPreparacionComparacion(...args);globalThis.planReaparecida=r.plan;return r;}};
-      out.innerHTML='<input id="haiku-asistente-texto" hidden><button id="haiku-asistente-enviar" hidden></button><div id="haiku-asistente-mensajes"></div>';
+      out.replaceChildren();HAIKU_ASISTENTE.abrir();
       A.mostrarResultado(d);
      }
      const historial=(await HAIKU_LIBRO_RESERVA_V1.leerCambiosDetectados()).cambios;
@@ -191,7 +197,7 @@ const server=http.createServer((req,res)=>{
      assert.deepEqual(preparado.mutaciones,[]);datos.altaPreparada=preparado.operaciones[0];datos.notaEnVistaPrevia=1;
     }
     assert.equal(datos.negocioIntacto,true);assert.deepEqual(datos.mutaciones,[]);
-    const texto=await page.locator('#vista').innerText();
+    const texto=await page.locator(escena.caso==='reaparecida-alta'?'#haku-chat-prueba':'#vista').innerText();
     if(escena.caso==='notas-respaldo'){
      assert.ok(datos.retiros.includes('JACUZZI 18:30'));assert.doesNotMatch(datos.notas,/18:30/);assert.match(datos.notas,/15:30/);
      assert.equal((datos.notas.match(/Late check-out 14:00/g)||[]).length,1);assert.match(datos.notas,/Comentario manual intacto/);
