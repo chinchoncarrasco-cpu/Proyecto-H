@@ -1924,6 +1924,14 @@ html[data-haku-mobile-assistant="1"] .haku-comprobante-notas > summary { min-hei
 .haku-libro-auto__desplegable > summary { cursor: pointer; color: var(--aviso-acento); padding: 3px 0; }
 .haku-libro-auto__desplegable > summary:focus-visible { outline: 2px solid var(--aviso-acento); outline-offset: 1px; }
 .haku-libro-auto__desplegable > .haku-libro-auto__filtrado:not(:empty) { margin-top: 6px; }
+.haku-libro-auto__operativos > summary {
+    box-sizing: border-box; min-height: 30px; padding: 5px 8px;
+    border: 1px solid var(--aviso-borde); border-radius: 6px;
+    background: var(--aviso-superficie); font-weight: 650;
+}
+@media (max-width: 719px), (pointer: coarse) {
+    .haku-libro-auto__operativos > summary { min-height: 38px; padding-block: 8px; }
+}
 .haku-libro-auto__filtrado .haku-libro-auto__caso:last-child { padding-bottom: 0; border-bottom: 0; }
 .haku-libro-auto__marca { display: block; flex: none; padding: 8px 12px; border-bottom: 1px solid var(--aviso-borde); font-size: 13px; font-weight: 650; }
 .haku-libro-auto__cuerpo {

@@ -76,6 +76,11 @@ const server=http.createServer((req,res)=>{
     if(view===3){
      const aviso=page.locator('body > .haku-libro-auto'), informe=aviso.getByRole('button',{name:'Ver informe',exact:true});
      await informe.waitFor();
+     const operativos=aviso.locator('.haku-libro-auto__operativos');
+     assert.match(await operativos.locator('summary').innerText(),/1 cambio de horario.*1 servicio retirado/);
+     await operativos.locator('summary').click();
+     await operativos.getByText('Servicio retirado del Libro',{exact:true}).waitFor();
+     assert.match(await operativos.innerText(),/18:00.*19:00/s);
      assert.equal(await aviso.locator('.haku-libro-casos__abrir').count(),0,'los retiros y cambios de registros no son ingresos pendientes');
      assert.doesNotMatch(await aviso.innerText(),/Falta comprobarlos en Proyecto H/);
      await informe.click();

@@ -251,7 +251,13 @@ async function comprobarCasosDelAviso(browser, url) {
                     cambios:[{campo:'servicios',antes:[],ahora:[{concepto:'Masaje'}]}]},
                 {tipo:'retiro',anterior:reserva(10,'Lectura anterior',4),actual:null,
                     fuente_vigente:{estado:'lectura_incompleta'}},
-                {tipo:'cancelacion',anterior:reserva(11,'Cancelación por revisar',5),actual:null}
+                {tipo:'cancelacion',anterior:reserva(11,'Cancelación por revisar',5),actual:null},
+                {tipo:'modificacion',actual:reserva(12,'Tonel reprogramado',6),
+                    cambios:[{campo:'servicios',antes:[{concepto:'tonel',hora:'19:15'}],ahora:[{concepto:'tonel',hora:'20:15'}]}]},
+                {tipo:'modificacion',actual:reserva(13,'Masaje retirado',7),
+                    cambios:[{campo:'servicios',antes:[{concepto:'masaje',hora:'16:00'}],ahora:[]}]},
+                {tipo:'retiro',anterior:reserva(14,'Reserva retirada',8),actual:null,
+                    fuente_vigente:{estado:'ausencia_verificada'}}
             ];
             const listaCompleta={tipo:'modificacion',actual:{...reserva(8,'Reserva completa',2),adultos:3},accionable:true,
                 cambios:[{campo:'adultos',antes:5,ahora:3,proyecto:2,accionable:true}],
@@ -299,8 +305,10 @@ async function comprobarCasosDelAviso(browser, url) {
                 window.dispatchEvent(new Event('haiku:libro-cambio'));
                 informe={estado:'ok',generado_en:'2026-11-27T20:00:00Z',libro_actual:{generacion},
                     nuevas:pendientes.filter(x=>x.tipo==='nueva'),
-                    modificadas:[...pendientes.slice(2,6),listaCompleta,excluidos[0]].map(({actual,cambios})=>({actual,cambios})),
-                    ya_no_aparecen:[excluidos[1]],cancelaciones_confirmadas:[excluidos[2]]};
+                    modificadas:[...pendientes.slice(2,6),listaCompleta,...excluidos.filter(x=>x.tipo==='modificacion')]
+                        .map(({actual,cambios})=>({actual,cambios})),
+                    ya_no_aparecen:excluidos.filter(x=>x.tipo==='retiro'),
+                    cancelaciones_confirmadas:excluidos.filter(x=>x.tipo==='cancelacion')};
                 window.dispatchEvent(new CustomEvent('haiku:libro-version-cargada',{
                     detail:{carga_automatica:true,tenia_anterior:true,generacion}}));
             };
@@ -311,6 +319,9 @@ async function comprobarCasosDelAviso(browser, url) {
         await page.evaluate(()=>__publicarCasos());
         const aviso=page.locator('.haku-libro-auto');
         await aviso.getByText('Listos para incorporar (1)',{exact:true}).waitFor();
+        const operativos=aviso.locator('.haku-libro-auto__operativos');
+        const rotuloOperativos=operativos.locator('summary');
+        assert.match(await rotuloOperativos.innerText(),/1 cancelación del Libro.*1 cambio de horario.*1 servicio retirado.*1 reserva que ya no aparece/);
         assert.match(await aviso.innerText(),/Reserva completa · CAB 2/);
         assert.doesNotMatch(await aviso.innerText(),/Elena Salas|Amelia Torres/);
         const ficha=aviso.getByRole('button',{name:'Ver cambios de Reserva completa · CAB 2'});
@@ -384,6 +395,20 @@ async function comprobarCasosDelAviso(browser, url) {
         const recibo=aviso.locator('.haku-libro-auto__recibo');
         const encabezadoRecibo=recibo.locator('summary');
         await encabezadoRecibo.getByText('1 actualización',{exact:true}).waitFor();
+        assert.equal(await rotuloOperativos.isVisible(),true,'los avisos sobreviven al confirmar la incorporación');
+        for(const tema of ['claro','oscuro']){
+            await page.evaluate(t=>document.documentElement.dataset.haikuTema=t,tema);
+            for(const width of [1280,320]){
+                await page.setViewportSize({width,height:850});
+                await rotuloOperativos.click();
+                await operativos.getByText('Tonel reprogramado · CAB 6',{exact:true}).waitFor();
+                assert.match(await operativos.innerText(),/19:15 → 20:15/);
+                assert.match(await operativos.innerText(),/Cancelación por revisar.*Masaje retirado.*Reserva retirada/s);
+                assert.equal(await operativos.evaluate(el=>el.scrollWidth<=el.clientWidth+1),true);
+                await rotuloOperativos.click();
+            }
+        }
+        await page.setViewportSize({width:1280,height:850});
         assert.equal(await recibo.getAttribute('open'),null);
         assert.doesNotMatch(await recibo.innerText(),/Reserva completa/);
         await encabezadoRecibo.click();

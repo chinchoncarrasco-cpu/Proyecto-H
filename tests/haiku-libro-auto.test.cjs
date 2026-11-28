@@ -491,6 +491,34 @@ test('burbuja: cancelación en el Libro no afirma que esté guardada en Proyecto
     assert.equal(cancelada.titulo,'Cancelada en el Libro');assert.match(cancelada.detalles[0].texto,/Falta confirmarla en Proyecto H/);
     assert.doesNotMatch(JSON.stringify(burbuja({ya_no_aparecen:[{anterior:row}]})),/cancelad/i);
 });
+test('el aviso señala horarios y retiros con evidencia, además de las cancelaciones',()=>{
+    const tonel={concepto:'tonel',hora:'19:15'},masaje={concepto:'masaje',hora:'18:00'};
+    const {operativos}=burbuja({
+        cancelaciones_confirmadas:[{anterior:row}],
+        ya_no_aparecen:[{anterior:row,fuente_vigente:{estado:'ausencia_verificada'}},
+            {anterior:row,fuente_vigente:{estado:'lectura_incompleta'}}],
+        modificadas:[
+            {actual:row,cambios:[{campo:'servicios',antes:[tonel],ahora:[{...tonel,hora:'20:15'}]}]},
+            {actual:row,cambios:[{campo:'servicios',antes:[masaje],ahora:[]}]},
+            {actual:row,cambios:[{campo:'servicios',antes:[],ahora:[masaje]}]},
+            {actual:row,cambios:[{campo:'cabana',antes:7,ahora:8}]}
+        ]
+    });
+    assert.deepEqual(operativos.map(x=>x.rotulo),['1 cancelación del Libro','1 cambio de horario',
+        '1 servicio retirado','1 reserva que ya no aparece','1 reserva por verificar','1 cambio de estadía']);
+    assert.match(operativos.find(x=>x.tipo==='horario').casos[0].detalles[0].texto,/19:15 → 20:15/);
+    assert.match(operativos.find(x=>x.tipo==='posibleRetiro').casos[0].titulo,/Posible retiro/);
+});
+test('el aviso usa el retiro operativo comprobado y conserva como cambio la evidencia dudosa',()=>{
+    const anterior={concepto:'Tonel',fecha:'2026-11-13',hora:'19:15'};
+    const c={campo:'servicios',antes:[{concepto:'tonel',hora:'19:15'}],ahora:[]};
+    const verificado=burbuja({modificadas:[{actual:row,cambios:[c],
+        retirosServicios:[{tipo:'modificado',antes:anterior,despues:{...anterior,hora:'21:15'}}]}]}).operativos;
+    assert.deepEqual(verificado.map(x=>x.tipo),['horario']);
+    assert.match(verificado[0].casos[0].detalles[0].texto,/19:15.*21:15/);
+    const dudoso=burbuja({modificadas:[{actual:row,cambios:[c],retirosServicios:[{tipo:'revision'}]}]}).operativos;
+    assert.deepEqual(dudoso.map(x=>x.tipo),['servicio']);
+});
 test('burbuja: varios cambios y avisos conservan límites, diferencias y estado parcial',()=>{
     const r=burbuja({estado:'parcial',nuevas:[{actual:row},{actual:row},{actual:row}],ya_no_aparecen:[{anterior:row}],ambiguas:[{}],advertencias:[{}]});
     assert.equal(r.casos.length,3);assert.equal(r.restantes,1);assert.match(r.titulo,/4 cambios/);
@@ -590,6 +618,12 @@ test('resumen compacto diferencia ausencias, cancelaciones por confirmar y lectu
     assert.match(texto,/No pude revisar todo el Libro/);
     assert.match(texto,/1 caso por aclarar.*1 dato por revisar/);
     assert.match(texto,/Cancelación en el Libro pendiente de confirmar en Proyecto H/);
+});
+test('el resumen en Haku también señala que cambió un horario de servicio',async()=>{
+    const h=interfaz(async()=>res({modificadas:[{actual:row,cambios:[{campo:'servicios',
+        antes:[{concepto:'tonel',hora:'19:15'}],ahora:[{concepto:'tonel',hora:'20:15'}]}]}]}));
+    h.emitir('haiku:libro-version-cargada',evento(2));await tick();
+    assert.match(textoNodo(h.ids['haiku-asistente-mensajes']),/1 cambio de horario/);
 });
 test('el resumen de un cambio conserva reserva y detalle; una versión nueva desactiva sólo sus acciones',async()=>{
     const h=interfaz(async()=>res({modificadas:[{actual:row,cambios:[{campo:'fecha_checkout',antes:'2026-09-12',ahora:'2026-09-13'}]}]}));

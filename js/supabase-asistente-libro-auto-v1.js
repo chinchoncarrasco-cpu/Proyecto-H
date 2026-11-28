@@ -29,11 +29,15 @@
     const nombreServicio = s => ({tonel:'Tonel',jacuzzi:'Jacuzzi',tinaja:'Tinaja',masaje:'Masaje',cuna:'Cuna',cama_adicional:'Cama adicional',lateout:'Salida tardía',desayuno:'Desayuno'})[normalizar(s?.concepto)] || 'Servicio';
     const horaServicio = s => /^\d{1,2}:\d{2}$/.test(s?.hora||'')?s.hora:'Sin hora';
     const servicioBreve = s => `${nombreServicio(s)} · ${horaServicio(s)}`;
-    function detalleServicios(c) {
-        const clave=s=>JSON.stringify([normalizar(s?.concepto),s?.hora??null,s?.pendiente??null,s?.cortesia??null,s?.monto??null]);
+    function diferenciaServicios(c) {
+        const clave=s=>JSON.stringify([normalizar(s?.concepto),s?.fecha_servicio||s?.fecha||null,s?.hora??null,s?.hora_fin??null,
+            s?.pendiente??null,s?.cortesia??null,s?.monto??null]);
         const anteriores=lista(c.antes),actuales=lista(c.ahora);
         const restantes=(origen,comparar)=>{const claves=comparar.map(clave);return origen.filter(s=>{const i=claves.indexOf(clave(s));if(i<0)return true;claves.splice(i,1);return false;});};
-        const antes=restantes(anteriores,actuales),ahora=restantes(actuales,anteriores);
+        return {retirados:restantes(anteriores,actuales),agregados:restantes(actuales,anteriores)};
+    }
+    function detalleServicios(c) {
+        const {retirados:antes,agregados:ahora}=diferenciaServicios(c);
         if (antes.length===1 && ahora.length===1) {
             const a=antes[0],b=ahora[0],na=nombreServicio(a),nb=nombreServicio(b),ha=horaServicio(a),hb=horaServicio(b);
             if (na!==nb || ha!==hb) return {etiqueta:['Tonel','Jacuzzi','Tinaja'].includes(na)&&['Tonel','Jacuzzi','Tinaja'].includes(nb)?'Tinaja':'Servicio',texto:na===nb?`${na} · ${ha} → ${hb}`:ha===hb?`${na} → ${nb} · ${hb}`:`${servicioBreve(a)} → ${servicioBreve(b)}`};
@@ -70,6 +74,61 @@
         const otros={titular:['Titular','Cambió el nombre del titular.'],operador:['Operador','Cambió el responsable de la reserva.'],rut_documento:['Documento','Cambió el RUT o documento.'],correo:['Contacto','Cambió el correo.'],telefono:['Contacto','Cambió el teléfono.'],pagos_pendientes:['Pagos','Cambió la información de pagos pendientes.']};
         const [etiqueta,texto]=otros[c.campo]||['Reserva','Cambió un dato de la reserva.'];return {etiqueta,texto};
     }
+    const tiposAvisoOperativo = {
+        cancelacion:['cancelación del Libro','cancelaciones del Libro'],
+        horario:['cambio de horario','cambios de horario'],
+        servicioRetirado:['servicio retirado','servicios retirados'],
+        reservaAusente:['reserva que ya no aparece','reservas que ya no aparecen'],
+        posibleRetiro:['reserva por verificar','reservas por verificar'],
+        servicio:['cambio de servicio','cambios de servicio'],
+        estadia:['cambio de estadía','cambios de estadía']
+    };
+    const fechaServicio=s=>s?.fecha_servicio||s?.fecha;
+    const horaVisible=s=>[s?.hora,s?.hora_fin].filter(x=>/^\d{1,2}:\d{2}$/.test(x||'')).join('–');
+    const turno=s=>[fechaServicio(s)&&fechaCorta(fechaServicio(s)),horaVisible(s)].filter(Boolean).join(' · ');
+    const reservaPorVerificar=(r,x)=>r.pendientesSinVerificar||x.fuente_vigente&&x.fuente_vigente.estado!=='ausencia_verificada';
+    function avisosDeServicios(item) {
+        const comprobados=lista(item.retirosServicios).filter(x=>['modificado','retirado'].includes(x.tipo));
+        if(comprobados.length)return comprobados.map(x=>{
+            const etiqueta=notaBreve(x.antes?.concepto||'Servicio',70);
+            return x.tipo==='modificado'
+                ? {tipo:'horario',titulo:'Cambió el horario de un servicio',detalles:[{etiqueta,texto:`${turno(x.antes)} → ${turno(x.despues)}`}]}
+                : {tipo:'servicioRetirado',titulo:'Servicio retirado del Libro',detalles:[{etiqueta,texto:turno(x.antes)}]};
+        });
+        return lista(item.cambios).filter(c=>c.campo==='servicios'&&Array.isArray(c.antes)&&Array.isArray(c.ahora)).flatMap(c=>{
+            const {retirados,agregados}=root.HAIKU_LIBRO_DIFERENCIAS_V1?.detallarCambio?.(c)||diferenciaServicios(c);
+            if(!retirados.length)return [];
+            const [antes]=retirados,[despues]=agregados;
+            const mismoTipo=despues&&normalizar(antes?.concepto)===normalizar(despues.concepto);
+            const cambioHorario=[[fechaServicio(antes),fechaServicio(despues)],[horaVisible(antes),horaVisible(despues)]].some(([a,b])=>a&&b&&a!==b);
+            if(retirados.length===1&&agregados.length===1&&mismoTipo&&cambioHorario)return [{
+                tipo:'horario',titulo:'Cambió el horario en el Libro',detalles:[{etiqueta:nombreServicio(antes),texto:`${turno(antes)} → ${turno(despues)}`}]
+            }];
+            const retiroSeguro=!agregados.length&&(!item.fuente_vigente||item.fuente_vigente.estado==='verificada')&&
+                !lista(item.retirosServicios).some(x=>x.tipo==='revision');
+            return [{tipo:retiroSeguro?'servicioRetirado':'servicio',
+                titulo:retiroSeguro?'Servicio retirado del Libro':'Cambió un servicio en el Libro',detalles:[detalleCambio(c)]}];
+        });
+    }
+    function avisosOperativos(r,porOrigen) {
+        const casosPorTipo=new Map();
+        const agregar=(tipo,caso)=>{
+            if(!casosPorTipo.has(tipo))casosPorTipo.set(tipo,[]);
+            casosPorTipo.get(tipo).push(caso);
+        };
+        for(const x of lista(r.cancelaciones_confirmadas))agregar('cancelacion',porOrigen.get(x));
+        for(const x of lista(r.ya_no_aparecen))agregar(reservaPorVerificar(r,x)?'posibleRetiro':'reservaAusente',porOrigen.get(x));
+        for(const x of lista(r.modificadas)){
+            const caso=porOrigen.get(x);
+            for(const {tipo,titulo,detalles} of avisosDeServicios(x))agregar(tipo,{...caso,titulo,detalles});
+            const estadia=lista(x.cambios).filter(c=>['fecha_checkin','fecha_checkout','cabana','tipo_estadia'].includes(c.campo));
+            if(estadia.length)agregar('estadia',{...caso,titulo:'Cambió la estadía en el Libro',detalles:estadia.map(detalleCambio)});
+        }
+        return Object.entries(tiposAvisoOperativo).flatMap(([tipo,[uno,varios]])=>{
+            const casos=casosPorTipo.get(tipo);
+            return casos?.length?[{tipo,casos,rotulo:`${casos.length} ${casos.length===1?uno:varios}`}]:[];
+        });
+    }
     function describirBurbuja(r) {
         const casos=[],porOrigen=new Map();
         const detalleAbono = root.HAIKU_ASISTENTE_LIBRO_ACTUALIZACION_V1?.detalleAbono;
@@ -105,8 +164,12 @@
             casos.push(caso); porOrigen.set(abono,caso);
         }
         for(const x of lista(r.cancelaciones_confirmadas)) agregar(x,'Cancelada en el Libro',x.anterior,[{etiqueta:'Estado',texto:'Figura en CANCELACIONES. Falta confirmarla en Proyecto H.'}]);
-        for(const x of lista(r.ya_no_aparecen)) agregar(x,x.fuente_vigente&&x.fuente_vigente.estado!=='ausencia_verificada'?'Posible retiro por revisar':'Una reserva ya no aparece',x.anterior,
-            [{etiqueta:'Libro',texto:x.fuente_vigente?.motivo||'No aparece en la copia leída; revisa continuidad y cobertura antes de resolver.'}]);
+        for(const x of lista(r.ya_no_aparecen)){
+            const porVerificar=reservaPorVerificar(r,x);
+            agregar(x,porVerificar?'Posible retiro por revisar':'Una reserva ya no aparece',x.anterior,[{etiqueta:'Libro',
+                texto:x.fuente_vigente?.motivo||(porVerificar?'Falta comprobar la continuidad y la cobertura del Libro.':
+                    'No aparece en la copia leída. Revisa su continuidad antes de resolver.')}]);
+        }
         const avisos=[];
         if(r.pendientesSinVerificar)avisos.push('Conservé los pendientes. Falta comprobarlos en Proyecto H.');
         if(['parcial','no_comparable'].includes(r.estado))avisos.push('No pude revisar todo el Libro.');
@@ -137,7 +200,7 @@
         }));
         const sinCambios=r.pendientesResueltos?'Sin cambios pendientes':'Sin cambios entre copias';
         return {titulo:casos.length>1?`${casos.length} cambios en el Libro`:casos.length?'':avisos.length?'Actualización por revisar':sinCambios,
-            casos:casos.slice(0,3),restantes:Math.max(0,casos.length-3),avisos,prioridades,datosPorRevisar,
+            casos:casos.slice(0,3),restantes:Math.max(0,casos.length-3),avisos,prioridades,datosPorRevisar,operativos:avisosOperativos(r,porOrigen),
             detalle:!casos.length&&!avisos.length&&!r.pendientesResueltos?'Esto no compara con Proyecto H.':''};
     }
     function resumir(r) {
@@ -817,6 +880,16 @@
                     }});
                 adaptarPendientes=vistaPendientes.adaptar;
             }
+            if(burbuja?.operativos?.length){
+                const avisos=nodo(cuerpoAviso,'details','haku-libro-auto__desplegable haku-libro-auto__operativos');
+                nodo(avisos,'summary','',burbuja.operativos.map(x=>x.rotulo).join(' · '));
+                const contenido=nodo(avisos,'div','haku-libro-auto__filtrado');
+                avisos.addEventListener('toggle',()=>{
+                    if(!avisos.open||contenido.children.length)return;
+                    const casos=nodo(contenido,'div','haku-libro-auto__categoria');
+                    for(const grupo of burbuja.operativos)for(const caso of grupo.casos)mostrarCaso(casos,caso);
+                });
+            }
             const vistaCambios=nodo(cuerpoAviso,'div','haku-libro-auto__cambios');
             let vistaFechas;
             if (burbuja) {
@@ -939,9 +1012,10 @@
                         if(!casos.length)nodo(contenido,'p','haku-libro-auto__aviso','No hay cambios ni avisos en esta categoría.');
                     }
                 }
-                if(burbuja.avisos.length || canceladas){
-                    const avisos=[...burbuja.avisos];
-                    if(canceladas)avisos.push('Cancelación en el Libro pendiente de confirmar en Proyecto H.');
+                const avisos=[...burbuja.avisos,...burbuja.operativos
+                    .filter(x=>!['cancelacion','reservaAusente'].includes(x.tipo)).map(x=>x.rotulo)];
+                if(canceladas)avisos.push('Cancelación en el Libro pendiente de confirmar en Proyecto H.');
+                if(avisos.length){
                     const aviso=nodo(mensaje,'div','haku-libro-resumen__aviso');
                     nodo(aviso,'span','','!').setAttribute('aria-hidden','true');
                     const textos=nodo(aviso,'span','haku-libro-resumen__avisos-texto');
@@ -1013,7 +1087,7 @@
                 reservas:'Guardando reservas y cambios en Proyecto H…',
                 servicios:'Revisando servicios y notas…',
                 cierre:'Revisando los cambios restantes…',
-                pendientes:'Actualizando casos pendientes…'
+                pendientes:'Actualizando ingresos pendientes…'
             };
             function mostrarProgreso({fase,incorporado}){
                 const texto=pasosIncorporacion[fase];
@@ -1052,7 +1126,7 @@
                         vistaCambios.hidden=true;
                         if(vistaFechas)vistaFechas.hidden=true;
                         if(resumen)mostrarRecibo(fin,resumen);
-                        else estadoGuardado.textContent=pendientes.length?'':'No quedan cambios pendientes en este aviso.';
+                        else estadoGuardado.textContent=pendientes.length?'':'Ingresos de este aviso revisados.';
                         bloquePendientes.hidden=!pendientes.length;
                         presentarPendientes(bloquePendientes,pendientes);
                         posicionarAviso();cuerpoAviso.scrollTop=0;
