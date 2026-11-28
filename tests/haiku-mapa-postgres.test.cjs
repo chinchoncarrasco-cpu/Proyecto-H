@@ -157,13 +157,16 @@ test('Mapa y Huéspedes comparten vehículos y conservan las reglas de estadías
         await db.exec(read('supabase/migrations/20261127223323_haiku_mapa_ocupacion_estadias.sql'));
         await db.exec(read('supabase/migrations/20261127223413_haiku_mapa_puestos_adicionales.sql'));
         await db.exec(read('supabase/migrations/20261127233716_haiku_mapa_hospedaje_estacionamientos.sql'));
+        const checkoutMigration = read('supabase/migrations/20261128030143_haiku_mapa_checkout_estadia.sql');
+        await db.exec(checkoutMigration);
+        await db.exec(checkoutMigration);
         await db.exec('set role authenticated');
         const {ocupacion_estadias, ...sameMap} = await snapshot();
         assert.deepEqual(sameMap, beforeOccupancy);
         assert.deepEqual(ocupacion_estadias, {
-            [confirmedStay]: {huespedes:2,noches:1,por_llegar:true,hospedada:false},
-            [stay]: {huespedes:3,noches:2,por_llegar:false,hospedada:true},
-            [fullDay]: {huespedes:2,noches:0,por_llegar:true,hospedada:false},
+            [confirmedStay]: {huespedes:2,noches:1,por_llegar:true,hospedada:false,checked_out:false},
+            [stay]: {huespedes:3,noches:2,por_llegar:false,hospedada:true,checked_out:false},
+            [fullDay]: {huespedes:2,noches:0,por_llegar:true,hospedada:false,checked_out:false},
         });
         await db.query("select set_config('request.jwt.claim.sub',$1,false)", [cleaningUser]);
         assert.deepEqual((await snapshot()).ocupacion_estadias,{});
@@ -230,11 +233,19 @@ test('Mapa y Huéspedes comparten vehículos y conservan las reglas de estadías
         await assert.rejects(() => save(uuid(55),'vehiculo',{...vehicle,puesto:17,patente:'QA1701'},uuid(67)), /Revisa el puesto/);
 
         await db.exec('reset role');
-        await db.query("update public.reserva_estadias set estado_estadia='checked_out',checkout_realizado_en=now() where id=$1", [stay]);
+        await db.query('update public.reserva_estadias set checkout_realizado_en=now() where id=$1', [stay]);
+        await db.query(`update public.reserva_estadias set estado_estadia='checked_out',
+            checkin_realizado_en=now() - interval '1 hour', checkout_realizado_en=null where id=$1`, [confirmedStay]);
         await db.exec('set role authenticated');
-        assert.equal((await snapshot()).personas.find(p => p.id === member).hospedado, false);
-        assert.equal((await snapshot()).ocupacion_estadias[stay].hospedada,false);
-        assert.equal((await snapshot()).elementos.some(e => e.id === marker), false);
+        const after = await snapshot();
+        assert.equal(after.personas.find(p => p.id === member).hospedado,false);
+        assert.equal(after.ocupacion_estadias[stay].hospedada,false);
+        assert.equal(after.ocupacion_estadias[stay].checked_out,true);
+        assert.equal(after.cabanas.find(row => row.ingreso_estadia_id === confirmedStay).estado_operativo,'libre-ingresa');
+        assert.deepEqual(after.ocupacion_estadias[confirmedStay],
+            {huespedes:2,noches:1,por_llegar:false,hospedada:false,checked_out:true});
+        assert.equal(after.ocupacion_estadias[fullDay].checked_out,false);
+        assert.equal(after.elementos.some(e => e.id === marker),false);
         await assert.rejects(() => save(uuid(10), 'persona', person, uuid(11)), { code: '22023' });
     } finally {
         await db.close();

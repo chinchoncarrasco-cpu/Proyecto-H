@@ -1314,9 +1314,13 @@ function stay(row) {
   if (!kind || !row[kind + '_reserva_id']) return null;
   return { reserve:row[kind + '_reserva_id'], stay:row[kind + '_estadia_id'], title:row[kind + '_titular'], number:row.numero };
 }
+function isCheckedOut(stayId, checkoutTime) {
+  return Boolean(checkoutTime || data().ocupacion_estadias?.[stayId]?.checked_out);
+}
 function cabinState(row) {
   if (!row) return ['Sin datos', 'unknown'];
-  if (row.estado_operativo === 'sale-libre' && row.salida_checkout_en) return ['Check-out', 'checkout'];
+  const checkoutTime = row.estado_operativo === 'sale-libre' ? row.salida_checkout_en : null;
+  if (isCheckedOut(stay(row)?.stay, checkoutTime)) return ['Check-out', 'checkout'];
   if (row.ingreso_checkin_en && ['libre-ingresa','sale-ingresa'].includes(row.estado_operativo)) return ['Check-in', 'continuing'];
   return states[row.estado_operativo] || ['Sin datos', 'unknown'];
 }
@@ -1348,7 +1352,7 @@ function draw() {
     const shape = createSvg('polygon', { points:poly(c.corners), class:'footprint', fill:'var(--' + fill + ')' });
     if (!enabled) shape.style.pointerEvents = 'none';
     g.append(shape);
-    if (row?.estado_operativo === 'continua' || row?.ingreso_checkin_en) {
+    if (fill !== 'checkout' && (row?.estado_operativo === 'continua' || row?.ingreso_checkin_en)) {
       g.append(createSvg('polygon', { points:poly(c.corners), fill:'url(#cabin-light)', 'pointer-events':'none' }));
     }
     if (enabled) {
@@ -1539,7 +1543,8 @@ function cabinSummary(n) {
     ['Aseo listo', formatTime(row?.aseo_fin || row?.aseo_ultimo_listo)], ['Observación', row?.aseo_nota],
   ]));
   if (row?.salida_reserva_id && row?.ingreso_reserva_id) {
-    summary.append(el('p', (row.salida_checkout_en ? 'Check-out' : 'Sale') + ' · ' + (row.salida_titular || 'Reserva anterior'), 'subtle cabin-outgoing'));
+    const outgoing = isCheckedOut(row.salida_estadia_id, row.salida_checkout_en) ? 'Check-out' : 'Sale';
+    summary.append(el('p', outgoing + ' · ' + (row.salida_titular || 'Reserva anterior'), 'subtle cabin-outgoing'));
   }
   return summary;
 }
