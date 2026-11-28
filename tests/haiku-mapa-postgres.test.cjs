@@ -295,7 +295,7 @@ test('Mapa y Huéspedes comparten vehículos y conservan las reglas de estadías
             ($5,$7,null,current_date,'16:00','17:00','programado'),
             ($6,$8,$10,current_date,'10:00','11:00','realizado')`,
         [77,78,79,80,81,82,75,76].map(uuid).concat(stay,fullDay));
-        const agendaMigration = read('supabase/migrations/20261128043618_haiku_mapa_agenda_cabanas.sql');
+        const agendaMigration = read('supabase/migrations/20261128045103_haiku_mapa_agenda_cabanas.sql');
         await db.exec(agendaMigration);
         await db.exec(agendaMigration);
         await db.exec('set role authenticated');
