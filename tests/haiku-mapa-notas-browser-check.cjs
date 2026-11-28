@@ -19,7 +19,7 @@ const snapshot = {
         {numero:11, nombre:'Loft', estado_operativo:'libre-libre'},
     ],
     ocupacion_estadias:{stay:{huespedes:2,noches:2,hospedada:true}},
-    notas_resumen:{3:[first,second,third,fourth],11:[separate]},
+    notas_resumen:{3:[first,second,third,fourth],5:['Preparar cortesía'],11:[separate]},
 };
 
 function fixture({ theme, snapshot }) {
@@ -65,6 +65,11 @@ async function check(browser, theme, mobile) {
             await (mobile ? target.tap() : target.click());
         };
         if (!mobile) {
+            await centerCabin(5);
+            assert.equal(await badge(5).evaluate(node => {
+                const {e:x,f:y} = node.getScreenCTM();
+                return document.elementFromPoint(x,y)?.closest('[data-ref]')?.dataset.ref;
+            }), 'c5');
             await centerCabin(3);
             await cabin(3).locator('.footprint').hover();
             const tooltip = page.getByRole('tooltip');

@@ -1309,7 +1309,9 @@ function textAt(value, point, size) {
 }
 function poly(corners) { return corners.map(p => p.join(',')).join(' '); }
 function summaryNoteBadge(cabin) {
-  const [x,y] = cabin.corners[0].map((coord,i) => coord*.77 + cabin.center[i]*.23);
+  // The north stairs label covers the upper-left corner of CAB 5.
+  const [x,y] = cabin.number === 5 ? [cabin.center[0]-10,cabin.center[1]-18]
+    : cabin.corners[0].map((coord,i) => coord*.77 + cabin.center[i]*.23);
   const badge = createSvg('g', { class:'cabin-note-badge', transform:`translate(${x},${y})`, 'aria-hidden':'true', 'pointer-events':'none' });
   badge.append(createSvg('rect', { x:-7, y:-7, width:14, height:14, rx:3, fill:'var(--paper)', stroke:'var(--outline)' }),
     createSvg('path', { d:'M-4 -4.5H1L4 -1.5V4.5H-4Z M1 -4.5V-1.5H4 M-2 .5H2 M-2 2.5H2', fill:'none', stroke:'var(--ink)', 'stroke-linejoin':'round' }));
