@@ -271,7 +271,7 @@ test('Mapa y Huéspedes comparten vehículos y conservan las reglas de estadías
             (null,null,$3,current_date+1,'operativa_resumen','Encargo de mañana',now()),
             (null,null,$3,current_date,'reserva','Nota de otro tipo',now())`,
         [reservationWithoutProfile,fullDay,cabin,fullDayCabin,reservation,emptyCabin]);
-        const notesMigration = read('supabase/migrations/20261128033420_haiku_mapa_notas_resumen.sql');
+        const notesMigration = read('supabase/migrations/20261128040620_haiku_mapa_notas_resumen.sql');
         await db.exec(notesMigration);
         await db.exec(notesMigration);
         await db.exec('set role authenticated');
