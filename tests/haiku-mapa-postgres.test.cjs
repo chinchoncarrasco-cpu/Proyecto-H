@@ -247,6 +247,41 @@ test('Mapa y Huéspedes comparten vehículos y conservan las reglas de estadías
         assert.equal(after.ocupacion_estadias[fullDay].checked_out,false);
         assert.equal(after.elementos.some(e => e.id === marker),false);
         await assert.rejects(() => save(uuid(10), 'persona', person, uuid(11)), { code: '22023' });
+
+        await db.exec('reset role');
+        await db.exec(`
+            alter table public.cabanas add column activa boolean not null default true;
+            create table public.notas (id uuid primary key default gen_random_uuid(), reserva_id uuid, estadia_id uuid,
+                cabana_id uuid, fecha_operacion date, tipo text, texto text, creado_en timestamptz);
+            grant select on public.notas to authenticated;
+            alter table public.notas enable row level security;
+            create policy notas_select on public.notas for select to authenticated
+                using (private.haiku_usuario_activo() and private.haiku_tiene_permiso('notas.ver'));
+        `);
+        const emptyCabin = uuid(74);
+        await db.query('insert into public.cabanas(id,numero) values($1,11)',[emptyCabin]);
+        await db.query("insert into private.permisos values($1,'notas.ver')", [actor]);
+        await db.query(`insert into public.notas (reserva_id,estadia_id,cabana_id,fecha_operacion,tipo,texto,creado_en) values
+            ($1,$2,$3,current_date,'operativa_resumen','Entregar espumante',now()),
+            ($1,null,$4,current_date,'operativa_resumen','Cortesía a las 09:00',now()+interval '1 minute'),
+            ($5,null,$4,current_date,'operativa_resumen','Dejar batas',now()),
+            (null,null,$6,current_date,'operativa_resumen','Revisar canasta',now()),
+            ($1,null,null,current_date,'operativa_resumen','Sin cabaña identificada',now()),
+            (null,null,$3,current_date,'operativa_resumen','  ',now()),
+            (null,null,$3,current_date+1,'operativa_resumen','Encargo de mañana',now()),
+            (null,null,$3,current_date,'reserva','Nota de otro tipo',now())`,
+        [reservationWithoutProfile,fullDay,cabin,fullDayCabin,reservation,emptyCabin]);
+        const notesMigration = read('supabase/migrations/20261128040620_haiku_mapa_notas_resumen.sql');
+        await db.exec(notesMigration);
+        await db.exec(notesMigration);
+        await db.exec('set role authenticated');
+        const {notas_resumen, ...mapWithoutNotes} = await snapshot();
+        assert.deepEqual(mapWithoutNotes,after);
+        assert.deepEqual(notas_resumen,{
+            5:['Dejar batas'], 6:['Entregar espumante','Cortesía a las 09:00'], 11:['Revisar canasta'],
+        });
+        await db.query("select set_config('request.jwt.claim.sub',$1,false)", [cleaningUser]);
+        assert.deepEqual((await snapshot()).notas_resumen,{});
     } finally {
         await db.close();
     }

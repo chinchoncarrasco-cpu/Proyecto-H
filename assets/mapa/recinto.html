@@ -129,7 +129,7 @@ h1 {font-size:clamp(17px, 2.6vw, 25px); letter-spacing:-.025em; margin-right:aut
 .region[aria-current="true"] .zone-tag, .region:focus-visible .zone-tag {stroke:var(--accent); stroke-width:2.5}
 .river {fill:var(--sub); font-size:19px; font-weight:500; text-anchor:start}
 #tooltip, #placement {position:absolute; z-index:2; color:var(--ink); background:var(--paper); border:1px solid var(--line); border-radius:9px; box-shadow:0 5px 18px #1610182c}
-#tooltip {padding:6px 9px; pointer-events:none; width:max-content; max-width:min(290px,calc(100% - 8px)); overflow-wrap:anywhere; font-size:12px}
+#tooltip {padding:6px 9px; pointer-events:none; width:max-content; max-width:min(290px,calc(100% - 8px)); overflow-wrap:anywhere; white-space:pre-line; font-size:12px}
 #placement {top:8px; left:8px; padding:5px 6px 5px 10px; display:flex; align-items:center; gap:8px}
 .viewport-tools {position:absolute; z-index:1; inset:auto 8px 8px; display:flex; justify-content:space-between; pointer-events:none}
 .viewport-tools div {display:flex; gap:4px}
@@ -198,6 +198,10 @@ textarea {min-height:59px; resize:vertical}
 .guest-notes summary {cursor:pointer; font-weight:650}
 .guest-notes > div {padding-top:5px}
 .cabin-summary, .cabin-extra > div, .cabin-extra-content {display:grid; gap:8px; min-width:0}
+.cabin-summary-notes {border-top:1px solid var(--line); padding-top:5px; font-size:12px}
+#detail-body .cabin-summary-notes h3 {margin:0 0 2px; font-size:12px}
+.cabin-summary-notes .compact-list li {padding:3px 0; white-space:pre-wrap}
+.cabin-summary-notes summary {color:var(--sub); cursor:pointer; font-weight:650; padding:3px 0}
 .cabin-extra {border-top:1px solid var(--line); padding-top:8px; scroll-margin-top:60px}
 .cabin-extra h3 {color:var(--ink)}
 .cabin-actions button[aria-expanded="true"] {border-color:var(--accent); background:var(--tint)}
@@ -374,7 +378,7 @@ textarea {min-height:59px; resize:vertical}
       <div id="tooltip" role="tooltip" hidden></div>
       <div id="placement" hidden><span>Elige la ubicación en el mapa</span><button id="cancel-placement" type="button">Cancelar</button></div>
       <nav class="viewport-tools" aria-label="Navegación del plano">
-        <div class="sectors"><button type="button" data-sector="north">Norte</button><button type="button" data-sector="south">Sur</button><button id="cabin11" type="button">CAB 11</button></div>
+        <div class="sectors"><button type="button" data-sector="north">Norte</button><button type="button" data-sector="south">Sur</button></div>
         <div class="zoom"><button type="button" id="minus" aria-label="Alejar">−</button><button type="button" id="plus" aria-label="Acercar">＋</button><button type="button" id="center" aria-label="Ver todo el recinto" title="Ver todo el recinto">◎</button></div>
       </nav>
     </section>
@@ -1146,6 +1150,8 @@ const markerColors = { persona:'#6da2be', mantencion:'#d4b16d', aseo:'#a6c6a5', 
 const empty = () => ({ cabanas:[], personas:[], elementos:[], agenda:[], catalogo:[], permisos:{} });
 const data = () => state.data || empty();
 const list = value => Array.isArray(value) ? value : [];
+const summaryNotes = number => list(data().notas_resumen?.[number]);
+const SUMMARY_NOTE_PREVIEW_COUNT = 2;
 const item = id => data().elementos.find(x => x.id === id);
 const bayRecord = n => data().elementos.find(x => x.tipo === 'vehiculo' && x.puesto === n);
 const cabinRow = n => data().cabanas.find(row => row.numero === n);
@@ -1269,7 +1275,7 @@ async function fetchSnapshot() {
       const number = Number(state.selection.slice(1));
       const reservations = detailBody.querySelector('.cabin-reservations');
       if (summary && pane?.dataset.context === cabinContext(number)) {
-        const updated = cabinSummary(number);
+        const updated = cabinSummary(number, summary.querySelector('.summary-notes-more')?.open);
         if (!summary.isEqualNode(updated)) summary.replaceWith(updated);
         if (!state.saving) void reservations?.reload();
       } else {
@@ -1302,6 +1308,15 @@ function textAt(value, point, size) {
   return createSvg('text', { x:point[0], y:point[1], 'font-size':size }, value);
 }
 function poly(corners) { return corners.map(p => p.join(',')).join(' '); }
+function summaryNoteBadge(cabin) {
+  // The north stairs label covers the upper-left corner of CAB 5.
+  const [x,y] = cabin.number === 5 ? [cabin.center[0]-10,cabin.center[1]-18]
+    : cabin.corners[0].map((coord,i) => coord*.77 + cabin.center[i]*.23);
+  const badge = createSvg('g', { class:'cabin-note-badge', transform:`translate(${x},${y})`, 'aria-hidden':'true', 'pointer-events':'none' });
+  badge.append(createSvg('rect', { x:-7, y:-7, width:14, height:14, rx:3, fill:'var(--paper)', stroke:'var(--outline)' }),
+    createSvg('path', { d:'M-4 -4.5H1L4 -1.5V4.5H-4Z M1 -4.5V-1.5H4 M-2 .5H2 M-2 2.5H2', fill:'none', stroke:'var(--ink)', 'stroke-linejoin':'round' }));
+  return badge;
+}
 function region(id, label) {
   return createSvg('g', {
     class:'region', 'data-ref':id, role:'button', tabindex:0, 'aria-label':label,
@@ -1345,6 +1360,7 @@ function applyTheme(theme) {
   draw();
 }
 function draw() {
+  tooltip.hidden = true;
   const definitions = createSvg('defs');
   const light = createSvg('radialGradient', { id:'cabin-light', cx:'.55', cy:'.43', r:'.64' });
   light.append(createSvg('stop', { offset:'0%', 'stop-color':'#ffe3a3', 'stop-opacity':.20 }),
@@ -1356,7 +1372,9 @@ function draw() {
     const row = cabinRow(c.number);
     const [title, fill] = cabinState(row);
     const enabled = filter === 'all' || filter === 'cabins';
-    const g = enabled ? region(ref, c.title + ' · ' + title) : createSvg('g', { class:'region', 'aria-hidden':'true', 'pointer-events':'none' });
+    const noteCount = summaryNotes(c.number).length;
+    const notesLabel = noteCount ? ' · ' + noteCount + (noteCount === 1 ? ' nota del Resumen' : ' notas del Resumen') : '';
+    const g = enabled ? region(ref, c.title + ' · ' + title + notesLabel) : createSvg('g', { class:'region', 'aria-hidden':'true', 'pointer-events':'none' });
     const shape = createSvg('polygon', { points:poly(c.corners), class:'footprint', fill:'var(--' + fill + ')' });
     if (!enabled) shape.style.pointerEvents = 'none';
     g.append(shape);
@@ -1370,6 +1388,7 @@ function draw() {
         createSvg('circle', { cx:c.dot[0], cy:c.dot[1], r:4.5, fill:'var(--' + tone + ')', 'pointer-events':'none' })
       );
       g.append(textAt(c.title, c.center, 16));
+      if (noteCount) g.append(summaryNoteBadge(c));
     }
     nodes.push(g);
   }
@@ -1541,7 +1560,7 @@ function notesPanel(person, reserve) {
   });
   detailBody.append(section);
 }
-function cabinSummary(n) {
+function cabinSummary(n, moreNotesOpen = false) {
   const row = cabinRow(n), ref = stay(row);
   const [reservation] = cabinState(row), [clean] = cleaning(row), guest = cabinGuest(ref);
   const summary = el('div', '', 'cabin-summary');
@@ -1553,6 +1572,24 @@ function cabinSummary(n) {
   if (row?.salida_reserva_id && row?.ingreso_reserva_id && !hasHostedDeparture(row)) {
     const outgoing = isCheckedOut(row.salida_estadia_id, row.salida_checkout_en) ? 'Check-out' : 'Sale';
     summary.append(el('p', outgoing + ' · ' + (row.salida_titular || 'Reserva anterior'), 'subtle cabin-outgoing'));
+  }
+  const notes = summaryNotes(n);
+  if (notes.length) {
+    const section = el('section', '', 'cabin-summary-notes');
+    const noteList = values => {
+      const items = el('ul', '', 'compact-list');
+      items.append(...values.map(text => el('li', text)));
+      return items;
+    };
+    section.append(el('h3','Notas del Resumen'), noteList(notes.slice(0,SUMMARY_NOTE_PREVIEW_COUNT)));
+    const others = notes.slice(SUMMARY_NOTE_PREVIEW_COUNT);
+    if (others.length) {
+      const more = el('details','','summary-notes-more');
+      more.open = moreNotesOpen;
+      more.append(el('summary','Ver ' + others.length + (others.length === 1 ? ' nota más' : ' notas más')), noteList(others));
+      section.append(more);
+    }
+    summary.append(section);
   }
   return summary;
 }
@@ -2525,9 +2562,18 @@ function pinch() {
 function findRef(target) { return target.closest?.('[data-ref]')?.dataset.ref; }
 function tooltipFor(id) {
   if (id?.startsWith('c') && Object.hasOwn(geometry.cabins,id)) {
-    const ref = stay(cabinRow(Number(id.slice(1))));
-    if (!ref) return '';
-    return [ref.title || cabinGuest(ref)?.nombre,cabinStayCounts(ref)].filter(Boolean).join(' · ');
+    const cabin = geometry.cabins[id];
+    const ref = stay(cabinRow(cabin.number));
+    const title = ref ? [ref.title || cabinGuest(ref)?.nombre,cabinStayCounts(ref)].filter(Boolean).join(' · ') : '';
+    const notes = summaryNotes(cabin.number);
+    if (!notes.length) return title;
+    const preview = notes.slice(0,SUMMARY_NOTE_PREVIEW_COUNT).map(note => {
+      const text = note.replace(/\s+/g,' ').trim();
+      return '• ' + (text.length > 110 ? text.slice(0,109).trimEnd() + '…' : text);
+    });
+    const remaining = notes.length - preview.length;
+    if (remaining) preview.push('+ ' + remaining + ' más en la ficha');
+    return [title || cabin.title,'Notas del Resumen',...preview].join('\n');
   }
   if (Object.hasOwn(geometry.parking,id)) {
     const number = Number(id.slice(1)), car = bayRecord(number);
@@ -2643,7 +2689,6 @@ byId('reload').onclick = refresh;
 byId('add').onclick = showAdd;
 byId('close').onclick = closeDetail;
 byId('cancel-placement').onclick = cancelPlacement;
-byId('cabin11').onclick = () => showDetail('c11');
 byId('plus').onclick = () => zoomBy(1.24);
 byId('minus').onclick = () => zoomBy(1/1.24);
 byId('center').onclick = () => { if (measure) center([width/2,height/2],fitScale()); };
