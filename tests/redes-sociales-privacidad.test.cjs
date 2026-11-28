@@ -6,6 +6,10 @@ const tick=async()=>{for(let i=0;i<5;i++)await new Promise(r=>setImmediate(r));}
 async function fixture(){
  const {window}=parseHTML('<html><body><section id="seccion-calendario"><div id="haiku-calendario-modo"><button data-calendar-mode="redes">Redes</button></div><div id="haiku-redes"></div></section></body></html>');
  const document=window.document,callbacks=[],timers=new Map();let timerId=0,shareResolve=null;
+ Object.defineProperties(document,{
+  visibilityState:{configurable:true,value:'visible'},
+  hasFocus:{configurable:true,value:()=>true},
+ });
  const storage=()=>{const data=new Map();return{getItem:k=>data.get(k)||null,setItem:(k,v)=>data.set(k,String(v)),removeItem:k=>data.delete(k)}};
  const createElement=document.createElement.bind(document);document.createElement=(name)=>{const el=createElement(name);if(name==='dialog'){el.open=false;el.showModal=()=>{el.open=true;el.setAttribute('open','');};el.close=()=>{el.open=false;el.removeAttribute('open');};}return el;};
  window.haikuSesion={auth:{id:'staff'}};window.HaikuRedesCore=C;window.confirm=()=>true;
@@ -70,4 +74,59 @@ test('el mapa interno conserva el foco y salir de Haku activa la protección', a
  f.window.HAIKU_PRIVACIDAD.verificarFocoMapa();
  assert.equal(f.overlay.hidden, false);
  assert.equal(f.window.HAIKU_PRIVACIDAD.estado().modo, 'cortina');
+});
+
+test('el blur pendiente del mapa no vuelve a cubrir el panel después de recuperar el foco', async () => {
+ const f = await fixture();
+ const map = f.document.createElement('iframe');
+ const section = f.document.createElement('section');
+ section.id = 'seccion-mapa';
+ map.setAttribute('data-haiku-mapa-interno', '');
+ section.append(map);
+ f.document.body.append(section);
+ let focused = false;
+ Object.defineProperties(f.document, {
+  visibilityState: {value: 'visible'},
+  hasFocus: {value: () => focused},
+  activeElement: {value: f.document.body},
+ });
+ f.window.dispatchEvent(new f.window.Event('blur'));
+ focused = true;
+ f.window.dispatchEvent(new f.window.Event('focus'));
+ for (const [id, timer] of f.timers) if (timer.ms === 0) {
+  f.timers.delete(id);
+  timer.fn();
+ }
+ assert.equal(f.overlay.hidden, true);
+ assert.equal(f.window.HAIKU_PRIVACIDAD.estado().modo, 'oculto');
+});
+
+test('un toque recupera la cortina tras volver y respeta el bloqueo por PIN', async () => {
+ const f = await fixture();
+ let focused = false, visible = true;
+ Object.defineProperties(f.document, {
+  visibilityState: {get: () => visible ? 'visible' : 'hidden'},
+  hasFocus: {value: () => focused},
+ });
+ const modo = () => f.window.HAIKU_PRIVACIDAD.estado().modo;
+ f.window.dispatchEvent(new f.window.Event('blur'));
+ assert.equal(modo(), 'cortina');
+ f.overlay.dispatchEvent(new f.window.Event('click'));
+ assert.equal(modo(), 'cortina');
+ focused = true;
+ visible = false;
+ f.window.dispatchEvent(new f.window.Event('focus'));
+ assert.equal(modo(), 'cortina');
+ visible = true;
+ f.overlay.dispatchEvent(new f.window.Event('click'));
+ assert.equal(modo(), 'oculto');
+ assert.equal(f.overlay.hidden, true);
+
+ focused = false;
+ f.window.dispatchEvent(new f.window.Event('blur'));
+ [...f.timers.values()].find(t => t.ms === 60030).fn();
+ focused = true;
+ f.overlay.dispatchEvent(new f.window.Event('click'));
+ assert.equal(modo(), 'pin');
+ assert.equal(f.overlay.hidden, false);
 });

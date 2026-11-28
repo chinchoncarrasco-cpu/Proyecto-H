@@ -12,7 +12,7 @@ const third = 'Cortesía a las 09:00';
 const fourth = 'Agregar una tarjeta con el texto <b>Felicitaciones</b>';
 const separate = 'Revisar canasta de CAB 11';
 const snapshot = {
-    fecha:'2026-11-28', permisos:{}, elementos:[], personas:[],
+    fecha:'2026-11-28', permisos:{agenda:true}, elementos:[], personas:[],
     cabanas:[
         {numero:3, nombre:'Loft Clásico 3', estado_operativo:'continua', continua_estadia_id:'stay',
             continua_reserva_id:'reservation', continua_titular:'Titular de prueba', aseo_estado:'pendiente'},
@@ -20,6 +20,15 @@ const snapshot = {
     ],
     ocupacion_estadias:{stay:{huespedes:2,noches:2,hospedada:true}},
     notas_resumen:{3:[first,second,third,fourth],5:['Preparar cortesía'],11:[separate]},
+    agenda:[
+        {numero:3, codigo:'tinajaTonel', nombre:'Tinaja Tonel', hora:'10:00:00', estado:'programado'},
+        {numero:3, codigo:'lateCheckout', nombre:'Late Check-out', hora:'13:30:00', estado:'programado'},
+        {numero:3, codigo:'masajeRelajante', nombre:'Masaje relajante', hora:'18:00:00', estado:'programado'},
+        {numero:9, codigo:'tinajaJacuzzi', nombre:'Tinaja Jacuzzi', hora:'19:15:00', estado:'programado'},
+        {numero:2, nombre:'Masaje realizado', hora:'09:00:00', estado:'realizado'},
+        {numero:2, nombre:'Sin hora', hora:null, estado:'programado'},
+        {numero:2, nombre:'Masaje cancelado', hora:'20:00:00', estado:'cancelado'},
+    ],
 };
 
 function fixture({ theme, snapshot }) {
@@ -50,10 +59,17 @@ async function check(browser, theme, mobile) {
         await page.locator('#viewport[data-scale]').waitFor();
         const cabin = n => page.locator('#regions [data-ref="c' + n + '"]');
         const badge = n => cabin(n).locator('.cabin-note-badge');
+        const calendar = n => cabin(n).locator('.cabin-service-badge');
         await badge(3).waitFor({state:'attached'});
         assert.equal(await badge(3).count(),1);
         assert.equal(await badge(11).count(),1);
         assert.equal(await badge(2).count(),0);
+        assert.equal(await calendar(3).count(),1);
+        assert.equal(await calendar(9).count(),1);
+        assert.equal(await calendar(2).count(),0);
+        assert.equal(await calendar(11).count(),0);
+        assert.match(await cabin(3).getAttribute('aria-label'),/3 servicios agendados/);
+        assert.match(await cabin(9).getAttribute('aria-label'),/1 servicio agendado/);
         assert.equal(await page.getByRole('navigation',{name:'Navegación del plano'})
             .getByRole('button',{name:'CAB 11',exact:true}).count(),0);
         assert(!((await page.locator('#regions').textContent()).includes(first)));
@@ -76,10 +92,19 @@ async function check(browser, theme, mobile) {
             await tooltip.waitFor();
             const preview = await tooltip.textContent();
             assert(preview.includes('Titular de prueba'));
+            assert(preview.includes('10:00 · Tinaja Tonel'));
+            assert(preview.includes('13:30 · Late Check-out'));
+            assert(preview.includes('+ 1 servicio más en la ficha'));
+            assert(!preview.includes('18:00 · Masaje relajante'));
+            assert(!preview.includes('Tinaja Jacuzzi'));
             assert(preview.includes(first) && preview.includes(second) && preview.includes('+ 2 más en la ficha'));
             assert(!preview.includes(third) && !preview.includes(separate));
         }
         await openCabin(3);
+        const agenda = page.locator('.cabin-summary-agenda');
+        assert.deepEqual(await agenda.locator('li').allTextContents(),[
+            '10:00 · Tinaja Tonel', '13:30 · Late Check-out', '18:00 · Masaje relajante',
+        ]);
         const notes = page.locator('.cabin-summary-notes');
         await notes.getByText(first,{exact:true}).waitFor();
         await notes.getByText(second,{exact:true}).waitFor();
@@ -91,26 +116,31 @@ async function check(browser, theme, mobile) {
 
         await page.evaluate(() => {
             window.mapNotesFixture.notas_resumen[3][0] = 'Batas entregadas';
+            window.mapNotesFixture.agenda[0].hora = '10:30:00';
         });
         await page.getByRole('button',{name:'Actualizar mapa'}).click();
         await notes.getByText('Batas entregadas',{exact:true}).waitFor();
         assert.equal(await notes.getByText(third,{exact:true}).isVisible(),true);
         assert.equal(await notes.getByText(first,{exact:true}).count(),0);
+        await agenda.getByText('10:30 · Tinaja Tonel',{exact:true}).waitFor();
 
         await page.locator('#close').click();
         await openCabin(11);
         assert.equal(await page.locator('#detail-title').textContent(),'CAB 11');
         await notes.getByText(separate,{exact:true}).waitFor();
         assert.equal(await notes.getByText(second,{exact:true}).count(),0);
+        assert.equal(await agenda.count(),0);
         await page.evaluate(() => {
             window.mapNotesFixture.fecha = '2026-11-29';
             delete window.mapNotesFixture.notas_resumen;
+            window.mapNotesFixture.agenda = [];
         });
         await page.getByRole('button',{name:'Actualizar mapa'}).click();
         await notes.waitFor({state:'detached'});
         assert.equal(await page.locator('.cabin-note-badge').count(),0);
+        assert.equal(await page.locator('.cabin-service-badge').count(),0);
         assert.deepEqual(errors,[]);
-        console.log('Notas del Resumen en el mapa verificadas',theme,mobile ? 'móvil' : 'escritorio');
+        console.log('Agenda y notas del Resumen en el mapa verificadas',theme,mobile ? 'móvil' : 'escritorio');
     } finally {
         await context.close();
     }

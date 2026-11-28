@@ -375,8 +375,12 @@
         }, GRACIA_MS + 30);
     }
 
+    function tieneFocoHaiku() {
+        return document.visibilityState === "visible" && document.hasFocus();
+    }
+
     function regresoAHaiku() {
-        if (!armado || !configurado) return;
+        if (!armado || !configurado || !tieneFocoHaiku()) return;
 
         clearTimeout(timerBloqueo);
         timerBloqueo = null;
@@ -660,12 +664,14 @@
             return;
         }
         setTimeout(() => {
-            if (document.visibilityState === "visible" && document.hasFocus()
-                && document.activeElement?.matches(selectorMapa)) return;
-            salidaDeHaiku();
+            if (!tieneFocoHaiku()) salidaDeHaiku();
         }, 0);
     });
     window.addEventListener("focus", regresoAHaiku);
+
+    overlay.addEventListener("click", () => {
+        if (modoActual === "cortina") regresoAHaiku();
+    });
 
     document.addEventListener("visibilitychange", () => {
         if (document.visibilityState === "hidden") {
@@ -676,6 +682,7 @@
     });
 
     window.addEventListener("pageshow", () => {
+        if (modoActual === "cortina") regresoAHaiku();
         if (window.haikuSesion) prepararSesion(window.haikuSesion);
     });
 
@@ -686,7 +693,7 @@
 
     window.HAIKU_PRIVACIDAD = {
         verificarFocoMapa() {
-            if (document.visibilityState === "hidden" || !document.hasFocus()) salidaDeHaiku();
+            if (!tieneFocoHaiku()) salidaDeHaiku();
         },
         bloquearAhora() {
             if (!armado || !configurado) return false;

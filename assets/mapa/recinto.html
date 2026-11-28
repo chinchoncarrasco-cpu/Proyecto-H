@@ -198,8 +198,9 @@ textarea {min-height:59px; resize:vertical}
 .guest-notes summary {cursor:pointer; font-weight:650}
 .guest-notes > div {padding-top:5px}
 .cabin-summary, .cabin-extra > div, .cabin-extra-content {display:grid; gap:8px; min-width:0}
-.cabin-summary-notes {border-top:1px solid var(--line); padding-top:5px; font-size:12px}
-#detail-body .cabin-summary-notes h3 {margin:0 0 2px; font-size:12px}
+.cabin-summary-notes, .cabin-summary-agenda {border-top:1px solid var(--line); padding-top:5px; font-size:12px}
+#detail-body :is(.cabin-summary-notes, .cabin-summary-agenda) h3 {margin:0 0 2px; font-size:12px}
+.cabin-summary-agenda .compact-list li {padding:3px 0}
 .cabin-summary-notes .compact-list li {padding:3px 0; white-space:pre-wrap}
 .cabin-summary-notes summary {color:var(--sub); cursor:pointer; font-weight:650; padding:3px 0}
 .cabin-extra {border-top:1px solid var(--line); padding-top:8px; scroll-margin-top:60px}
@@ -1151,7 +1152,10 @@ const empty = () => ({ cabanas:[], personas:[], elementos:[], agenda:[], catalog
 const data = () => state.data || empty();
 const list = value => Array.isArray(value) ? value : [];
 const summaryNotes = number => list(data().notas_resumen?.[number]);
-const SUMMARY_NOTE_PREVIEW_COUNT = 2;
+const CABIN_PREVIEW_COUNT = 2;
+const cabinAgenda = number => list(data().agenda).filter(s =>
+  s.numero === number && s.estado === 'programado' && typeof s.hora === 'string' && s.hora.length >= 5);
+const agendaLabel = service => service.hora.slice(0,5) + ' · ' + (service.nombre || 'Servicio');
 const item = id => data().elementos.find(x => x.id === id);
 const bayRecord = n => data().elementos.find(x => x.tipo === 'vehiculo' && x.puesto === n);
 const cabinRow = n => data().cabanas.find(row => row.numero === n);
@@ -1317,6 +1321,14 @@ function summaryNoteBadge(cabin) {
     createSvg('path', { d:'M-4 -4.5H1L4 -1.5V4.5H-4Z M1 -4.5V-1.5H4 M-2 .5H2 M-2 2.5H2', fill:'none', stroke:'var(--ink)', 'stroke-linejoin':'round' }));
   return badge;
 }
+function scheduledServiceBadge(cabin) {
+  const [x,y] = cabin.corners[3].map((coord,i) => coord*.67 + cabin.center[i]*.33);
+  const badge = createSvg('g', { class:'cabin-service-badge', transform:`translate(${x},${y})`, 'aria-hidden':'true', 'pointer-events':'none' });
+  badge.append(createSvg('rect', { x:-7, y:-7, width:14, height:14, rx:3, fill:'var(--paper)', stroke:'var(--waiting)' }),
+    createSvg('path', { d:'M-4.25 -3.75H4.25V4.5H-4.25Z M-4.25 -1H4.25 M-2 -5V-2.5 M2 -5V-2.5 M-1.5 1.5H1.5',
+      fill:'none', stroke:'var(--ink)', 'stroke-linecap':'round', 'stroke-linejoin':'round' }));
+  return badge;
+}
 function region(id, label) {
   return createSvg('g', {
     class:'region', 'data-ref':id, role:'button', tabindex:0, 'aria-label':label,
@@ -1373,8 +1385,11 @@ function draw() {
     const [title, fill] = cabinState(row);
     const enabled = filter === 'all' || filter === 'cabins';
     const noteCount = summaryNotes(c.number).length;
+    const serviceCount = cabinAgenda(c.number).length;
     const notesLabel = noteCount ? ' · ' + noteCount + (noteCount === 1 ? ' nota del Resumen' : ' notas del Resumen') : '';
-    const g = enabled ? region(ref, c.title + ' · ' + title + notesLabel) : createSvg('g', { class:'region', 'aria-hidden':'true', 'pointer-events':'none' });
+    const servicesLabel = serviceCount ? ' · ' + serviceCount + (serviceCount === 1 ? ' servicio agendado' : ' servicios agendados') : '';
+    const g = enabled ? region(ref, c.title + ' · ' + title + notesLabel + servicesLabel)
+      : createSvg('g', { class:'region', 'aria-hidden':'true', 'pointer-events':'none' });
     const shape = createSvg('polygon', { points:poly(c.corners), class:'footprint', fill:'var(--' + fill + ')' });
     if (!enabled) shape.style.pointerEvents = 'none';
     g.append(shape);
@@ -1389,6 +1404,7 @@ function draw() {
       );
       g.append(textAt(c.title, c.center, 16));
       if (noteCount) g.append(summaryNoteBadge(c));
+      if (serviceCount) g.append(scheduledServiceBadge(c));
     }
     nodes.push(g);
   }
@@ -1573,6 +1589,14 @@ function cabinSummary(n, moreNotesOpen = false) {
     const outgoing = isCheckedOut(row.salida_estadia_id, row.salida_checkout_en) ? 'Check-out' : 'Sale';
     summary.append(el('p', outgoing + ' · ' + (row.salida_titular || 'Reserva anterior'), 'subtle cabin-outgoing'));
   }
+  const agenda = cabinAgenda(n);
+  if (agenda.length) {
+    const section = el('section', '', 'cabin-summary-agenda');
+    const items = el('ul', '', 'compact-list');
+    for (const service of agenda) items.append(el('li', agendaLabel(service)));
+    section.append(el('h3', 'Servicios agendados'), items);
+    summary.append(section);
+  }
   const notes = summaryNotes(n);
   if (notes.length) {
     const section = el('section', '', 'cabin-summary-notes');
@@ -1581,8 +1605,8 @@ function cabinSummary(n, moreNotesOpen = false) {
       items.append(...values.map(text => el('li', text)));
       return items;
     };
-    section.append(el('h3','Notas del Resumen'), noteList(notes.slice(0,SUMMARY_NOTE_PREVIEW_COUNT)));
-    const others = notes.slice(SUMMARY_NOTE_PREVIEW_COUNT);
+    section.append(el('h3','Notas del Resumen'), noteList(notes.slice(0,CABIN_PREVIEW_COUNT)));
+    const others = notes.slice(CABIN_PREVIEW_COUNT);
     if (others.length) {
       const more = el('details','','summary-notes-more');
       more.open = moreNotesOpen;
@@ -2566,14 +2590,23 @@ function tooltipFor(id) {
     const ref = stay(cabinRow(cabin.number));
     const title = ref ? [ref.title || cabinGuest(ref)?.nombre,cabinStayCounts(ref)].filter(Boolean).join(' · ') : '';
     const notes = summaryNotes(cabin.number);
-    if (!notes.length) return title;
-    const preview = notes.slice(0,SUMMARY_NOTE_PREVIEW_COUNT).map(note => {
-      const text = note.replace(/\s+/g,' ').trim();
-      return '• ' + (text.length > 110 ? text.slice(0,109).trimEnd() + '…' : text);
-    });
-    const remaining = notes.length - preview.length;
-    if (remaining) preview.push('+ ' + remaining + ' más en la ficha');
-    return [title || cabin.title,'Notas del Resumen',...preview].join('\n');
+    const agenda = cabinAgenda(cabin.number);
+    if (!notes.length && !agenda.length) return title;
+    const preview = [title || cabin.title];
+    if (agenda.length) {
+      preview.push('Servicios agendados', ...agenda.slice(0,CABIN_PREVIEW_COUNT).map(s => '• ' + agendaLabel(s)));
+      const remaining = agenda.length - CABIN_PREVIEW_COUNT;
+      if (remaining > 0) preview.push('+ ' + remaining + (remaining === 1 ? ' servicio más' : ' servicios más') + ' en la ficha');
+    }
+    if (notes.length) {
+      preview.push('Notas del Resumen', ...notes.slice(0,CABIN_PREVIEW_COUNT).map(note => {
+        const text = note.replace(/\s+/g,' ').trim();
+        return '• ' + (text.length > 110 ? text.slice(0,109).trimEnd() + '…' : text);
+      }));
+      const remaining = notes.length - CABIN_PREVIEW_COUNT;
+      if (remaining > 0) preview.push('+ ' + remaining + ' más en la ficha');
+    }
+    return preview.join('\n');
   }
   if (Object.hasOwn(geometry.parking,id)) {
     const number = Number(id.slice(1)), car = bayRecord(number);

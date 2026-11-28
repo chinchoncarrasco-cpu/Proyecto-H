@@ -282,6 +282,30 @@ test('Mapa y Huéspedes comparten vehículos y conservan las reglas de estadías
         });
         await db.query("select set_config('request.jwt.claim.sub',$1,false)", [cleaningUser]);
         assert.deepEqual((await snapshot()).notas_resumen,{});
+
+        await db.exec('reset role');
+        await db.query(`insert into public.catalogo_servicios values
+            ($1,'lateCheckout','Late Check-out',null,null,true,1),
+            ($2,'tinajaTonel','Tinaja Tonel',60,3,true,2)`, [uuid(75),uuid(76)]);
+        await db.query(`insert into public.servicios values
+            ($1,$7,$9,current_date,'13:30','14:30','programado'),
+            ($2,$7,$9,current_date,'14:00','15:00','cancelado'),
+            ($3,$7,$9,current_date+1,'13:30','14:30','programado'),
+            ($4,$7,$9,current_date,null,null,'programado'),
+            ($5,$7,null,current_date,'16:00','17:00','programado'),
+            ($6,$8,$10,current_date,'10:00','11:00','realizado')`,
+        [77,78,79,80,81,82,75,76].map(uuid).concat(stay,fullDay));
+        const agendaMigration = read('supabase/migrations/20261128043618_haiku_mapa_agenda_cabanas.sql');
+        await db.exec(agendaMigration);
+        await db.exec(agendaMigration);
+        await db.exec('set role authenticated');
+        assert.deepEqual((await snapshot()).agenda,[]);
+        await db.query("select set_config('request.jwt.claim.sub',$1,false)", [actor]);
+        const agenda = (await snapshot()).agenda;
+        assert.deepEqual(agenda.map(({codigo,numero,hora,estado}) => ({codigo,numero,hora,estado})),[
+            {codigo:'tinajaTonel',numero:6,hora:'10:00:00',estado:'realizado'},
+            {codigo:'lateCheckout',numero:5,hora:'13:30:00',estado:'programado'},
+        ]);
     } finally {
         await db.close();
     }
