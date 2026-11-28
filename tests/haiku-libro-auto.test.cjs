@@ -348,6 +348,44 @@ test('una sincronización sin cambios queda en silencio y conserva los pendiente
     assert.equal(informe.pendientesSinVerificar,false);
     assert.equal(informe.nuevas[0].id,anterior.id);
 });
+test('Incorporar comprueba sólo lo seleccionado y conserva los 21 casos anteriores',async()=>{
+    const seleccionada={...row,id:'fila-lista'};
+    const anteriores=Array.from({length:21},(_,i)=>({id:`anterior-${i}`,tipo:'modificacion',
+        actual:{...row,id:i===0?seleccionada.id:`anterior-${i}`,titular:`Caso anterior ${i+1}`},
+        detectado_en:'2026-11-26T20:00:00Z',detectado_generacion:1,cambios:[]}));
+    const h=interfaz(async()=>res({nuevas:[{actual:seleccionada}],libro_actual:{generacion:2},
+        generado_en:'2026-11-27T20:00:00Z'}),{proyectar:true});
+    h.window.haikuSesion={usuario:{activo:true},roles:['administrador']};
+    h.window.haikuSupabase={auth:{getUser:async()=>({data:{user:{id:'admin'}}})}};
+    let registro={version:1,cambios:anteriores},guardada=false;
+    h.window.HAIKU_LIBRO_RESERVA_V1.leerCambiosDetectados=async()=>registro;
+    h.window.HAIKU_LIBRO_RESERVA_V1.guardarCambiosDetectados=async dato=>{registro=dato;};
+    const cotejos=[],proyecto=[];
+    h.window.HAIKU_LIBRO_CONTEXTO_V1={actualizarDesdeLibro:async rows=>{
+        cotejos.push(rows.length);return rows;
+    },enriquecer:async items=>items};
+    h.window.HAIKU_LIBRO_CONSULTAS={revalidarCambiosDetectados:async rows=>{
+        proyecto.push(Array.from(rows,r=>r.actual.titular));
+        const nueva=rows.find(r=>r.tipo==='nueva');
+        const items=rows.filter(r=>r!==nueva||!guardada).map(r=>({...r,accionable:r===nueva}));
+        return {items,resueltos:guardada&&nueva?[nueva.id]:[],reservas:nueva&&!guardada?[nueva.actual]:[],comparacion:[],q:{}};
+    },prepararIncorporacion:async entrada=>{
+        assert.deepEqual(Array.from(entrada.reservas,r=>r.titular),[seleccionada.titular]);
+        return {items:[{seleccionado:true,categoria:'nuevas'}]};
+    },confirmarIncorporacion:async()=>{
+        guardada=true;return {resultado:{ok:true,reservas_creadas:1}};
+    }};
+    const api=h.window.HAIKU_ASISTENTE_LIBRO_ACTUALIZACION_V1;
+    const aviso=await api.obtenerResultadoAviso({soloCambiosNuevos:true});
+    assert.equal(aviso.incorporacion.pendientes.length,21);assert.equal(aviso.incorporacion.listos.length,1);
+    const fin=await api.incorporarDesdeAviso(aviso);
+    assert.equal(fin.reservas_creadas,1);
+    assert.deepEqual(proyecto.map(x=>x.length),[22,1,1]);
+    assert.deepEqual(proyecto.slice(1),[[seleccionada.titular],[seleccionada.titular]]);
+    assert.deepEqual(cotejos,[22,1,1]);
+    assert.deepEqual(Array.from(fin.pendientes,x=>x.titular),anteriores.map(x=>x.actual.titular));
+    assert.equal(registro.cambios.filter(x=>x.id.startsWith('anterior-')).length,21);
+});
 test('aviso en segundo plano conserva conversación, borrador y posición y espera al terminar para abrir',async()=>{
     const h=interfaz(async()=>res({nuevas:[{actual:row}]}));let ocupado=true;
     h.window.HAIKU_ASISTENTE.procesando=()=>ocupado;

@@ -325,8 +325,11 @@
         panel.style.insetBlock=`${margen}px`;
         panel.style.setProperty('--haku-detalle-arriba',`${Math.max(0,arriba-margen)}px`);
     }
-    function crearVistaPendientes({toast,aviso,cuerpoAviso,contenedor,pendientes,nodo,id,botonInforme,cerrar,revisar,abrirPendientes,posicionar}) {
+    function crearVistaPendientes({toast,aviso,cuerpoAviso,contenedor,pendientes,generadoEn,nodo,id,botonInforme,cerrar,revisar,abrirPendientes,posicionar}) {
         const total=pendientes.length;
+        const fechaAviso=Date.parse(generadoEn);
+        const anteriores=pendientes.filter(p=>Date.parse(p.detectadoEn)<fechaAviso).length;
+        const historial=anteriores?`${anteriores} de revisiones anteriores`:'';
         const icono=(padre,nombre)=>nodo(padre,'span',`haku-libro-casos__icono haku-libro-casos__icono--${nombre}`).setAttribute('aria-hidden','true');
         const boton=(padre,clase,texto)=>{const el=nodo(padre,'button',clase,texto);el.type='button';return el;};
         const abrir=boton(contenedor,'haku-libro-casos__abrir');
@@ -335,6 +338,7 @@
         nodo(abrir,'span','haku-libro-auto__cantidad',String(total)).setAttribute('aria-hidden','true');
         icono(abrir,'siguiente');
         abrir.setAttribute('aria-label',`${total} ${total===1?'caso pendiente':'casos pendientes'}`);
+        if(historial)abrir.title=historial;
         abrir.setAttribute('aria-controls',id);
         abrir.setAttribute('aria-expanded','false');
 
@@ -345,18 +349,18 @@
         toast.classList.add('haku-libro-auto--con-pendientes');
         abrir.addEventListener('click',()=>{
             if(!abrirPendientes())return;
-            vista??=montarVistaPendientes({panel,toast,aviso,cuerpoAviso,pendientes,nodo,botonInforme,cerrar,revisar,posicionar,abrir,icono,boton});
+            vista??=montarVistaPendientes({panel,toast,aviso,cuerpoAviso,pendientes,historial,nodo,botonInforme,cerrar,revisar,posicionar,abrir,icono,boton});
             vista.abrir();
         });
         return {adaptar:()=>vista?.adaptar(),retirar(){
             abrir.remove();panel.remove();toast.classList.remove('haku-libro-auto--con-pendientes');
         }};
     }
-    function montarVistaPendientes({panel,toast,aviso,cuerpoAviso,pendientes,nodo,botonInforme,cerrar,revisar,posicionar,abrir,icono,boton}) {
+    function montarVistaPendientes({panel,toast,aviso,cuerpoAviso,pendientes,historial,nodo,botonInforme,cerrar,revisar,posicionar,abrir,icono,boton}) {
         const id=panel.id;
         const deServicios=pendientes.filter(p=>p.tipo==='servicio').length;
         const deReservas=pendientes.length-deServicios;
-        const recuento=[deServicios&&`${deServicios} de servicios`,deReservas&&`${deReservas} de reservas`].filter(Boolean).join(' · ');
+        const recuento=[deServicios&&`${deServicios} de servicios`,deReservas&&`${deReservas} de reservas`,historial].filter(Boolean).join(' · ');
         const contenido=root.document.createDocumentFragment();
         const cabecera=nodo(contenido,'header','haku-libro-casos__cabecera');
         const volver=boton(cabecera,'haku-libro-casos__volver');
@@ -802,7 +806,7 @@
                     if(guardando||consultando())return;
                     api.revisarDesdeAviso(resultado);root.HAIKU_ASISTENTE?.abrir?.();cerrarAviso();
                 }:null;
-                vistaPendientes=crearVistaPendientes({toast,aviso:vistaAviso,cuerpoAviso,contenedor,pendientes,nodo,botonInforme,
+                vistaPendientes=crearVistaPendientes({toast,aviso:vistaAviso,cuerpoAviso,contenedor,pendientes,generadoEn:resultado?.generado_en,nodo,botonInforme,
                     id:'haku-casos-pendientes-'+(++numeroAviso),cerrar:cerrarAviso,posicionar:posicionarAviso,revisar,
                     abrirPendientes:()=>{
                         if(guardando)return false;

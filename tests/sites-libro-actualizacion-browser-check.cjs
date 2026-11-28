@@ -249,7 +249,9 @@ async function comprobarCasosDelAviso(browser, url) {
                 cambios:[{campo:'adultos',antes:5,ahora:3,proyecto:2,accionable:true}],
                 vistaIncorporacion:{campos:[{etiqueta:'Adultos',anterior:'2',propuesto:'3'}],
                     notas:{retiradas:['Llegada a las 18:00'],añadidas:['Llegada a las 20:00 · contacto@example.test · DNI AB123456']}}};
-            let generacion=0,informe,registro={version:1,cambios:[]},guardada=false;
+            const anteriores=pendientes.slice(0,2).map((x,i)=>({...x,id:'anterior-'+i,
+                detectado_generacion:0,detectado_en:'2026-11-26T20:00:00Z'}));
+            let generacion=0,informe,registro={version:1,cambios:anteriores},guardada=false;
             const panel=document.querySelector('.haiku-asistente-panel');
             panel.hidden=true;
             document.getElementById('haiku-asistente-texto').value='Mi consulta sigue aquí';
@@ -278,7 +280,8 @@ async function comprobarCasosDelAviso(browser, url) {
             window.__publicarCasos=()=>{
                 generacion++;
                 window.dispatchEvent(new Event('haiku:libro-cambio'));
-                informe={estado:'ok',libro_actual:{generacion},modificadas:[...pendientes,listaCompleta].map(({actual,cambios})=>({actual,cambios}))};
+                informe={estado:'ok',generado_en:'2026-11-27T20:00:00Z',libro_actual:{generacion},
+                    modificadas:[...pendientes.slice(2),listaCompleta].map(({actual,cambios})=>({actual,cambios}))};
                 window.dispatchEvent(new CustomEvent('haiku:libro-version-cargada',{
                     detail:{carga_automatica:true,tenia_anterior:true,generacion}}));
             };
@@ -352,6 +355,7 @@ async function comprobarCasosDelAviso(browser, url) {
         assert.equal(await page.evaluate(()=>__guardadosCasos),0);
         const abrir=aviso.getByRole('button',{name:/8 casos pendientes/});
         assert.equal(await abrir.getAttribute('aria-expanded'),'false');
+        assert.equal(await abrir.getAttribute('title'),'2 de revisiones anteriores');
         await abrir.click();
         assert.equal(await aviso.locator('.haku-libro-casos__fila').count(),8);
         assert.equal(await aviso.getByRole('button',{name:'Incorporar',exact:true}).count(),0);
@@ -377,7 +381,7 @@ async function comprobarCasosDelAviso(browser, url) {
         const panel=aviso.locator('.haku-libro-casos'),detalle=panel.locator('.haku-libro-casos__detalle');
         const masaje=panel.getByRole('button',{name:/Elena Salas.*Faltan 3 datos/});
         assert.equal(await panel.locator('.haku-libro-casos__fila').count(),8);
-        assert.match(await panel.locator('.haku-libro-casos__encabezado').innerText(),/6 de servicios · 2 de reservas/);
+        assert.match(await panel.locator('.haku-libro-casos__encabezado').innerText(),/6 de servicios · 2 de reservas · 2 de revisiones anteriores/);
         await masaje.click();
         assert.deepEqual(await detalle.locator('li').allTextContents(),['Fecha del servicio','Horario','Duración']);
         assert.match(await detalle.innerText(),/Nov26, AB43/);
