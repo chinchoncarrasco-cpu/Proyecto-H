@@ -284,7 +284,7 @@
         const general=razonesPendiente(motivoGeneral,esServicio?{}:null);
         const datos=general.datos.filter(campo=>!bloques.some(b=>b.datos.includes(campo)));
         const otros=general.otros;
-        const nombreGeneral=esServicio?nombreServicio({concepto:p.concepto}):'Reserva';
+        const nombreGeneral=esServicio?nombreServicio({concepto:p.concepto}):p.tipo==='nota'?'Nota':'Reserva';
         if(datos.length||otros.length||!bloques.length){
             bloques.push({titulo:bloques.length?'Otros datos por revisar':nombreGeneral,nombre:nombreGeneral,datos,
                 otros:datos.length||otros.length?otros:[esServicio?'Revisa los datos del servicio.':'Revisa a qué reserva corresponde.']});
@@ -334,10 +334,10 @@
         const boton=(padre,clase,texto)=>{const el=nodo(padre,'button',clase,texto);el.type='button';return el;};
         const abrir=boton(contenedor,'haku-libro-casos__abrir');
         icono(abrir,'pendiente');
-        nodo(abrir,'strong','haku-libro-casos__enlace-titulo','Casos pendientes');
+        nodo(abrir,'strong','haku-libro-casos__enlace-titulo','Pendientes de ingreso');
         nodo(abrir,'span','haku-libro-auto__cantidad',String(total)).setAttribute('aria-hidden','true');
         icono(abrir,'siguiente');
-        abrir.setAttribute('aria-label',`${total} ${total===1?'caso pendiente':'casos pendientes'}`);
+        abrir.setAttribute('aria-label',`${total} ${total===1?'pendiente':'pendientes'} de ingreso`);
         if(historial)abrir.title=historial;
         abrir.setAttribute('aria-controls',id);
         abrir.setAttribute('aria-expanded','false');
@@ -359,14 +359,15 @@
     function montarVistaPendientes({panel,toast,aviso,cuerpoAviso,pendientes,historial,nodo,botonInforme,cerrar,revisar,posicionar,abrir,icono,boton}) {
         const id=panel.id;
         const deServicios=pendientes.filter(p=>p.tipo==='servicio').length;
-        const deReservas=pendientes.length-deServicios;
-        const recuento=[deServicios&&`${deServicios} de servicios`,deReservas&&`${deReservas} de reservas`,historial].filter(Boolean).join(' · ');
+        const deNotas=pendientes.filter(p=>p.tipo==='nota').length;
+        const deReservas=pendientes.length-deServicios-deNotas;
+        const recuento=[deServicios&&`${deServicios} de servicios`,deReservas&&`${deReservas} de reservas`,deNotas&&`${deNotas} de notas`,historial].filter(Boolean).join(' · ');
         const contenido=root.document.createDocumentFragment();
         const cabecera=nodo(contenido,'header','haku-libro-casos__cabecera');
         const volver=boton(cabecera,'haku-libro-casos__volver');
         volver.setAttribute('aria-label','Volver al aviso');icono(volver,'volver');
         const encabezado=nodo(cabecera,'div','haku-libro-casos__encabezado');
-        const titulo=nodo(encabezado,'h2','','Casos pendientes');titulo.id=id+'-titulo';
+        const titulo=nodo(encabezado,'h2','','Pendientes de ingreso');titulo.id=id+'-titulo';
         nodo(titulo,'span','haku-libro-casos__total',String(pendientes.length));
         nodo(encabezado,'p','haku-libro-casos__meta',recuento);
         const salir=boton(cabecera,'haku-libro-casos__cerrar');
@@ -802,9 +803,9 @@
                 vistaPendientes?.retirar();
                 vistaPendientes=adaptarPendientes=null;
                 if(!pendientes.length)return;
-                const revisar=api?.puedeRevisarDesdeAviso?.(resultado)?()=>{
+                const revisar=api?.puedeCompletarPendientes?.(resultado,pendientes)?()=>{
                     if(guardando||consultando())return;
-                    api.revisarDesdeAviso(resultado);root.HAIKU_ASISTENTE?.abrir?.();cerrarAviso();
+                    api.revisarDesdeAviso(resultado,pendientes);root.HAIKU_ASISTENTE?.abrir?.();cerrarAviso();
                 }:null;
                 vistaPendientes=crearVistaPendientes({toast,aviso:vistaAviso,cuerpoAviso,contenedor,pendientes,generadoEn:resultado?.generado_en,nodo,botonInforme,
                     id:'haku-casos-pendientes-'+(++numeroAviso),cerrar:cerrarAviso,posicionar:posicionarAviso,revisar,

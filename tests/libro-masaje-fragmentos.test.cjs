@@ -252,9 +252,11 @@ test('comparar dos turnos explícitos comprueba ambos horarios antes de darlos p
         assert.equal(item.semantica, 'SERVICIO_REAL', modalidad);
         assert.equal(item.estado, completo ? 'existente' : 'revisar', modalidad);
         assert.equal(item.payload, null, modalidad);
+        assert.equal(e.c.HAIKU_LIBRO_SERVICIOS_SCOPE_V2.esOperacionPorIngresar(item),
+            ['sin registros','otra estadía'].includes(modalidad), modalidad);
         if (modalidad === 'truncado') {
             assert.equal(item.servicio_existente.id, registro.id);
-            assert.match(item.razones.join(' '), /Falta el turno de las 17:00/);
+            assert.match(item.razones.join(' '), /Los dos masajes figuran.*distribuirlos entre las 16:00 y 17:00/);
             assert.equal(item.diferenciaRegistrada.filas[0].proyecto, '16:00–17:00');
         }
         if (modalidad === 'ambos') assert.equal(item.servicio_existente, undefined);

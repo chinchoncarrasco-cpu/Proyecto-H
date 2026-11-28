@@ -58,9 +58,9 @@ test('conserva un resultado parcial y reintenta sólo servicios pendientes',asyn
 });
 test('los incompletos explican el dato que falta y nunca llegan al writer',async()=>{
  const h=coordinador();h.c.HAIKU_LIBRO_CONSULTAS.revalidarCambiosDetectados=async()=>({items:[
-  {actual:fila,revision:{motivos:['Falta la fecha del masaje.']}}],reservas:[],comparacion:[]});
+  {tipo:'nueva',actual:fila,altaSinCoincidencia:true,revision:{motivos:['Falta una cantidad válida de adultos.']}}],reservas:[],comparacion:[]});
  const fin=await h.api.incorporarDesdeAviso(h.informe);
- assert.equal(fin.pendientes[0].motivos[0],'Falta la fecha del masaje.');assert.equal(h.estado.escrituras,0);
+ assert.equal(fin.pendientes[0].motivos[0],'Falta una cantidad válida de adultos.');assert.equal(h.estado.escrituras,0);
 });
 test('el mismo clic termina las notas que quedan listas después del servicio',async()=>{
  const h=coordinador();
@@ -126,7 +126,7 @@ test('un cierre sin selección conserva la última revisión sin otra consulta',
  const h=coordinador(),api=h.c.HAIKU_LIBRO_CONSULTAS;
  api.revalidarCambiosDetectados=async rows=>{
   h.estado.consultas.push(rows);
-  return {items:[{tipo:'modificacion',actual:fila}],reservas:[fila],comparacion:[],q:{}};
+  return {items:[{tipo:'nueva',actual:fila,altaSinCoincidencia:true}],reservas:[fila],comparacion:[],q:{}};
  };
  const preparar=api.prepararIncorporacion;
  api.prepararIncorporacion=async(...args)=>{

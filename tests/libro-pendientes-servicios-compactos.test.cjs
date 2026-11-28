@@ -36,14 +36,27 @@ test('lector semántico → comparación → contexto: una fecha faltante, dos m
     assert.match(html,/<details class="haku-pendiente-comparacion"><summary>Ver detalle del Libro/);
     assert.equal(e.state.escrituras.length,0);
 });
-test('el informe muestra dos inicios, el turno que falta y la precaución como nota',async()=>{
+test('el informe muestra ambos inicios, el horario por corregir y la precaución como nota',async()=>{
     const nota='OJO EN MASAJES: USAR ACEITE NEUTRO';
     const {e,item,html}=await crearCaso(`2 MASAJES RELAJANTES DE 1 HORA C/U EL 14/11 A LAS 16.00 HRS Y 17HRS X COBRAR // ${nota}`);
     assert.equal(item.contexto.servicios.length,1);
     assert.match(html,/Masaje[^<]*×2[^<]*16:00 y 17:00/);
-    assert.match(html,/Falta el turno de las 17:00 en la agenda de Proyecto H/);
+    assert.match(html,/Los dos masajes figuran en el horario 16:00–17:00.*distribuirlos entre las 16:00 y 17:00/);
     assert.match(html,/Nota · (falta guardar|por revisar)<\/strong><br>OJO EN MASAJES: USAR ACEITE NEUTRO/);
     assert.doesNotMatch(html,/Semántica ambigua|Ya registrado\./);
+    assert.equal(e.state.escrituras.length,0);
+});
+test('completar un servicio pendiente en la misma ficha deja la diferencia de turnos para el informe',async()=>{
+    const {e,item}=await crearCaso('TINAJA TONEL A LAS 19:15 X COBRAR // 2 MASAJES RELAJANTES DE 1 HORA C/U EL 14/11 A LAS 16.00 HRS Y 17HRS X COBRAR');
+    e.c.HAIKU_LIBRO_RESERVA_V1.listarHojas=()=>['Nov26'];
+    const scope={reservas:[item.actual],generacion:1};
+    const informe=await e.api.prepararHistorial(scope);
+    const tonel=informe.items.find(x=>x.mapa?.codigo==='tinajaTonel');
+    const masaje=informe.items.find(x=>x.mapa?.codigo==='masajeTerapeutico60');
+    assert.equal(e.api.esOperacionPorIngresar(tonel),true);
+    assert.equal(masaje.diferenciaRegistrada.servicio.id,'masajes-registrados');
+    const revision=await e.api.prepararHistorial({...scope,idsIngreso:[tonel.item_id]});
+    assert.deepEqual(Array.from(revision.items,x=>x.item_id),[tonel.item_id]);
     assert.equal(e.state.escrituras.length,0);
 });
 test('conserva una nota independiente, otros cambios y las advertencias que no son la fecha',async()=>{
