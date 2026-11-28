@@ -564,6 +564,7 @@
     }
     let instalado = false, cacheCompartida, cachePendientesCompartida, observarDeteccion, insertarResultado, insertarIncorporacion, insertarRevisionAbonos;
     const origenAvisos = new WeakMap(), registroLeido = new WeakMap();
+    const alcancesIncorporacion = new WeakMap();
     function proyectarPendientesAviso(resultado,registros,{resueltos=false,sinVerificar=false}={}) {
         const aviso={...resultado,nuevas:[],modificadas:[],cancelaciones_confirmadas:[],ya_no_aparecen:[],
             pendientesResueltos:resueltos,pendientesSinVerificar:sinVerificar&&registros.length>0};
@@ -631,11 +632,12 @@
                 typeof item.proyecto==='string'?item.proyecto:null].filter(Boolean))]
         };
     }
+    const claveReservaAviso=r=>JSON.stringify([r?.id,normalizar(r?.titular),normalizar(r?.rut_documento),
+        Number(r?.cabana),r?.fecha_checkin,r?.fecha_checkout]);
     function clasificarIncorporacionAviso(pendientes) {
         const listos=[],porRevisar=[],operacionesListas=[],reservasListas=[];
-        const clave=r=>JSON.stringify([r?.id,normalizar(r?.titular),normalizar(r?.rut_documento),
-            Number(r?.cabana),r?.fecha_checkin,r?.fecha_checkout]);
-        const ambitoServicios=new Set(lista(pendientes.revisionServicios?.reservas).map(clave));
+        const seleccion=new Set();
+        const ambitoServicios=new Set(lista(pendientes.revisionServicios?.reservas).map(claveReservaAviso));
         const operaciones=new Map();
         for(const [tipo,contexto,permiso] of [
             ['servicio',pendientes.serviciosContexto,'servicios.crear'],
@@ -643,7 +645,7 @@
         ]){
             for(const x of lista(contexto)){
                 if(x.estado==='en_sistema'||!x.reserva?.id||!x.canonico)continue;
-                const firma=clave(x.reserva);
+                const firma=claveReservaAviso(x.reserva);
                 if(!operaciones.has(firma))operaciones.set(firma,[]);
                 operaciones.get(firma).push({tipo,detalle:x,listo:x.estado==='faltante'&&Boolean(x.item_id)&&
                     root.haikuTienePermiso?.(permiso)===true});
@@ -651,13 +653,15 @@
         }
         for(const item of lista(pendientes.items)){
             const r=item.actual, cambios=lista(item.cambios);
+            const clave=claveReservaAviso(r||item.anterior);
             const verificado=r?.id&&item.tipo!=='cancelacion'&&(!item.fuente_vigente||item.fuente_vigente.estado==='verificada');
             const puedeGuardarReserva=verificado&&item.accionable===true&&
                 root.haikuTienePermiso?.(item.tipo==='nueva'?'reservas.crear':'reservas.editar')!==false;
-            const operativo=verificado&&ambitoServicios.has(clave(r))&&cambios.some(c=>c.campo==='servicios')
-                ? operaciones.get(clave(r))||[] : [];
+            const operativo=verificado&&ambitoServicios.has(clave)&&cambios.some(c=>c.campo==='servicios')
+                ? operaciones.get(clave)||[] : [];
             const preparados=operativo.filter(x=>x.listo);
             if(puedeGuardarReserva||preparados.length){
+                seleccion.add(clave);
                 const alta=puedeGuardarReserva&&item.tipo==='nueva';
                 const reserva=puedeGuardarReserva?item.vistaIncorporacion:null;
                 const servicios=preparados.filter(x=>x.tipo==='servicio').map(({detalle:x})=>({
@@ -695,10 +699,11 @@
                     notas:revisar.filter(x=>x.tipo==='nota').map(({detalle:x})=>x.estado==='faltante'?
                         'Tu sesión requiere permiso para guardar esta nota.':x.razon||'Falta revisar una nota.')
                 }:undefined;
-                porRevisar.push(pendienteParaAviso(item,opciones));
+                porRevisar.push({clave,caso:pendienteParaAviso(item,opciones)});
             }
         }
-        return {listos,pendientes:porRevisar,operacionesListas,reservasListas};
+        return {incorporacion:{listos,pendientes:porRevisar.map(x=>x.caso),operacionesListas,reservasListas},seleccion,
+            pendientesFuera:porRevisar.filter(x=>!seleccion.has(x.clave)).map(x=>x.caso)};
     }
     const tieneServiciosAviso=r=>lista(r?.servicios).length>0||lista(r?.menciones_servicio).length>0;
     function reciboReservas(fin) {
@@ -726,6 +731,8 @@
         }
         if(estado.terminado)return Promise.resolve(estado.terminado);
         if(estado.promesa)return estado.promesa;
+        const alcance=alcancesIncorporacion.get(resultado);
+        const informe=alcance?.informe||resultado;
         const validarSesion=async()=>{
             if(!puedeIncorporar(resultado))throw Error('Necesitas una sesión de administrador para incorporar estos cambios.');
             const auth=await root.haikuSupabase?.auth?.getUser?.(),id=auth?.data?.user?.id;
@@ -748,7 +755,7 @@
                 await validarSesion();
                 informar('comprobar');
                 const api=root.HAIKU_LIBRO_CONSULTAS;
-                if(!estado.inicial)estado.inicial=await estado.cache.obtener(resultado,{revalidar:true});
+                if(!estado.inicial)estado.inicial=await estado.cache.obtener(informe,{revalidar:true});
                 const idsAutorizados=new Set(resultado.incorporacion.reservasListas);
                 const idsOperaciones=new Set(lista(resultado.incorporacion?.operacionesListas).map(x=>x.reserva));
                 const limitarPreparacion=(preparacion,cierre=false)=>{
@@ -799,7 +806,7 @@
                 }
                 informar(estado.cierreTerminado?'pendientes':'cierre');
                 let pendientes=estado.recibos.length
-                    ? await estado.cache.obtener(resultado,{revalidar:true}) : estado.inicial;
+                    ? await estado.cache.obtener(informe,{revalidar:true}) : estado.inicial;
                 // Al guardar un servicio pueden quedar sus notas listas para el
                 // writer de la reserva. Completar esa etapa en el mismo clic.
                 const entradaFinal=limitarPreparacion(pendientes.preparacion,true);
@@ -821,10 +828,11 @@
                     estado.cierreTerminado=true;
                     if(guardarCierre){
                         informar('pendientes');
-                        pendientes=await estado.cache.obtener(resultado,{revalidar:true});
+                        pendientes=await estado.cache.obtener(informe,{revalidar:true});
                     }
                 }
-                estado.terminado={...totales(),pendientes:lista(pendientes.items).map(pendienteParaAviso)};
+                estado.terminado={...totales(),pendientes:[...lista(pendientes.items).map(x=>pendienteParaAviso(x)),
+                    ...(alcance?.pendientesFuera||[])]};
                 return estado.terminado;
             }catch(error){
                 estado.cache.invalidar();
@@ -892,7 +900,16 @@
             const [pendientes]=await Promise.all([cachePendientesCompartida.obtener(resultado),comprobacionAbonos]);
             registroLeido.set(resultado,pendientes.registrosAviso);
             const aviso=proyectarPendientesAviso(resultado,pendientes.registrosAviso,{resueltos:lista(pendientes.resueltos).length>0});
-            aviso.incorporacion=clasificarIncorporacionAviso(pendientes);
+            const {incorporacion,seleccion,pendientesFuera}=clasificarIncorporacionAviso(pendientes);
+            aviso.incorporacion=incorporacion;
+            if(seleccion.size){
+                // El guardado comprueba las estadías elegidas. Los otros casos ya
+                // cotejados siguen disponibles en la lista y en el informe general.
+                const informe={generado_en:aviso.generado_en,libro_actual:{...aviso.libro_actual,generacion:generacionInforme(resultado)}};
+                for(const campo of ['nuevas','modificadas','cancelaciones_confirmadas','ya_no_aparecen'])
+                    informe[campo]=aviso[campo].filter(x=>seleccion.has(claveReservaAviso(x.actual||x.anterior)));
+                alcancesIncorporacion.set(aviso,{informe,pendientesFuera});
+            }
             return aviso;
         }catch(_){
             const [registros]=await Promise.all([conservarRegistros(resultado),comprobacionAbonos]);
